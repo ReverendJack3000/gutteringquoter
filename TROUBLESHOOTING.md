@@ -139,6 +139,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Flipped element jumps out of bounding box – 2026-02
+
+- **Symptom:** After using Flip Horizontal or Flip Vertical, the element’s image appears shifted (e.g. to the left) and no longer inside its blue selection box; the box stays in place but the drawn content moves.
+- **Cause:** Flip was implemented by translating to the element’s top-left, then `scale(-1, 1)` (or similar), then a “compensating” translate. With the origin at the top-left, scaling by -1 draws the image in the opposite direction, which effectively moves it by its full width/height and breaks alignment with the bounding box.
+- **Fix:** Use a strict local transform order with **origin at the element center**: (1) `ctx.save()`, (2) `ctx.translate(centerX, centerY)`, (3) `ctx.rotate(rotation)`, (4) `ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1)`, (5) `ctx.drawImage(img, -width/2, -height/2, width, height)`, (6) `ctx.restore()`. No extra translate before or after the scale; flip is purely a visual transform around the center so the box stays correct. Apply the same order in draw, ghost, export, and thumbnail.
+
+---
+
 <!-- Example entry format:
 
 ## Short title (optional: date)

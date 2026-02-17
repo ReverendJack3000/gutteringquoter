@@ -1940,9 +1940,47 @@ function initFloatingToolbar() {
     });
   }
 
+  const btnFlipMenu = document.getElementById('btnFlipMenu');
+  const flipDropdown = document.getElementById('flipDropdown');
+  if (btnFlipMenu && flipDropdown) {
+    btnFlipMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.colorPaletteOpen = false;
+      const wasOpen = !flipDropdown.hidden;
+      flipDropdown.hidden = wasOpen;
+      btnFlipMenu.setAttribute('aria-expanded', flipDropdown.hidden ? 'false' : 'true');
+      draw();
+    });
+    flipDropdown.querySelectorAll('.flip-dropdown-item').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.selectedIds.length === 0) return;
+        const action = item.dataset.action;
+        if (action === 'flip-horizontal') {
+          pushUndoSnapshot();
+          state.selectedIds.forEach((id) => {
+            const el = state.elements.find((x) => x.id === id);
+            if (el) el.flipX = !el.flipX;
+          });
+        } else if (action === 'flip-vertical') {
+          pushUndoSnapshot();
+          state.selectedIds.forEach((id) => {
+            const el = state.elements.find((x) => x.id === id);
+            if (el) el.flipY = !el.flipY;
+          });
+        }
+        draw();
+      });
+    });
+  }
+
   if (colorBtn) {
     colorBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (flipDropdown) {
+        flipDropdown.hidden = true;
+        if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
+      }
       state.colorPaletteOpen = !state.colorPaletteOpen;
       draw();
     });
@@ -1977,6 +2015,11 @@ function initFloatingToolbar() {
     if (submenu && !submenu.hidden && toolbar && !toolbar.contains(e.target)) {
       submenu.hidden = true;
       if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
+      draw();
+    }
+    if (flipDropdown && !flipDropdown.hidden && toolbar && !toolbar.contains(e.target)) {
+      flipDropdown.hidden = true;
+      if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
       draw();
     }
   });
@@ -2626,6 +2669,8 @@ function cloneStateForUndo() {
       color: el.color || null,
       baseScale: el.baseScale ?? 1,
       locked: !!el.locked,
+      flipX: !!el.flipX,
+      flipY: !!el.flipY,
       sequenceId: el.sequenceId != null ? el.sequenceId : undefined,
       measuredLength: el.measuredLength != null ? el.measuredLength : 0,
     })),
@@ -3168,14 +3213,16 @@ function draw() {
     if (ghost && el.id === ghost.id) {
       ctx.save();
       ctx.globalAlpha = 0.2;
-      const gx = offsetX + state.dragGhostX * scale + (ghost.width * scale) / 2;
-      const gy = offsetY + state.dragGhostY * scale + (ghost.height * scale) / 2;
-      ctx.translate(gx, gy);
+      const gcx = offsetX + state.dragGhostX * scale + (ghost.width * scale) / 2;
+      const gcy = offsetY + state.dragGhostY * scale + (ghost.height * scale) / 2;
+      ctx.translate(gcx, gcy);
       ctx.rotate((ghost.rotation * Math.PI) / 180);
-      ctx.translate(-(ghost.width * scale) / 2, -(ghost.height * scale) / 2);
+      ctx.scale(ghost.flipX ? -1 : 1, ghost.flipY ? -1 : 1);
       const ghostRenderImage = getElementRenderImage(ghost);
       if (ghostRenderImage) {
-        ctx.drawImage(ghostRenderImage, 0, 0, ghost.width * scale, ghost.height * scale);
+        const gw = ghost.width * scale;
+        const gh = ghost.height * scale;
+        ctx.drawImage(ghostRenderImage, -gw / 2, -gh / 2, gw, gh);
       }
       ctx.restore();
     }
@@ -3188,10 +3235,12 @@ function draw() {
     ctx.translate(cx, cy);
     if (pop !== 1) ctx.scale(pop, pop);
     ctx.rotate((el.rotation * Math.PI) / 180);
-    ctx.translate(-(el.width * scale) / 2, -(el.height * scale) / 2);
+    ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
     const renderImage = getElementRenderImage(el);
     if (renderImage) {
-      ctx.drawImage(renderImage, 0, 0, el.width * scale, el.height * scale);
+      const dw = el.width * scale;
+      const dh = el.height * scale;
+      ctx.drawImage(renderImage, -dw / 2, -dh / 2, dw, dh);
     }
     ctx.restore();
   });
@@ -4387,6 +4436,8 @@ function initCanvas() {
           color: null,
           baseScale: 1,
           locked: false,
+          flipX: false,
+          flipY: false,
         };
       if (isMeasurableElement(productId)) {
         el.sequenceId = state.nextSequenceId++;
@@ -4747,8 +4798,10 @@ function initExport() {
           const cy = offsetY + el.y * scale + (el.height * scale) / 2;
           ex.translate(cx, cy);
           ex.rotate((el.rotation * Math.PI) / 180);
-          ex.translate(-(el.width * scale) / 2, -(el.height * scale) / 2);
-          ex.drawImage(renderImage, 0, 0, el.width * scale, el.height * scale);
+          ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+          const ew = el.width * scale;
+          const eh = el.height * scale;
+          ex.drawImage(renderImage, -ew / 2, -eh / 2, ew, eh);
           ex.restore();
         }
       }
@@ -4775,6 +4828,8 @@ function getDiagramDataForSave() {
       color: el.color || null,
       baseScale: el.baseScale ?? 1,
       locked: !!el.locked,
+      flipX: !!el.flipX,
+      flipY: !!el.flipY,
       sequenceId: el.sequenceId != null ? el.sequenceId : undefined,
       measuredLength: el.measuredLength != null ? el.measuredLength : 0,
     })),
@@ -4836,8 +4891,8 @@ function getDiagramDataForSave() {
             tx.save();
             tx.translate(el.x + el.width / 2, el.y + el.height / 2);
             tx.rotate((el.rotation * Math.PI) / 180);
-            tx.translate(-el.width / 2, -el.height / 2);
-            tx.drawImage(renderImage, 0, 0, el.width, el.height);
+            tx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+            tx.drawImage(renderImage, -el.width / 2, -el.height / 2, el.width, el.height);
             tx.restore();
           }
         }
@@ -5309,6 +5364,8 @@ function renderProducts(products) {
           color: null,
           baseScale: 1,
           locked: false,
+          flipX: false,
+          flipY: false,
         };
         if (isMeasurableElement(p.id)) {
           el.sequenceId = state.nextSequenceId++;

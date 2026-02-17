@@ -85,6 +85,23 @@
           <button type="button" class="floating-toolbar-btn" id="floatingToolbarDelete" title="Delete">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
+          <div class="floating-toolbar-flip-wrap">
+            <button type="button" class="floating-toolbar-btn floating-toolbar-btn-text floating-toolbar-element-only" id="btnFlipMenu" title="Flip" aria-label="Flip" aria-haspopup="true" aria-expanded="false">Flip</button>
+            <div class="floating-toolbar-flip-dropdown" id="flipDropdown" role="menu" aria-label="Flip options" hidden>
+              <button type="button" class="flip-dropdown-item" role="menuitem" data-action="flip-horizontal" id="flipHorizontalOption">
+                <svg class="flip-dropdown-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M3 12H21M3 12L7 8M3 12L7 16M21 12L17 8M21 12L17 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Flip horizontal</span>
+              </button>
+              <button type="button" class="flip-dropdown-item" role="menuitem" data-action="flip-vertical" id="flipVerticalOption">
+                <svg class="flip-dropdown-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M12 3V21M12 3L8 7M12 3L16 7M12 21L8 17M12 21L16 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Flip vertical</span>
+              </button>
+            </div>
+          </div>
           <button type="button" class="floating-toolbar-btn floating-toolbar-element-only" id="floatingToolbarColor" title="Colour" aria-label="Colour"></button>
           <div class="floating-toolbar-more-wrap">
             <button type="button" class="floating-toolbar-btn" id="floatingToolbarMore" title="More" aria-haspopup="true" aria-expanded="false">
