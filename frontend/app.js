@@ -299,11 +299,15 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/web
 const ACCEPTED_PDF_TYPE = 'application/pdf';
 const MAX_FILE_SIZE_MB = 20;
 
+/** PDF.js version – import and worker URLs must match (Phase 3, Task 30.5). */
+const PDFJS_VERSION = '4.0.379';
+
 /** Phase 3, Task 30.5: Convert PDF first page to PNG File for crop modal. Backend never sees PDF. */
 async function convertPdfFirstPageToPng(file) {
-  const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
+  const pdfUrl = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.mjs`;
+  const pdfjsLib = await import(pdfUrl);
   const pdfjs = pdfjsLib.default || pdfjsLib;
-  pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.mjs`;
   const arrayBuffer = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
   const page = await doc.getPage(1);
@@ -4437,7 +4441,13 @@ function initUpload() {
         clearMessage();
         showCropModal(pngFile);
       } catch (err) {
-        showMessage('Could not convert PDF: ' + (err.message || String(err)));
+        const msg = err?.message || String(err);
+        const userMsg = /password|encrypted|require.*pass/i.test(msg)
+          ? 'This PDF is password-protected. Please remove the password and try again.'
+          : /invalid|corrupt|malformed/i.test(msg)
+            ? 'The PDF appears to be corrupt or invalid.'
+            : 'Could not convert PDF: ' + msg;
+        showMessage(userMsg);
       }
     } else {
       showCropModal(file);
@@ -4479,7 +4489,13 @@ function initUpload() {
         clearMessage();
         showCropModal(pngFile);
       } catch (err) {
-        showMessage('Could not convert PDF: ' + (err.message || String(err)));
+        const msg = err?.message || String(err);
+        const userMsg = /password|encrypted|require.*pass/i.test(msg)
+          ? 'This PDF is password-protected. Please remove the password and try again.'
+          : /invalid|corrupt|malformed/i.test(msg)
+            ? 'The PDF appears to be corrupt or invalid.'
+            : 'Could not convert PDF: ' + msg;
+        showMessage(userMsg);
       }
     } else {
       showCropModal(file);
