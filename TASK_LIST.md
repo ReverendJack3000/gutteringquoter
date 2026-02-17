@@ -8,8 +8,13 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/auth-saved-diagrams
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 33.1 Save diagrams/blueprints as project files
+  - [x] 34.1 Auth and multi-tenancy
+  - [x] 34.2 Per-user saved files
 
 ---
 
@@ -133,7 +138,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 *Context: Allow users to persist and reload full diagram/blueprint state as project files.*
 
-- [ ] **33.1** Ability to save diagrams/blueprints as project files (e.g. export to .json or save to backend; load from file or backend to restore blueprint + elements + view state).
+- [x] **33.1** Ability to save diagrams/blueprints as project files (e.g. export to .json or save to backend; load from file or backend to restore blueprint + elements + view state).
 
 ---
 
@@ -639,8 +644,8 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 *Context: Password protection, tenant isolation, and per-user saved files for multi-user use.*
 
-- [ ] **34.1** Password protection and multi-tenancy: implement auth (e.g. login) and tenant isolation so each tenant’s data is separated.
-- [ ] **34.2** Allow each user to have their own saved files (per-user storage for project files; depends on auth and save/load project files).
+- [x] **34.1** Password protection and multi-tenancy: implement auth (e.g. login) and tenant isolation so each tenant’s data is separated.
+- [x] **34.2** Allow each user to have their own saved files (per-user storage for project files; depends on auth and save/load project files).
 
 ---
 

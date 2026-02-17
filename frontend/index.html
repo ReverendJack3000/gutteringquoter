@@ -23,6 +23,18 @@
         <button type="button" class="btn btn-zoom" id="recenterViewBtn" title="Recenter view to fit content">Recenter View</button>
         <button type="button" class="btn btn-zoom" id="zoomInBtn" title="Zoom in">+</button>
         <button type="button" class="btn btn-export" id="exportBtn" title="Download blueprint with all products as PNG">Export PNG</button>
+        <button type="button" class="btn btn-export" id="saveDiagramBtn" title="Save diagram (requires login)" aria-label="Save diagram">Save</button>
+        <div class="toolbar-diagrams-wrap">
+          <button type="button" class="btn btn-icon" id="diagramsDropdownBtn" title="Saved diagrams" aria-label="Open saved diagrams" aria-haspopup="true" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </button>
+          <div class="diagrams-dropdown" id="diagramsDropdown" role="menu" aria-label="Saved diagrams" hidden>
+            <div class="diagrams-dropdown-header">Saved diagrams</div>
+            <div class="diagrams-dropdown-list" id="diagramsDropdownList"></div>
+            <div class="diagrams-dropdown-empty" id="diagramsDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-export" id="authBtn" title="Sign in to save and load diagrams" aria-label="Sign in">Sign in</button>
       </div>
       <div class="toolbar-right">
         <button type="button" class="btn btn-export" id="generateQuoteBtn" title="Generate quote from canvas elements">Generate Quote</button>
@@ -154,6 +166,46 @@
     </div>
   </div>
 
+  <!-- Auth modal: sign in / sign up -->
+  <div class="auth-modal" id="authModal" role="dialog" aria-labelledby="authModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="authModalBackdrop"></div>
+    <div class="auth-modal-content">
+      <h2 id="authModalTitle" class="auth-modal-title">Sign in</h2>
+      <p class="auth-modal-desc">Sign in to save and load your diagrams.</p>
+      <div id="authError" class="auth-error" role="alert" hidden></div>
+      <form id="authForm" class="auth-form">
+        <label for="authEmail">Email</label>
+        <input type="email" id="authEmail" required placeholder="you@example.com" autocomplete="email" />
+        <label for="authPassword">Password</label>
+        <input type="password" id="authPassword" required placeholder="••••••••" autocomplete="current-password" />
+        <div class="auth-actions">
+          <button type="submit" class="btn btn-primary" id="authSubmitBtn">Sign in</button>
+          <button type="button" class="btn" id="authSignUpBtn">Create account</button>
+          <button type="button" class="btn" id="authModalClose">Cancel</button>
+        </div>
+      </form>
+      <div class="auth-user" id="authUserSection" hidden>
+        <p>Signed in as <strong id="authUserEmail"></strong></p>
+        <button type="button" class="btn" id="authSignOutBtn">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save diagram name modal -->
+  <div class="auth-modal save-name-modal" id="saveDiagramModal" role="dialog" aria-labelledby="saveDiagramModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="saveDiagramModalBackdrop"></div>
+    <div class="auth-modal-content">
+      <h2 id="saveDiagramModalTitle" class="auth-modal-title">Save diagram</h2>
+      <label for="saveDiagramName">Name</label>
+      <input type="text" id="saveDiagramName" placeholder="e.g. House North – Feb 2026" maxlength="255" />
+      <div id="saveDiagramError" class="auth-error" role="alert" hidden></div>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="saveDiagramConfirmBtn">Save</button>
+        <button type="button" class="btn" id="saveDiagramCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Quote modal: generate quote from canvas elements -->
   <div class="quote-modal" id="quoteModal" role="dialog" aria-labelledby="quoteModalTitle" aria-modal="true" hidden>
     <div class="quote-modal-backdrop" id="quoteModalBackdrop"></div>
@@ -215,6 +267,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -66,6 +66,9 @@ const state = {
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
 };
 
+/** Auth: token and Supabase client for saved diagrams. */
+const authState = { token: null, email: null, supabase: null };
+
 /** Product IDs that are consumables (billing only); excluded from canvas/panel drag-drop. */
 const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
 
@@ -4757,6 +4760,393 @@ function initExport() {
   });
 }
 
+/** Serializable diagram payload for API (no blueprintImageRef). */
+function getDiagramDataForSave() {
+  const data = {
+    elements: state.elements.map((el) => ({
+      id: el.id,
+      assetId: el.assetId,
+      x: el.x,
+      y: el.y,
+      width: el.width,
+      height: el.height,
+      rotation: el.rotation || 0,
+      zIndex: el.zIndex,
+      color: el.color || null,
+      baseScale: el.baseScale ?? 1,
+      locked: !!el.locked,
+      sequenceId: el.sequenceId != null ? el.sequenceId : undefined,
+      measuredLength: el.measuredLength != null ? el.measuredLength : 0,
+    })),
+    blueprintTransform: state.blueprintTransform ? { ...state.blueprintTransform, locked: !!state.blueprintTransform.locked } : null,
+    hasBlueprint: !!state.blueprintImage,
+    groups: state.groups.map((g) => ({ id: g.id, elementIds: g.elementIds.slice() })),
+  };
+  let blueprintImageBase64 = null;
+  let thumbnailBase64 = null;
+  if (state.blueprintImage && state.blueprintTransform) {
+    const bt = state.blueprintTransform;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bt.w));
+    c.height = Math.max(1, Math.round(bt.h));
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.globalAlpha = bt.opacity ?? 1;
+      ctx.drawImage(state.blueprintImage, 0, 0, c.width, c.height);
+      blueprintImageBase64 = c.toDataURL('image/png');
+    }
+  }
+  const hasContent = state.blueprintImage || state.elements.length > 0;
+  if (hasContent && state.canvas && state.ctx) {
+    const w = state.canvasWidth;
+    const h = state.canvasHeight;
+    const tw = 200;
+    const th = 150;
+    const scale = Math.min(tw / w, th / h);
+    const tc = document.createElement('canvas');
+    tc.width = tw;
+    tc.height = th;
+    const tx = tc.getContext('2d');
+    if (tx) {
+      tx.fillStyle = '#f5f5f5';
+      tx.fillRect(0, 0, tw, th);
+      tx.scale(scale, scale);
+      const { blueprintImage, elements } = state;
+      const layers = [];
+      if (blueprintImage && state.blueprintTransform) {
+        const bt = state.blueprintTransform;
+        layers.push({ zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX, type: 'blueprint', bt, img: blueprintImage });
+      }
+      elements.forEach((el) => layers.push({ zIndex: el.zIndex != null ? el.zIndex : 0, type: 'element', element: el }));
+      layers.sort((a, b) => a.zIndex - b.zIndex);
+      layers.forEach((layer) => {
+        if (layer.type === 'blueprint') {
+          const { bt, img } = layer;
+          tx.save();
+          tx.globalAlpha = bt.opacity ?? 1;
+          tx.translate(bt.x + bt.w / 2, bt.y + bt.h / 2);
+          tx.rotate(((bt.rotation || 0) * Math.PI) / 180);
+          tx.translate(-bt.w / 2, -bt.h / 2);
+          tx.drawImage(img, 0, 0, bt.w, bt.h);
+          tx.restore();
+        } else if (layer.type === 'element') {
+          const el = layer.element;
+          const renderImage = getElementRenderImage(el);
+          if (renderImage) {
+            tx.save();
+            tx.translate(el.x + el.width / 2, el.y + el.height / 2);
+            tx.rotate((el.rotation * Math.PI) / 180);
+            tx.translate(-el.width / 2, -el.height / 2);
+            tx.drawImage(renderImage, 0, 0, el.width, el.height);
+            tx.restore();
+          }
+        }
+      });
+      thumbnailBase64 = tc.toDataURL('image/png');
+    }
+  }
+  return { data, blueprintImageBase64, thumbnailBase64 };
+}
+
+/** Restore canvas from API snapshot (no blueprintImageRef; optional blueprint_image_url). */
+async function restoreStateFromApiSnapshot(apiSnapshot) {
+  const d = apiSnapshot.data || {};
+  state.elements = await Promise.all(
+    (d.elements || []).map(async (el) => {
+      const img = await loadDiagramImage(getDiagramUrl(el.assetId));
+      return {
+        ...el,
+        image: img,
+        originalImage: img,
+        tintedCanvas: null,
+        tintedCanvasColor: null,
+      };
+    })
+  );
+  state.groups = (d.groups || []).map((g) => ({ id: g.id, elementIds: g.elementIds.slice() }));
+  let maxSeq = 0;
+  state.elements.forEach((el) => {
+    if (el.sequenceId != null && el.sequenceId > maxSeq) maxSeq = el.sequenceId;
+  });
+  state.nextSequenceId = maxSeq + 1;
+  if (!d.hasBlueprint) {
+    state.blueprintImage = null;
+    state.blueprintTransform = null;
+  } else {
+    state.blueprintTransform = d.blueprintTransform ? { ...d.blueprintTransform } : null;
+    if (apiSnapshot.blueprintImageUrl) {
+      try {
+        const img = await loadImage(apiSnapshot.blueprintImageUrl);
+        state.blueprintImage = img;
+        if (!state.blueprintTransform && img) {
+          state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
+        }
+      } catch (err) {
+        console.warn('Failed to load blueprint image from URL', err);
+        state.blueprintImage = null;
+      }
+    } else {
+      state.blueprintImage = null;
+    }
+  }
+  setSelection([]);
+  state.selectedBlueprint = false;
+  undoHistory.length = 0;
+  updatePlaceholderVisibility();
+  renderMeasurementDeck();
+  draw();
+}
+
+function initAuth() {
+  const authModal = document.getElementById('authModal');
+  const authBtn = document.getElementById('authBtn');
+  const authForm = document.getElementById('authForm');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authSignUpBtn = document.getElementById('authSignUpBtn');
+  const authModalClose = document.getElementById('authModalClose');
+  const authError = document.getElementById('authError');
+  const authUserSection = document.getElementById('authUserSection');
+  const authUserEmail = document.getElementById('authUserEmail');
+  const authSignOutBtn = document.getElementById('authSignOutBtn');
+  if (!authModal || !authBtn) return;
+
+  function setAuthUI() {
+    if (authState.token) {
+      authBtn.textContent = 'Sign out';
+      authBtn.title = 'Sign out';
+      if (authUserSection) authUserSection.hidden = false;
+      if (authForm) authForm.hidden = true;
+      if (authUserEmail) authUserEmail.textContent = authState.email || 'Signed in';
+    } else {
+      authBtn.textContent = 'Sign in';
+      authBtn.title = 'Sign in to save and load diagrams';
+      if (authUserSection) authUserSection.hidden = true;
+      if (authForm) authForm.hidden = false;
+    }
+  }
+
+  authBtn.addEventListener('click', () => {
+    if (authState.token) {
+      authState.token = null;
+      authState.email = null;
+      if (authState.supabase) authState.supabase.auth.signOut();
+      setAuthUI();
+      return;
+    }
+    authModal.hidden = false;
+    if (authError) { authError.hidden = true; authError.textContent = ''; }
+  });
+
+  const authModalBackdrop = document.getElementById('authModalBackdrop');
+  authModalClose?.addEventListener('click', () => { authModal.hidden = true; });
+  authModalBackdrop?.addEventListener('click', () => { authModal.hidden = true; });
+
+  authForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!authState.supabase || !authEmail?.value || !authPassword?.value) return;
+    if (authError) { authError.hidden = true; authError.textContent = ''; }
+    authSubmitBtn.disabled = true;
+    try {
+      const { data, error } = await authState.supabase.auth.signInWithPassword({ email: authEmail.value.trim(), password: authPassword.value });
+      if (error) throw error;
+      authState.token = data.session?.access_token ?? null;
+      authState.email = data.user?.email ?? null;
+      setAuthUI();
+      authModal.hidden = true;
+    } catch (err) {
+      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign in failed'; }
+    }
+    authSubmitBtn.disabled = false;
+  });
+
+  authSignUpBtn?.addEventListener('click', async () => {
+    if (!authState.supabase || !authEmail?.value || !authPassword?.value) return;
+    if (authError) { authError.hidden = true; authError.textContent = ''; }
+    authSignUpBtn.disabled = true;
+    try {
+      const { data, error } = await authState.supabase.auth.signUp({ email: authEmail.value.trim(), password: authPassword.value });
+      if (error) throw error;
+      authState.token = data.session?.access_token ?? null;
+      authState.email = data.user?.email ?? null;
+      setAuthUI();
+      authModal.hidden = true;
+      showMessage('Account created. You can sign in and save diagrams.', 'success');
+    } catch (err) {
+      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign up failed'; }
+    }
+    authSignUpBtn.disabled = false;
+  });
+
+  authSignOutBtn?.addEventListener('click', () => {
+    authState.token = null;
+    authState.email = null;
+    if (authState.supabase) authState.supabase.auth.signOut();
+    setAuthUI();
+    authModal.hidden = true;
+  });
+
+  setAuthUI();
+  fetch('/api/config')
+    .then((r) => r.json())
+    .then((config) => {
+      if (config.supabaseUrl && config.anonKey && typeof window.supabase !== 'undefined') {
+        authState.supabase = window.supabase.createClient(config.supabaseUrl, config.anonKey);
+        authState.supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            authState.token = session.access_token;
+            authState.email = session.user?.email ?? null;
+            setAuthUI();
+          }
+        });
+        authState.supabase.auth.onAuthStateChange((_event, session) => {
+          authState.token = session?.access_token ?? null;
+          authState.email = session?.user?.email ?? null;
+          setAuthUI();
+        });
+      }
+    })
+    .catch(() => {});
+}
+
+function initDiagrams() {
+  const saveDiagramBtn = document.getElementById('saveDiagramBtn');
+  const diagramsDropdownBtn = document.getElementById('diagramsDropdownBtn');
+  const diagramsDropdown = document.getElementById('diagramsDropdown');
+  const diagramsDropdownList = document.getElementById('diagramsDropdownList');
+  const diagramsDropdownEmpty = document.getElementById('diagramsDropdownEmpty');
+  const saveDiagramModal = document.getElementById('saveDiagramModal');
+  const saveDiagramName = document.getElementById('saveDiagramName');
+  const saveDiagramConfirmBtn = document.getElementById('saveDiagramConfirmBtn');
+  const saveDiagramCancelBtn = document.getElementById('saveDiagramCancelBtn');
+  const saveDiagramModalBackdrop = document.getElementById('saveDiagramModalBackdrop');
+  const saveDiagramError = document.getElementById('saveDiagramError');
+  if (!saveDiagramBtn || !diagramsDropdownBtn) return;
+
+  function authHeaders() {
+    return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
+  }
+
+  function closeDropdown() {
+    if (diagramsDropdown) diagramsDropdown.hidden = true;
+    if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  saveDiagramBtn.addEventListener('click', () => {
+    if (!authState.token) {
+      showMessage('Sign in to save diagrams.', 'error');
+      document.getElementById('authBtn')?.click();
+      return;
+    }
+    if (!state.blueprintImage && state.elements.length === 0) {
+      showMessage('Add a photo or products to the canvas before saving.');
+      return;
+    }
+    saveDiagramName.value = 'Diagram ' + new Date().toLocaleDateString();
+    if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
+    saveDiagramModal.hidden = false;
+  });
+
+  saveDiagramConfirmBtn?.addEventListener('click', async () => {
+    const name = (saveDiagramName.value || '').trim();
+    if (!name) {
+      if (saveDiagramError) { saveDiagramError.hidden = false; saveDiagramError.textContent = 'Enter a name.'; }
+      return;
+    }
+    saveDiagramConfirmBtn.disabled = true;
+    if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
+    try {
+      const { data, blueprintImageBase64, thumbnailBase64 } = getDiagramDataForSave();
+      const body = { name, data, blueprintImageBase64: blueprintImageBase64 || undefined, thumbnailBase64: thumbnailBase64 || undefined };
+      const res = await fetch('/api/diagrams', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || res.statusText || 'Save failed');
+      }
+      saveDiagramModal.hidden = true;
+      showMessage('Diagram saved.', 'success');
+      refreshDiagramsList();
+    } catch (err) {
+      if (saveDiagramError) { saveDiagramError.hidden = false; saveDiagramError.textContent = err.message || 'Save failed'; }
+    }
+    saveDiagramConfirmBtn.disabled = false;
+  });
+
+  saveDiagramCancelBtn?.addEventListener('click', () => { saveDiagramModal.hidden = true; });
+  saveDiagramModalBackdrop?.addEventListener('click', () => { saveDiagramModal.hidden = true; });
+
+  diagramsDropdownBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!authState.token) {
+      showMessage('Sign in to open saved diagrams.', 'error');
+      return;
+    }
+    const open = diagramsDropdown && !diagramsDropdown.hidden;
+    if (open) {
+      closeDropdown();
+      return;
+    }
+    refreshDiagramsList();
+    if (diagramsDropdown) diagramsDropdown.hidden = false;
+    if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'true');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (diagramsDropdown && !diagramsDropdown.hidden && !diagramsDropdown.contains(e.target) && !diagramsDropdownBtn.contains(e.target)) closeDropdown();
+  });
+
+  async function refreshDiagramsList() {
+    if (!diagramsDropdownList || !diagramsDropdownEmpty) return;
+    try {
+      const res = await fetch('/api/diagrams', { headers: authHeaders() });
+      if (!res.ok) { diagramsDropdownList.innerHTML = ''; diagramsDropdownEmpty.hidden = false; return; }
+      const json = await res.json();
+      const list = json.diagrams || [];
+      diagramsDropdownEmpty.hidden = list.length > 0;
+      diagramsDropdownList.innerHTML = '';
+      list.forEach((item) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'diagram-item';
+        btn.setAttribute('role', 'menuitem');
+        const thumb = document.createElement('img');
+        thumb.className = 'diagram-item-thumb';
+        thumb.alt = '';
+        thumb.src = item.thumbnailUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect fill="%23eee" width="64" height="48"/><text x="32" y="26" text-anchor="middle" fill="%23999" font-size="12">No preview</text></svg>';
+        const info = document.createElement('div');
+        info.className = 'diagram-item-info';
+        const nameEl = document.createElement('div');
+        nameEl.className = 'diagram-item-name';
+        nameEl.textContent = item.name || 'Untitled';
+        const dateEl = document.createElement('div');
+        dateEl.className = 'diagram-item-date';
+        dateEl.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+        info.appendChild(nameEl);
+        info.appendChild(dateEl);
+        btn.appendChild(thumb);
+        btn.appendChild(info);
+        btn.addEventListener('click', async () => {
+          closeDropdown();
+          try {
+            const r = await fetch('/api/diagrams/' + item.id, { headers: authHeaders() });
+            if (!r.ok) throw new Error('Failed to load');
+            const diagram = await r.json();
+            await restoreStateFromApiSnapshot(diagram);
+            showMessage('Diagram loaded.', 'success');
+          } catch (err) {
+            showMessage('Could not load diagram.', 'error');
+          }
+        });
+        diagramsDropdownList.appendChild(btn);
+      });
+    } catch (_) {
+      diagramsDropdownList.innerHTML = '';
+      diagramsDropdownEmpty.hidden = false;
+    }
+  }
+}
+
 function initPanel() {
   const panel = document.getElementById('panel');
   const panelContent = document.getElementById('panelContent');
@@ -5132,6 +5522,16 @@ function init() {
     initFloatingToolbar();
   } catch (e) {
     console.warn('initFloatingToolbar failed', e);
+  }
+  try {
+    initAuth();
+  } catch (e) {
+    console.warn('initAuth failed', e);
+  }
+  try {
+    initDiagrams();
+  } catch (e) {
+    console.warn('initDiagrams failed', e);
   }
   initProducts();
   draw();

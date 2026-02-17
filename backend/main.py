@@ -2,15 +2,24 @@
 Quote App API – FastAPI backend.
 Blueprint processing, product list, static frontend. API-ready for future integrations.
 """
+import base64
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from app.auth import get_current_user_id
 from app.blueprint_processor import process_blueprint
 from app.csv_import import import_products_from_csv
+from app.diagrams import (
+    create_diagram,
+    delete_diagram,
+    get_diagram,
+    list_diagrams,
+    update_diagram,
+)
 from app.gutter_accessories import expand_elements_with_gutter_accessories
 from app.pricing import get_product_pricing
 from app.products import get_products
@@ -40,6 +49,20 @@ class UpdatePricingItem(BaseModel):
     markup_percentage: float = Field(..., ge=0, le=1000, description="Markup percentage (0-1000)")
 
 
+class SaveDiagramRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    data: dict[str, Any] = Field(..., description="Canvas state: elements, blueprintTransform, groups")
+    blueprintImageBase64: Optional[str] = Field(None, description="PNG image as base64 data URL or raw base64")
+    thumbnailBase64: Optional[str] = Field(None, description="Thumbnail PNG as base64")
+
+
+class UpdateDiagramRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    data: Optional[dict[str, Any]] = Field(None)
+    blueprintImageBase64: Optional[str] = None
+    thumbnailBase64: Optional[str] = None
+
+
 app = FastAPI(
     title="Quote App API",
     description="Property photo → blueprint; Marley guttering repair plans. API-ready for integrations.",
@@ -59,6 +82,15 @@ app.add_middleware(
 def health():
     """Health check for local dev and future API consumers."""
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def api_config():
+    """Public config for frontend (Supabase URL and anon key for auth). Safe to expose."""
+    import os
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    anon = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+    return {"supabaseUrl": url or None, "anonKey": anon or None}
 
 
 @app.get("/api/products")
@@ -258,6 +290,101 @@ async def api_process_blueprint(
     except ValueError as e:
         raise HTTPException(400, str(e))
     return Response(content=png_bytes, media_type="image/png")
+
+
+def _decode_base64_image(value: str) -> Optional[bytes]:
+    """Decode base64 image; supports data URL (data:image/png;base64,...) or raw base64."""
+    if not value or not value.strip():
+        return None
+    s = value.strip()
+    if s.startswith("data:"):
+        idx = s.find("base64,")
+        if idx == -1:
+            return None
+        s = s[idx + 7 :]
+    try:
+        return base64.b64decode(s)
+    except Exception:
+        return None
+
+
+@app.get("/api/diagrams")
+def api_list_diagrams(user_id: Any = Depends(get_current_user_id)):
+    """List saved diagrams for the current user. Requires Bearer token."""
+    return {"diagrams": list_diagrams(user_id)}
+
+
+@app.post("/api/diagrams")
+def api_create_diagram(body: SaveDiagramRequest, user_id: Any = Depends(get_current_user_id)):
+    """Save a new diagram. Requires Bearer token."""
+    blueprint_bytes = _decode_base64_image(body.blueprintImageBase64) if body.blueprintImageBase64 else None
+    thumbnail_bytes = _decode_base64_image(body.thumbnailBase64) if body.thumbnailBase64 else None
+    try:
+        created = create_diagram(
+            user_id,
+            body.name,
+            body.data,
+            blueprint_bytes=blueprint_bytes,
+            thumbnail_bytes=thumbnail_bytes,
+        )
+        return created
+    except Exception as e:
+        logger.exception("Create diagram failed: %s", e)
+        raise HTTPException(500, "Failed to save diagram")
+
+
+@app.get("/api/diagrams/{diagram_id}")
+def api_get_diagram(diagram_id: str, user_id: Any = Depends(get_current_user_id)):
+    """Get full diagram by id. Requires Bearer token; returns 404 if not found or not owned."""
+    from uuid import UUID
+    try:
+        did = UUID(diagram_id)
+    except ValueError:
+        raise HTTPException(404, "Diagram not found")
+    diagram = get_diagram(user_id, did)
+    if not diagram:
+        raise HTTPException(404, "Diagram not found")
+    return diagram
+
+
+@app.patch("/api/diagrams/{diagram_id}")
+def api_update_diagram(
+    diagram_id: str,
+    body: UpdateDiagramRequest,
+    user_id: Any = Depends(get_current_user_id),
+):
+    """Update diagram name/data/images. Requires Bearer token."""
+    from uuid import UUID
+    try:
+        did = UUID(diagram_id)
+    except ValueError:
+        raise HTTPException(404, "Diagram not found")
+    blueprint_bytes = _decode_base64_image(body.blueprintImageBase64) if body.blueprintImageBase64 else None
+    thumbnail_bytes = _decode_base64_image(body.thumbnailBase64) if body.thumbnailBase64 else None
+    updated = update_diagram(
+        user_id,
+        did,
+        name=body.name,
+        data=body.data,
+        blueprint_bytes=blueprint_bytes,
+        thumbnail_bytes=thumbnail_bytes,
+    )
+    if not updated:
+        raise HTTPException(404, "Diagram not found")
+    return updated
+
+
+@app.delete("/api/diagrams/{diagram_id}")
+def api_delete_diagram(diagram_id: str, user_id: Any = Depends(get_current_user_id)):
+    """Delete a diagram. Requires Bearer token."""
+    from uuid import UUID
+    try:
+        did = UUID(diagram_id)
+    except ValueError:
+        raise HTTPException(404, "Diagram not found")
+    if not delete_diagram(user_id, did):
+        raise HTTPException(404, "Diagram not found")
+    return {"success": True}
 
 
 # Serve static frontend and assets (must be after API routes)

@@ -71,11 +71,24 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
 Placeholder diagram SVGs for: **gutter**, **downpipe**, **bracket**, **stopend**, **outlet**, **dropper**.  
 Replace files in `frontend/assets/marley/` with your own Marley guttering diagram images when ready (keep same filenames or update `backend/app/products.py`).
 
+## Saved diagrams and sign-in (Sections 33 & 34)
+
+To save and load diagrams (clock icon in the toolbar), configure auth in `backend/.env`:
+
+- **`SUPABASE_ANON_KEY`** – from Supabase → Settings → API (anon/public). Used by `GET /api/config` so the frontend can sign in with Supabase Auth.
+- **`SUPABASE_JWT_SECRET`** – from Supabase → Settings → API → JWT Secret. Used by the backend to verify Bearer tokens for `/api/diagrams`.
+
+Then sign in via the **Sign in** button, use **Save** to store the current diagram, and open the **clock icon** dropdown to list and load saved diagrams.
+
 ## API (for later integration)
 
 - `GET /api/health` – health check
+- `GET /api/config` – public config (supabaseUrl, anonKey for frontend auth)
 - `GET /api/products?search=&category=` – list products
 - `POST /api/process-blueprint?technical_drawing=true|false` – upload image, returns PNG
+- `GET /api/diagrams` – list saved diagrams (requires `Authorization: Bearer <token>`)
+- `POST /api/diagrams` – save diagram (requires Bearer token)
+- `GET /api/diagrams/{id}` – load diagram (requires Bearer token)
 
 OpenAPI docs: http://127.0.0.1:8000/docs
 

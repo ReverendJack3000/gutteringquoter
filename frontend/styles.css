@@ -874,6 +874,174 @@ body {
   color: #fff;
 }
 
+/* ----- Auth modal & Save diagram ----- */
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+.auth-modal[hidden] {
+  display: none;
+}
+.auth-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+.auth-modal-content {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+  min-width: 320px;
+  max-width: 400px;
+}
+.auth-modal-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.auth-modal-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #666;
+}
+.auth-form label,
+.save-name-modal label {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.save-name-modal input[type="text"] {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.auth-error {
+  margin: 12px 0;
+  padding: 8px 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.auth-error[hidden] {
+  display: none;
+}
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.auth-user {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+/* ----- Diagrams dropdown (clock icon) ----- */
+.toolbar-diagrams-wrap {
+  position: relative;
+}
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #333;
+}
+.btn-icon:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+.diagrams-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  min-width: 280px;
+  max-width: 360px;
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 500;
+}
+.diagrams-dropdown[hidden] {
+  display: none;
+}
+.diagrams-dropdown-header {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid #eee;
+}
+.diagrams-dropdown-list {
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.diagrams-dropdown-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+}
+.diagram-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+}
+.diagram-item:hover {
+  background: #f0f8ff;
+}
+.diagram-item-thumb {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #eee;
+  flex-shrink: 0;
+}
+.diagram-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.diagram-item-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diagram-item-date {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
 /* ----- Quote modal ----- */
 .quote-modal {
   position: fixed;
