@@ -26,7 +26,7 @@ Set in `backend/.env` (from `backend/.env.example`):
 | `SUPABASE_URL` | **Yes** | Project URL; server will not start without it |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Service role key (backend only; never expose in frontend) |
 | `SUPABASE_ANON_KEY` | For auth | Anon (publishable) key; exposed via `GET /api/config` so frontend can use Supabase Auth |
-| `SUPABASE_JWT_SECRET` | For saved diagrams | JWT secret (Supabase → Settings → API); used to verify Bearer tokens for `/api/diagrams` |
+| `SUPABASE_JWT_SECRET` | Optional (legacy) | Legacy JWT secret for HS256. If your project uses **ECC (P-256)** only, leave unset; the backend verifies tokens via JWKS (ES256) using `SUPABASE_URL`. |
 
 ---
 

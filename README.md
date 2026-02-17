@@ -76,7 +76,7 @@ Replace files in `frontend/assets/marley/` with your own Marley guttering diagra
 To save and load diagrams (clock icon in the toolbar), configure auth in `backend/.env`:
 
 - **`SUPABASE_ANON_KEY`** – from Supabase → Settings → API (anon/public). Used by `GET /api/config` so the frontend can sign in with Supabase Auth.
-- **`SUPABASE_JWT_SECRET`** – from Supabase → Settings → API → JWT Secret. Used by the backend to verify Bearer tokens for `/api/diagrams`.
+- **`SUPABASE_JWT_SECRET`** – only for projects using the legacy JWT secret (HS256). If your project uses **ECC (P-256)** signing (no “JWT Secret” on the API page), leave this unset; the backend verifies tokens via JWKS (ES256) using your existing `SUPABASE_URL`.
 
 Then sign in via the **Sign in** button, use **Save** to store the current diagram, and open the **clock icon** dropdown to list and load saved diagrams.
 
