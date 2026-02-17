@@ -8,11 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/flip-elements
-- Based on: main
-- Status: Complete (7.11 done, ready to merge)
-- Related Tasks:
-  - [x] **7.11** Element transform: horizontal and vertical flip (preserve rotation and size)
+- Branch: main
+- Status: Stable
 
 ---
 
