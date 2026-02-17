@@ -12,7 +12,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - Based on: main
 - Status: In Progress
 - Related Tasks:
-  - [ ] 30.3 Clipboard paste listener (Phase 1)
+  - [x] 30.3 Clipboard paste listener (Phase 1)
+  - [x] 30.2, 30.4 HEIC support (Phase 2)
 
 ---
 
@@ -569,14 +570,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **Tasks (reference; implement in phase order above):**
 
-- [ ] **30.1** Relax frontend MIME validation: Expand `ACCEPTED_IMAGE_TYPES` (app.js) to accept `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/heic`. Update file input `accept` attribute. Keep GIF allowed if already present. *(Do as part of Phase 2 for HEIC.)*
-- [ ] **30.2** Relax backend validation: Extend backend `file.content_type` check (main.py) to accept any `image/*` type. Pipeline and response format unchanged. *(Do as part of Phase 2.)*
+- [x] **30.1** Relax frontend MIME validation: Expand `ACCEPTED_IMAGE_TYPES` (app.js) to accept `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/heic`. Update file input `accept` attribute. Keep GIF allowed if already present. *(Done as part of Phase 2.)*
+- [x] **30.2** Relax backend validation: Extend backend `file.content_type` check (main.py) to accept any `image/*` type. Pipeline and response format unchanged. *(Already accepts image/*; no change needed.)*
 - [x] **30.3** Clipboard paste listener: Phase 1 — add paste listener, route image files to `showCropModal(file)`. Do not modify file input or drag-drop.
-- [ ] **30.4** HEIC and OpenCV-incompatible formats: Phase 2 — add pillow-heif fallback in `blueprint_processor.py` when input is HEIC; standard formats use existing `cv2.imdecode` path.
+- [x] **30.4** HEIC and OpenCV-incompatible formats: Phase 2 — add pillow-heif fallback in `blueprint_processor.py` when cv2.imdecode returns None; standard formats use existing `cv2.imdecode` path.
 - [ ] **30.5** PDF support: Phase 3 — frontend-only; pdf.js renders first page to canvas → PNG → `showCropModal()`. Backend never sees PDF.
 - [ ] **30.6** Update docs and UX: Error messages, file input `accept` attribute, and README to reflect supported types (JPEG, PNG, WebP, HEIC, PDF via conversion).
 
-*Section 30 status: Planned. Implement in phases 1 → 2 → 3. BMP, TIFF, AVIF, GIF excluded from scope.*
+*Section 30 status: Phases 1 and 2 complete. Phase 3 (PDF) pending. BMP, TIFF, AVIF, GIF excluded from scope.*
 
 ---
 

@@ -295,7 +295,7 @@ const MAX_UNDO_HISTORY = 50;
 let undoHistory = [];
 let blueprintUndoHistory = []; // Separate stack for blueprint moves/resize/rotate so Ctrl+Z doesn't undo background when tweaking parts
 
-const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
 const MAX_FILE_SIZE_MB = 20;
 
 // Crop modal state (image coords in source pixels)
