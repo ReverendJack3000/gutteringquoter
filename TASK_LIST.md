@@ -8,14 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/undo-delete-polish
-- Based on: main
-- Status: Ready to merge (14.3, 28.3, 10.8, 22.28 complete)
-- Related Tasks:
-  - [x] 14.3 Ensure Cmd+Z undoes blueprint upload + element move/placement
-  - [x] 28.3 Ensure Delete key works for all elements
-  - [x] 10.8 Local server single command and documentation
-  - [x] 22.28 ServiceM8 job number field (conditional on manual entries)
+- Branch: main
+- Status: Stable
 
 ---
 
