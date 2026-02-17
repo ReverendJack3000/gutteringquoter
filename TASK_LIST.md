@@ -644,6 +644,43 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 35. App views: Login, Canvas, Products (navigation)
+
+*Context: Restructure the app to support navigation between three distinct screens (Login, Canvas, Products) without breaking existing functionality. Implement in a feature branch; this section lists the tasks to be done there. The app should load to a Login screen when logged out, and upon logging in reveal the Canvas exactly as before.*
+
+**Risk – Zero width canvas:** If `initCanvas()` runs while `#view-canvas` is `display: none`, the canvas dimensions become 0 and the app is broken until a window resize. The plan below avoids measuring the canvas while it is hidden by using a `switchView(viewId)` helper that makes the target view visible first, then (for the canvas view) calls `resizeCanvas()` and `draw()`.
+
+**HTML structure (index.html)**
+
+- [ ] **35.1** Wrap the existing canvas view into a single container: create `<div id="view-canvas" class="app-view">` and move inside it (as direct children) the toolbar (`header.toolbar`), the workspace (`.workspace`: blueprint-wrap, resizer, panel), and the Measurement Deck (`#measurementDeck`). No change to the DOM order of those elements; only wrap them in the new div.
+- [ ] **35.2** Create two new sibling container divs (siblings to `#view-canvas`, not inside it): `<div id="view-login" class="app-view hidden">` and `<div id="view-products" class="app-view hidden">`. Add CSS rule for `.app-view.hidden { display: none; }` (e.g. in styles.css) so hidden views are not shown and take no layout space.
+
+**Canvas container safety (avoid zero-size wrap)**
+
+- [ ] **35.3** Ensure `#blueprintWrap` (the canvas parent) has a defined CSS height so it fills the `#view-canvas` container as soon as that view becomes visible. For example: give `#view-canvas` a flex layout (e.g. `display: flex; flex-direction: column; flex: 1; min-height: 0`) and ensure the workspace / `#blueprintWrap` has `flex-grow: 1` (or `height: 100%` where the chain from `#view-canvas` down has explicit heights). This way, when `switchView('view-canvas')` makes the view visible, the wrap has non-zero dimensions before `resizeCanvas()` runs.
+
+**switchView(viewId) – robust view transition (app.js)**
+
+- [ ] **35.4** Implement `switchView(viewId)` with the following logic: (1) Hide all `.app-view` elements (e.g. add `.hidden` class to each). (2) Remove `.hidden` from the element with id equal to `viewId` so only that view is visible. (3) **CRITICAL:** If `viewId === 'view-canvas'`, call `resizeCanvas()` immediately after making it visible so the canvas is never measured while its container is hidden. (4) Call `draw()` to repaint the canvas content. Expose `switchView` where needed (e.g. after auth check and on login/sign-out).
+
+**init() and first render – auth-driven view (app.js)**
+
+- [ ] **35.5** On page load, do not rely on CSS or initial HTML classes for which view is shown. After all inits (including `initAuth()` and any async auth setup), check authentication (e.g. `authState.token` or session from `getSession()`). If **logged out:** call `switchView('view-login')`. If **logged in:** call `switchView('view-canvas')`. This ensures the correct view is set by JavaScript on first render and the canvas is never measured while hidden.
+
+**Login migration**
+
+- [ ] **35.6** Move the existing login form into `#view-login`: relocate the auth form content from the current auth modal (`#authModal`: form, email/password inputs, Sign in / Create account / Cancel, and optionally the “Signed in as” / Sign out block) into `#view-login` so the login screen is a full-screen view, not a modal. Remove or repurpose `#authModal` so it is no longer the primary login UI (e.g. keep modal for “Sign in” button from toolbar if desired, or remove and use only view-login).
+- [ ] **35.7** After successful login (from `#view-login`), call `switchView('view-canvas')` so the user sees the Canvas. On Sign out (from canvas), call `switchView('view-login')`. Wire these to the existing auth success/sign-out handlers.
+
+**No regressions and deliverable**
+
+- [ ] **35.8** Verify that when logged in and `#view-canvas` is visible, behaviour is unchanged: toolbar, panel, canvas, measurement deck, upload, export, quote, auth button, and saved diagrams work as today. No duplicate event listeners; no missing elements.
+- [ ] **35.9** Manual and (if applicable) E2E check: app loads to Login screen when logged out; after logging in, Canvas view is shown and all existing functionality (upload, drag-drop, select, resize, rotate, export, quote, save/load diagrams) works without regression. Confirm no zero-width canvas (e.g. resize never needed to "fix" the canvas).
+
+*Section 35 status: Not started. To be implemented in a feature branch; main branch remains stable. Refined plan: switchView() + resizeCanvas-on-show + auth-driven init prevent zero-width canvas bug.*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files).*
+*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files), Section 35 (app views: login/canvas/products navigation – to implement in feature branch).*
