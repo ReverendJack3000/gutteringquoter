@@ -514,16 +514,59 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 **PDF is not an image format.** You cannot relax validation to support PDF. You must add a dedicated conversion step (frontend pdf.js or backend pdf2image/poppler) to convert the first page of the PDF into PNG/JPG so the canvas can draw it.
 
-**Tasks ordered easiest → hardest:**
+---
 
-- [ ] **30.1** Relax frontend MIME validation: Expand `ACCEPTED_IMAGE_TYPES` (app.js) to accept `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/heic` (or use `type.startsWith('image/')` for flexibility). Update file input `accept` attribute. Keep GIF allowed if already present; no need to add BMP/TIFF/AVIF.
-- [ ] **30.2** Relax backend validation: Extend backend `file.content_type` check (main.py) to accept any `image/*` type. Pipeline and response format unchanged.
-- [ ] **30.3** Clipboard paste listener: Add global `document.addEventListener('paste', ...)` that looks for any `File` with `type` starting `image/` in `clipboardData.items`; route it through `showCropModal(file)` so existing validation, cropping, and upload logic applies uniformly. Enables Cmd+V/Ctrl+V for desktop screenshots. See app.js (e.g. lines 369–391) for crop modal flow.
-- [ ] **30.4** HEIC and OpenCV-incompatible formats: For formats OpenCV can't decode (e.g. HEIC), either (a) transcode to PNG on the client (like post-crop) before upload, or (b) add a Pillow-based fallback in `blueprint_processor.py` when `cv2.imdecode` returns None. Keep `/api/process-blueprint` returning PNG.
-- [ ] **30.5** PDF support: Add PDF conversion step. Option A: frontend pdf.js – render first page to canvas, export as PNG, route through `showCropModal` or upload flow. Option B: backend pdf2image/poppler – accept `application/pdf`, convert first page to PNG, process as blueprint. Canvas pipeline unchanged (always receives PNG).
+**Phased Implementation Strategy**
+
+This feature touches frontend input, data processing, and backend decoding. Do **not** implement it all at once. Split into three isolated phases so that if one part breaks, the cause is clear and the core JPEG/PNG upload flow remains untouched.
+
+| Phase | Scope | Risk | Rationale |
+|-------|-------|------|-----------|
+| **1** | Clipboard paste (frontend only) | Low | New way to enter existing flow; no changes to file input or drag-drop. |
+| **2** | HEIC support (backend) | Medium | New library (pillow-heif); gate new logic behind file-type check so JPEG/PNG skip it. |
+| **3** | PDF support (frontend conversion) | Medium | Convert PDF to image in browser; backend never sees PDF, receives only images. |
+
+**Phase 1: Clipboard Paste (Frontend Only)** — maps to 30.3
+
+- Add global `document.addEventListener('paste', ...)`.
+- In handler: iterate `event.clipboardData.items`, find item where `type` starts with `image/`, call `.getAsFile()`.
+- Pass the file directly to `showCropModal(file)`.
+- **Constraint:** Do not modify file input or drag-and-drop logic yet. Just add this listener.
+
+  *Prompt for Cursor:* "I need to implement Task 30.3 (Clipboard Paste). Please update app.js to add a global 'paste' event listener. Listen for the paste event on the document. Check event.clipboardData.items for an item where type starts with 'image/'. If found, extract the file using .getAsFile(). Pass this file directly to the existing showCropModal(file) function. Constraint: Do not modify the existing file input or drag-and-drop logic yet. Just add this new listener."
+
+**Phase 2: HEIC Support (Backend Handling)** — maps to 30.2, 30.4
+
+- Add `pillow-heif` to `requirements.txt`.
+- In `blueprint_processor.py`: import `pillow_heif`; if input is HEIC, open with pillow-heif, convert to PIL Image, then to numpy array for OpenCV; else use existing `cv2.imdecode` path.
+- Frontend: add `image/heic` to `ACCEPTED_IMAGE_TYPES` in app.js.
+- **Verify:** Standard PNG uploads still work after changes.
+
+  *Prompt for Cursor:* "I am moving to Task 30.2 and 30.4 (HEIC Support). Backend Changes: Add pillow-heif to requirements.txt. Modify blueprint_processor.py: Import pillow_heif. In process_blueprint, check if the file format is HEIC. If it is HEIC, use pillow_heif to open it, convert it to a standard PIL Image, and then convert that to the numpy array OpenCV expects. Ensure standard image formats (PNG, JPEG) continue to use the existing cv2.imdecode path to avoid regressions. Frontend Changes: Update ACCEPTED_IMAGE_TYPES in app.js to include 'image/heic'. Please verify that standard PNG uploads still work after these changes."
+
+**Phase 3: PDF Support (Frontend Conversion)** — maps to 30.5
+
+- Add pdf.js (pdfjs-dist) via CDN in `index.html`.
+- In app.js file input change handler and drop handler: if `file.type === 'application/pdf'`, use PDF.js to render first page to canvas, convert canvas to PNG Blob/File, pass that to `showCropModal()`.
+- Add `application/pdf` to `ACCEPTED_IMAGE_TYPES` (or equivalent allowlist).
+- **Constraint:** PDF conversion must complete before crop modal opens; crop modal receives a valid image file, never a PDF.
+
+  *Prompt for Cursor:* "Now I need to implement Task 30.5 (PDF Support) using a Frontend-only approach. Goal: Detect a PDF upload, convert the first page to an image (PNG), and pass that image to showCropModal. The backend should never see a PDF. Plan: Add pdfjs-dist (PDF.js) via CDN in index.html. In app.js, modify the file input change handler and drop handler: Check if the file type is 'application/pdf'. If it is, use PDF.js to render the first page of the PDF to an HTML Canvas. Convert that canvas to a Blob/File (PNG format). Pass the new PNG file to showCropModal(). Update ACCEPTED_IMAGE_TYPES to include 'application/pdf'. Constraint: Ensure the PDF conversion happens before the crop modal opens. The crop modal should receive a valid image file, not a PDF."
+
+**Why this order:** Phase 1 validates that `showCropModal` handles files from different sources. Phase 2 touches the backend but protects existing flows with a file-type gate. Phase 3 acts as a frontend adaptor so the core app never changes its logic for documents.
+
+---
+
+**Tasks (reference; implement in phase order above):**
+
+- [ ] **30.1** Relax frontend MIME validation: Expand `ACCEPTED_IMAGE_TYPES` (app.js) to accept `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/heic`. Update file input `accept` attribute. Keep GIF allowed if already present. *(Do as part of Phase 2 for HEIC.)*
+- [ ] **30.2** Relax backend validation: Extend backend `file.content_type` check (main.py) to accept any `image/*` type. Pipeline and response format unchanged. *(Do as part of Phase 2.)*
+- [ ] **30.3** Clipboard paste listener: Phase 1 — add paste listener, route image files to `showCropModal(file)`. Do not modify file input or drag-drop.
+- [ ] **30.4** HEIC and OpenCV-incompatible formats: Phase 2 — add pillow-heif fallback in `blueprint_processor.py` when input is HEIC; standard formats use existing `cv2.imdecode` path.
+- [ ] **30.5** PDF support: Phase 3 — frontend-only; pdf.js renders first page to canvas → PNG → `showCropModal()`. Backend never sees PDF.
 - [ ] **30.6** Update docs and UX: Error messages, file input `accept` attribute, and README to reflect supported types (JPEG, PNG, WebP, HEIC, PDF via conversion).
 
-*Section 30 status: Planned. All subtasks uncompleted. BMP, TIFF, AVIF, GIF excluded from scope.*
+*Section 30 status: Planned. Implement in phases 1 → 2 → 3. BMP, TIFF, AVIF, GIF excluded from scope.*
 
 ---
 
