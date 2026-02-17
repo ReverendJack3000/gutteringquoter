@@ -4432,6 +4432,26 @@ function initUpload() {
     }
   });
 
+  // Clipboard paste: Cmd+V/Ctrl+V for desktop screenshots (Phase 1, Task 30.3)
+  document.addEventListener('paste', (e) => {
+    if (!e.clipboardData?.items) return;
+    for (const item of e.clipboardData.items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          clearMessage();
+          if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+            showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+          } else {
+            showCropModal(file);
+          }
+          break;
+        }
+      }
+    }
+  });
+
   toggle.addEventListener('change', async () => {
     state.technicalDrawing = toggle.checked;
     state.transparencyPopoverOpen = false;
