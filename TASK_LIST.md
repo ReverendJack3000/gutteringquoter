@@ -8,13 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/auth-saved-diagrams
-- Based on: main
-- Status: Complete (merging to main)
-- Related Tasks:
-  - [x] 33.1 Save diagrams/blueprints as project files
-  - [x] 34.1 Auth and multi-tenancy
-  - [x] 34.2 Per-user saved files
+- Branch: main
+- Status: Stable
 
 ---
 
