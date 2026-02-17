@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SVG Rotator &amp; Trim</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1rem;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.25rem; margin-top: 0; }
+    .drop-zone {
+      border: 2px dashed #555;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      background: #252525;
+      margin-bottom: 1rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop-zone.dragover { border-color: #0a7; background: #2a3530; }
+    .drop-zone.has-file { border-color: #0a7; border-style: solid; }
+    .drop-zone p { margin: 0 0 0.5rem; color: #999; }
+    .drop-zone .filename { color: #0a7; font-weight: 600; }
+    .preview-wrap {
+      background: #252525;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview-wrap svg {
+      max-width: 100%;
+      max-height: 400px;
+      display: block;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border: 1px solid #555;
+      border-radius: 6px;
+      background: #333;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover { background: #444; border-color: #666; }
+    button:active { background: #2a2a2a; }
+    button.download { background: #0a5; color: #fff; border-color: #0a5; }
+    button.download:hover { background: #0b6; }
+    .hint { font-size: 0.85rem; color: #777; margin-top: 1rem; }
+    .error { color: #e66; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>SVG Rotator &amp; Trim</h1>
+  <p class="hint">Drop an SVG file to make it horizontal with a tight bounding box. Rotate in 90° steps, trim whitespace, then download. Open this file in a browser (file:// or via a local server).</p>
+
+  <div class="drop-zone" id="dropZone">
+    <p>Drop an SVG file here</p>
+    <p class="filename" id="filename"></p>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <p id="previewPlaceholder" style="color:#666; margin:0;">Preview will appear here after you drop an SVG.</p>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="rotateLeft">↶ Rotate Left (90°)</button>
+    <button type="button" id="rotateRight">↷ Rotate Right (90°)</button>
+    <button type="button" id="trim">Trim Whitespace</button>
+    <button type="button" class="download" id="download">Download Fixed SVG</button>
+  </div>
+  <p id="error" class="error"></p>
+  <p class="hint" style="margin-top:1.5rem;">After fixing assets: update <code>backend/app/products.py</code> to stop using .png (remove <code>_diagram_url_with_normalized</code> / use .svg only).</p>
+
+  <script>
+    (function () {
+      const dropZone = document.getElementById('dropZone');
+      const filenameEl = document.getElementById('filename');
+      const previewWrap = document.getElementById('previewWrap');
+      const previewPlaceholder = document.getElementById('previewPlaceholder');
+      const rotateLeftBtn = document.getElementById('rotateLeft');
+      const rotateRightBtn = document.getElementById('rotateRight');
+      const trimBtn = document.getElementById('trim');
+      const downloadBtn = document.getElementById('download');
+      const errorEl = document.getElementById('error');
+
+      let currentSvg = null;   // SVGElement in DOM
+      let currentName = '';
+      let rotationDeg = 0;    // accumulated rotation (0, 90, 180, 270)
+      let contentGroup = null;
+      let contentCenter = null;
+
+      function showError(msg) {
+        errorEl.textContent = msg || '';
+      }
+
+      function setButtons(enabled) {
+        rotateLeftBtn.disabled = !enabled;
+        rotateRightBtn.disabled = !enabled;
+        trimBtn.disabled = !enabled;
+        downloadBtn.disabled = !enabled;
+      }
+
+      function ensureContentGroup(svg) {
+        const children = Array.from(svg.childNodes);
+        const first = children[0];
+        if (first && first.tagName && first.tagName.toUpperCase() === 'G' && first.id === 'svg-rotator-content') {
+          contentGroup = first;
+          return;
+        }
+        contentGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        contentGroup.id = 'svg-rotator-content';
+        children.forEach(function (node) {
+          contentGroup.appendChild(node.cloneNode(true));
+        });
+        svg.innerHTML = '';
+        svg.appendChild(contentGroup);
+      }
+
+      function updateViewBoxFromBBox(svg, alsoSetSize) {
+        const bbox = svg.getBBox();
+        const vb = [bbox.x, bbox.y, bbox.width, bbox.height].join(' ');
+        svg.setAttribute('viewBox', vb);
+        if (alsoSetSize || (!svg.hasAttribute('width') && !svg.hasAttribute('height'))) {
+          svg.setAttribute('width', bbox.width);
+          svg.setAttribute('height', bbox.height);
+        }
+      }
+
+      function applyRotation() {
+        if (!contentGroup || contentCenter == null) return;
+        const cx = contentCenter.x;
+        const cy = contentCenter.y;
+        contentGroup.setAttribute('transform', 'rotate(' + rotationDeg + ',' + cx + ',' + cy + ')');
+        updateViewBoxFromBBox(currentSvg);
+      }
+
+      function loadSvg(text, name) {
+        showError('');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'image/svg+xml');
+        const svg = doc.documentElement;
+        if (!svg || svg.tagName.toUpperCase() !== 'SVG') {
+          showError('Not a valid SVG document.');
+          return;
+        }
+        const clone = svg.cloneNode(true);
+        previewPlaceholder.remove();
+        if (previewWrap.querySelector('svg')) previewWrap.querySelector('svg').remove();
+        previewWrap.appendChild(clone);
+        currentSvg = clone;
+        currentName = name || 'image.svg';
+        rotationDeg = 0;
+
+        ensureContentGroup(currentSvg);
+        const bbox = contentGroup.getBBox();
+        contentCenter = { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 };
+        updateViewBoxFromBBox(currentSvg);
+        applyRotation();
+
+        dropZone.classList.add('has-file');
+        filenameEl.textContent = currentName;
+        setButtons(true);
+      }
+
+      dropZone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('dragover');
+      });
+      dropZone.addEventListener('dragleave', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+      });
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.svg')) {
+          showError('Please drop an SVG file.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function () {
+          loadSvg(reader.result, file.name);
+        };
+        reader.onerror = function () {
+          showError('Failed to read file.');
+        };
+        reader.readAsText(file);
+      });
+
+      rotateLeftBtn.addEventListener('click', function () {
+        if (!currentSvg) return;
+        rotationDeg -= 90;
+        if (rotationDeg < 0) rotationDeg += 360;
+        applyRotation();
+      });
+      rotateRightBtn.addEventListener('click', function () {
+        if (!currentSvg) return;
+        rotationDeg += 90;
+        if (rotationDeg >= 360) rotationDeg -= 360;
+        applyRotation();
+      });
+      trimBtn.addEventListener('click', function () {
+        if (!currentSvg) return;
+        updateViewBoxFromBBox(currentSvg, true);
+      });
+      downloadBtn.addEventListener('click', function () {
+        if (!currentSvg) return;
+        const serializer = new XMLSerializer();
+        const str = serializer.serializeToString(currentSvg);
+        const blob = new Blob([str], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (currentName && currentName.replace(/\.svg$/i, '')) ? currentName : 'fixed.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      setButtons(false);
+    })();
+  </script>
+</body>
+</html>

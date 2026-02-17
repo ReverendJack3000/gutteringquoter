@@ -1,0 +1,16 @@
+---
+description: Mark completed tasks in TASK_LIST.md with [x]
+alwaysApply: true
+---
+
+# Task list completion
+
+- **Single source of truth:** All task tracking for this project lives in `TASK_LIST.md`. Do not create or maintain a separate task list (e.g. in other markdown files or comments) for the same work.
+
+- **Marking completion:** When a task (or subtask) from `TASK_LIST.md` is done, update that line so the checkbox is **checked** by putting an **X** inside the square brackets:
+  - Before: `- [ ] **1.1** Create project folder structure`
+  - After:  `- [x] **1.1** Create project folder structure`
+
+- Prefer lowercase `x` in `[x]` for compatibility with common markdown checklists.
+
+- If you complete multiple tasks in one change, update every corresponding checkbox in `TASK_LIST.md` in the same edit.

@@ -1,0 +1,25 @@
+---
+description: Use Supabase MCP tools when working on database schema, data, or API that uses Supabase
+alwaysApply: false
+globs: 
+  - "**/backend/**"
+  - "**/docs/**BACKEND*.md"
+  - "**/docs/**SUPABASE*.md"
+---
+
+# Supabase database – use MCP to inspect
+
+When working on anything related to the **database** (schema, tables, queries, migrations, or API/backend code that reads or writes Supabase data):
+
+1. **Examine the current schema and data** using the Supabase MCP tools before changing code or docs:
+   - **List tables:** `mcp_supabase_list_tables` with `project_id: rlptjmkejfykisaefkeh` and `schemas: ["public"]`.
+   - **Run read-only queries:** `mcp_supabase_execute_sql` to inspect columns, sample rows, or verify data.
+   - **List migrations:** `mcp_supabase_list_migrations` to see what has been applied.
+
+2. **Apply schema changes** via migrations, not ad-hoc SQL in the codebase:
+   - Use `mcp_supabase_apply_migration` with the same `project_id` for DDL (create/alter table, policies, etc.).
+   - Keep migration names descriptive and snake_case (e.g. `add_products_category_index`).
+
+3. **Project reference:** The Quote App Supabase project is **Jacks Quote App** (project ID `rlptjmkejfykisaefkeh`). The canonical backend and schema spec is in **`docs/BACKEND_DATABASE.md`**.
+
+This ensures schema and code stay in sync and changes are traceable in the Supabase migration history.

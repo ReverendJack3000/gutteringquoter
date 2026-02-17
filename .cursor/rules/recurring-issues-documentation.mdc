@@ -1,0 +1,18 @@
+---
+description: Document recurring or sticky issues in TROUBLESHOOTING.md
+alwaysApply: true
+---
+
+# Document issues that might recur
+
+When we get stuck on an issue that is likely to come up again (e.g. environment quirks, dependency problems, API gotchas, or non-obvious fixes), document it so the project can recover faster next time.
+
+**Where to document:** Add or update an entry in **`TROUBLESHOOTING.md`** in the project root.
+
+**Each entry should include:**
+- **Symptom / context:** What we were doing and what went wrong (error message, behaviour).
+- **Cause (if known):** Why it happened (e.g. Python version, path, missing env).
+- **Fix / workaround:** Exact steps or code that resolved it (or a link to the fix).
+- **Optional:** One-line title and date so entries are easy to scan.
+
+After adding or updating `TROUBLESHOOTING.md`, continue with the original task. Do not remove or overwrite existing entries unless they are obsolete or incorrect.

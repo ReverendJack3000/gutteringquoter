@@ -1,0 +1,44 @@
+Item Number,Servicem8 Material_uuid,Item Name,Purchase Cost,Price
+SCR-SS,b6b81885-9bc2-4be5-a4de-23bbc59ed59b,Stainless Steel Screws,0.16$ exc GST ,0.22$ exc GST 
+GL-MAR,192aabb7-8bb3-4914-81d2-23bbc6df9feb,Marley Glue,16.79$ exc GST ,23.51$ exc GST 
+MS-GRY,5cd8764c-821a-4b40-88ce-23bbc463850b,MS Sika Sealant,19.13$ exc GST ,26.78$ exc GST 
+EJ-SC-MAR,0f90097d-c2fa-4e39-87bd-23bbc710be2b,Expansion Joiner: Storm Cloud Marley,26.61$ exc GST ,35.92$ exc GST 
+J-SC-MAR,d600de27-94e1-4dd0-8d3d-23bbcd62b58b,Joiner: Storm Cloud Marley,4.25$ exc GST ,5.95$ exc GST 
+GUT-SC-MAR-1.5M,e16968e4-d5c3-4edc-9494-23bbca37c94b,Gutter 1.5m: Storm Cloud Marley,34.10$ exc GST ,44.32$ exc GST 
+GUT-SC-MAR-3M,aef2a560-0d83-4f1d-9130-23bbcd540fdb,Gutter 3m: Storm Cloud Marley,49.57$ exc GST ,69.39$ exc GST 
+GUT-SC-MAR-5M,106a0c83-4863-4051-91a1-23bbc122688b,Gutter 5m: Storm Cloud Marley,84.90$ exc GST ,110.36$ exc GST 
+RSE-SC-MAR,6d9cbb8c-3f95-408b-9fc1-23bbc599917b,Right Hand Stopend: Storm Cloud Marley,6.41$ exc GST ,8.97$ exc GST 
+LSE-SC-MAR,73f9dd71-b21e-4d1b-9d84-23bbc5a0be8b,Left Hand Stopend: Storm Cloud Marley,6.41$ exc GST ,8.97$ exc GST 
+BRK-SC-MAR,1e417637-4f11-490e-a4a1-23bbc1bb25bb,Bracket: Storm Cloud Marley,3.46$ exc GST ,4.85$ exc GST 
+EO-SC-MAR-65,de6927c9-9f24-415a-a762-23bbc19ff89b,Expansion Outlet 65mm: Storm Cloud Marley,27.26$ exc GST ,35.44$ exc GST 
+EO-SC-MAR-80,7aa532b0-9d84-4829-805e-23bbcc3438fb,Expansion Outlet 80mm: Storm Cloud Marley,27.83$ exc GST ,36.17$ exc GST 
+EC-SC-MAR,7e721e17-991a-45c3-af25-23bbc08ccbdb,External Corner: Storm Cloud Marley,22.16$ exc GST ,28.80$ exc GST 
+IC-SC-MAR,13a80b34-7e08-46f7-a652-23bbcc0fc03b,Internal Corner: Storm Cloud Marley,22.55$ exc GST ,29.31$ exc GST 
+EJ-CL-MAR,b1fe4323-1ffc-4cb4-a700-23bbcff3a91b,Expansion Joiner: Classic Marley,25.34$ exc GST ,34.21$ exc GST 
+J-CL-MAR,1ccd01d4-e5b3-4ef1-a1c5-23bbc817f82b,Joiner: Classic Marley,4.62$ exc GST ,6.46$ exc GST 
+GUT-CL-MAR-1.5M,5e9e71ee-aeb8-49a2-9056-23bbc1dbc28b,Gutter 1.5m: Classic Marley,34.10$ exc GST ,44.32$ exc GST 
+GUT-CL-MAR-3M,16bdc7c7-54ba-470d-ad97-23bbc43a0bdb,Gutter 3m: Classic Marley,48.30$ exc GST ,67.61$ exc GST 
+GUT-CL-MAR-5M,bc22091c-5ace-4a05-9431-23bbc8f2f09b,Gutter 5m: Classic Marley,84.90$ exc GST ,110.38$ exc GST 
+RSE-CL-MAR,dd56c15e-a72a-41f8-816c-23bbccebffcb,Right Hand Stopend: Classic Marley,6.71$ exc GST ,9.40$ exc GST 
+LSE-CL-MAR,c8394f3c-ba72-4d7f-80e5-23bbc56311fb,Left Hand Stopend: Classic Marley,6.71$ exc GST ,9.40$ exc GST 
+BRK-CL-MAR,09dedf12-0221-4ad1-b57f-23bbc450f4ab,Bracket: Classic Marley,3.31$ exc GST ,4.64$ exc GST 
+EO-CL-MAR-65,4a4123df-d04d-4f0c-8144-23bbc523248b,Expansion Outlet 65mm: Classic Marley,27.17$ exc GST ,35.33$ exc GST 
+EO-CL-MAR-80,53bfd0fb-c454-4059-98e9-23bbc6ecae7b,Expansion Outlet 80mm: Classic Marley,27.17$ exc GST ,35.33$ exc GST 
+EC-CL-MAR,957108b0-9741-4b75-b6af-23bbcb4c667b,External Corner: Classic Marley,26.78$ exc GST ,34.82$ exc GST 
+IC-CL-MAR,448a0eb6-f9a8-45c8-af53-23bbc5a6339b,Internal Corner: Classic Marley,26.96$ exc GST ,35.04$ exc GST 
+ACL-65,db2944ca-87ee-4ae1-b4ab-23bbc0e9c31b,65mm: Adjustable Clip,6.70$ exc GST ,8.70$ exc GST 
+SCL-65,a0696e7b-5596-4ede-aeb5-23bbcf8789cb,65mm: Saddle Clip,2.96$ exc GST ,3.84$ exc GST 
+DPJ-65,e9c97d7d-c893-4d41-b2fb-23bbcb82ab1b,65mm: Downpipe Joiner,4.76$ exc GST ,6.18$ exc GST 
+EL95-65,ca2a2ed1-1299-4f7b-915f-23bbc65079bb,65mm: Downpipe Elbow 95°,8.01$ exc GST ,10.41$ exc GST 
+EL43-65,797ea51d-88fe-4354-91bd-23bbc8e39ccb,65mm: Downpipe Elbow 43°,9.63$ exc GST ,12.53$ exc GST 
+DP-65-3M,996faff2-e693-4808-a42b-23bbcf55541b,65mm: Downpipe 3m,32.17$ exc GST ,41.83$ exc GST 
+DP-65-6M,96e07ced-74d1-43ef-8938-23bdd129952b,65mm: Downpipe 6m,64.35$ exc GST ,83.65$ exc GST 
+DP-65-1.5M,9e7114a7-97a3-4fa0-8c57-23bdd1df261b,65mm: Downpipe 1.5m,16.09$ exc GST ,20.91$ exc GST 
+ACL-80,9539dc5c-dd40-4599-a3d2-23bbc1112bbb,80mm: Adjustable Clip,6.78$ exc GST ,8.82$ exc GST 
+SCL-80,244f9544-3114-47e4-ae8c-23bbc05ddd7b,80mm: Saddle Clip,3.31$ exc GST ,4.31$ exc GST 
+DPJ-80,273c7f90-e3b1-41d0-be5a-23bbccb187bb,80mm: Downpipe Joiner,5.48$ exc GST ,7.12$ exc GST 
+EL95-80,e6ac8e62-b2f1-439a-ac69-23bbc991281b,80mm: Downpipe Elbow 95°,8.64$ exc GST ,11.24$ exc GST 
+EL43-80,974ef800-1458-40f3-b2d4-23bbcc67e1bb,80mm: Downpipe Elbow 43°,11.61$ exc GST ,15.09$ exc GST 
+DP-80-3M,c1c783dd-351e-450a-a69b-23bbca62942b,80mm: Downpipe 3m,37.22$ exc GST ,48.38$ exc GST 
+DP-80-6M,ed4c9c2b-4c6f-495e-aa17-23bdd3ff65eb,80mm: Downpipe 6m,74.43$ exc GST ,96.77$ exc GST 
+DP-80-1.5M,78697d50-6f63-4bd7-b491-23bdd556ba1b,80mm: Downpipe 1.5m,18.61$ exc GST ,24.19$ exc GST 
