@@ -1043,6 +1043,13 @@ function initQuoteModal() {
     // Show modal
     modal.removeAttribute('hidden');
 
+    // Reset ServiceM8 feedback so it stays hidden until "Add to Job" sequence completes
+    const servicem8FeedbackEl = document.getElementById('servicem8Feedback');
+    if (servicem8FeedbackEl) {
+      servicem8FeedbackEl.classList.add('quote-servicem8-feedback--hidden');
+      servicem8FeedbackEl.classList.remove('quote-servicem8-feedback--visible');
+    }
+
     // Fetch labour rates and populate dropdown
     try {
       const res = await fetch('/api/labour-rates');
@@ -1088,6 +1095,29 @@ function initQuoteModal() {
   }
   labourHoursInput?.addEventListener('input', runCalculateQuote);
   labourRateSelect?.addEventListener('change', runCalculateQuote);
+
+  // ServiceM8 job number (Task 22.28): 1–5 digits only; placeholder "e.g. 4999" is strictly placeholder, never used as value
+  const servicem8JobIdInput = document.getElementById('servicem8JobIdInput');
+  const servicem8AddToJobBtn = document.getElementById('servicem8AddToJobBtn');
+  if (servicem8JobIdInput) {
+    servicem8JobIdInput.addEventListener('input', () => {
+      const raw = servicem8JobIdInput.value.replace(/\D/g, '');
+      const limited = raw.slice(0, 5);
+      if (limited !== servicem8JobIdInput.value) servicem8JobIdInput.value = limited;
+      updateServicem8InputState();
+    });
+  }
+  if (servicem8AddToJobBtn) {
+    servicem8AddToJobBtn.addEventListener('click', () => {
+      const jobId = (servicem8JobIdInput?.value || '').trim();
+      if (!jobId || jobId.length < 1 || jobId.length > 5) {
+        showMessage('Enter a job number (1–5 digits) to add materials to an existing job.', 'info');
+        return;
+      }
+      if (servicem8AddToJobBtn.classList.contains('quote-servicem8-btn--loading')) return;
+      runAddToJobSequence(servicem8AddToJobBtn);
+    });
+  }
 
   const btnCopy = document.getElementById('quoteCopyBtn');
   btnCopy?.addEventListener('click', () => copyQuoteToClipboard());
@@ -1169,6 +1199,7 @@ function commitMetresInput(tr, input) {
 
 /**
  * Show ⚠️ and red total when any quote row has missing manual measurement; hide when none.
+ * Also updates ServiceM8 job number section: disabled/shaded when there are outstanding manual entries (Task 22.28).
  */
 function updateQuoteTotalWarning() {
   const tableBody = document.getElementById('quoteTableBody');
@@ -1178,6 +1209,75 @@ function updateQuoteTotalWarning() {
   const hasIncomplete = tableBody.querySelector('tr.quote-row-incomplete-measurement') != null;
   warningSpan.hidden = !hasIncomplete;
   totalLine.classList.toggle('quote-total-final--incomplete', hasIncomplete);
+  updateServiceM8SectionState(hasIncomplete);
+}
+
+/**
+ * Enable or disable the ServiceM8 job number field and button based on manual entries (Task 22.28).
+ * When there are outstanding manual entries (incomplete measurement rows), the section is shaded and pointer-events: none.
+ */
+function updateServiceM8SectionState(hasIncomplete) {
+  const section = document.getElementById('quoteServicem8Section');
+  const input = document.getElementById('servicem8JobIdInput');
+  const btn = document.getElementById('servicem8AddToJobBtn');
+  if (!section || !input || !btn) return;
+  if (hasIncomplete) {
+    section.classList.add('quote-servicem8-section--disabled');
+    input.disabled = true;
+    btn.disabled = true;
+  } else {
+    section.classList.remove('quote-servicem8-section--disabled');
+    input.disabled = false;
+    btn.disabled = false;
+    updateServicem8InputState();
+  }
+}
+
+/**
+ * Update input/button state classes from actual input.value only (placeholder is never used as value).
+ * Valid = 1–5 digits; adds --has-value on input and --valid on button for Apple-style styling.
+ */
+function updateServicem8InputState() {
+  const input = document.getElementById('servicem8JobIdInput');
+  const btn = document.getElementById('servicem8AddToJobBtn');
+  if (!input || !btn) return;
+  const raw = (input.value || '').trim();
+  const valid = /^\d{1,5}$/.test(raw);
+  input.classList.toggle('quote-servicem8-job-input--has-value', valid);
+  btn.classList.toggle('quote-servicem8-btn--valid', valid);
+}
+
+/**
+ * Add to Job click sequence: text → spinner (~800ms) → checkmark (~1000ms) → text. Button width kept stable.
+ * TODO: Wire this to the ServiceM8 API response (Success/Error) after deployment.
+ */
+function runAddToJobSequence(btn) {
+  if (!btn) return;
+  btn.disabled = true;
+  btn.classList.add('quote-servicem8-btn--loading');
+
+  // Phase 1: text gone (handled by --loading class)
+  // Phase 2: spinner visible for ~800ms
+  const spinnerMs = 800;
+  const checkmarkMs = 1000;
+
+  setTimeout(() => {
+    btn.classList.remove('quote-servicem8-btn--loading');
+    btn.classList.add('quote-servicem8-btn--done');
+    // Phase 3: checkmark for ~1000ms
+    setTimeout(() => {
+      btn.classList.remove('quote-servicem8-btn--done');
+      btn.disabled = false;
+      // Phase 4: text visible again (default state)
+      // Feedback: reveal only after sequence complete (fade + slide). TODO: Wire to ServiceM8 API response (Success/Error) after deployment.
+      const feedback = document.getElementById('servicem8Feedback');
+      if (feedback) {
+        feedback.textContent = 'Success';
+        feedback.classList.remove('quote-servicem8-feedback--error', 'quote-servicem8-feedback--hidden');
+        feedback.classList.add('quote-servicem8-feedback--success', 'quote-servicem8-feedback--visible');
+      }
+    }, checkmarkMs);
+  }, spinnerMs);
 }
 
 /**
@@ -1823,6 +1923,7 @@ function initFloatingToolbar() {
         draw();
         return;
       }
+      // Remove all selected elements (Task 28.3); same logic as Delete/Backspace key.
       const toRemove = new Set(state.selectedIds);
       state.elements = state.elements.filter((el) => !toRemove.has(el.id));
       state.groups = state.groups.map((g) => ({
@@ -2527,6 +2628,7 @@ function cloneStateForUndo() {
     })),
     blueprintTransform: state.blueprintTransform ? { ...state.blueprintTransform, locked: !!state.blueprintTransform.locked } : null,
     hasBlueprint: !!state.blueprintImage,
+    blueprintImageRef: state.blueprintImage || null, // reference so undo can restore previous blueprint (Task 14.3)
     groups: state.groups.map((g) => ({ id: g.id, elementIds: g.elementIds.slice() })),
   };
 }
@@ -2547,8 +2649,9 @@ async function restoreStateFromSnapshot(snapshot) {
   if (!snapshot.hasBlueprint) {
     state.blueprintImage = null;
     state.blueprintTransform = null;
-  } else if (snapshot.blueprintTransform) {
-    state.blueprintTransform = { ...snapshot.blueprintTransform };
+  } else {
+    if (snapshot.blueprintImageRef) state.blueprintImage = snapshot.blueprintImageRef;
+    if (snapshot.blueprintTransform) state.blueprintTransform = { ...snapshot.blueprintTransform };
   }
   state.groups = (snapshot.groups || []).map((g) => ({ id: g.id, elementIds: g.elementIds.slice() }));
   setSelection([]);
@@ -4153,8 +4256,9 @@ function initCanvas() {
       e.preventDefault();
       undo();
     }
-    // Delete/Backspace: remove selected elements only; never remove or alter the blueprint.
-    // Allow delete when focus is in badge length input so measurable elements (gutters, downpipes, droppers) can be deleted from the popover.
+    // Delete/Backspace: remove all selected elements from the canvas (Task 28.3). Never remove or alter the blueprint.
+    // Works for single selection, marquee multi-select, and any element type (gutter, downpipe, bracket, etc.).
+    // Allow delete when focus is in badge length input so measurable elements can be deleted from the popover.
     if ((!inInput || inBadgeLengthInput) && (e.key === 'Delete' || e.key === 'Backspace')) {
       if (state.selectedBlueprint && state.selectedIds.length === 0) return; // blueprint only: do nothing
       if (state.selectedIds.length === 0) return;
@@ -4370,6 +4474,7 @@ async function processFileAsBlueprint(file) {
   }
   state.originalFile = file;
   state.technicalDrawing = toggle.checked;
+  pushUndoSnapshot(); // so Cmd+Z can revert this upload (Task 14.3)
   updatePlaceholderVisibility();
   const formData = new FormData();
   formData.append('file', file);
@@ -4526,6 +4631,7 @@ function initUpload() {
     state.technicalDrawing = toggle.checked;
     state.transparencyPopoverOpen = false;
     if (!state.originalFile) return;
+    pushUndoSnapshot(); // so Cmd+Z can revert technical-drawing toggle (Task 14.3)
     clearMessage();
     const formData = new FormData();
     formData.append('file', state.originalFile);

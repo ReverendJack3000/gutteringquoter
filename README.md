@@ -30,12 +30,21 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    # Edit .env: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from Supabase dashboard → Settings → API
    ```
 
-3. **Run the server (local)**
+3. **Run the local server (single command)**
 
-   From the **backend** directory:
+   From the **project root**, one command starts the backend and serves the frontend (Task 10.8):
+
+   ```bash
+   ./scripts/run-server.sh
+   ```
+
+   The script activates the backend `.venv` if present and runs `uvicorn` on **http://127.0.0.1:8000/**. Health check: **GET http://127.0.0.1:8000/api/health** (returns `{"status":"ok"}`).
+
+   **Alternative (manual):** from the `backend` directory run:
 
    ```bash
    cd backend
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
    uvicorn main:app --reload --host 127.0.0.1 --port 8000
    ```
 

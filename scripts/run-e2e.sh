@@ -12,11 +12,11 @@ if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
   BASE_URL="$BASE_URL" npm run test:e2e
 else
   echo ""
-  echo "  Server not running. In a separate terminal, start it:"
+  echo "  Server not running. In a separate terminal, start it (from project root):"
   echo ""
-  echo "    cd backend"
-  echo "    source .venv/bin/activate   # or: .venv\\Scripts\\activate on Windows"
-  echo "    uvicorn main:app --reload --host 127.0.0.1 --port 8000"
+  echo "    ./scripts/run-server.sh"
+  echo ""
+  echo "  Or manually:  cd backend && source .venv/bin/activate && uvicorn main:app --reload --host 127.0.0.1 --port 8000"
   echo ""
   echo "  Then run this script again:  ./scripts/run-e2e.sh"
   echo "  Or:  npm run test:e2e"

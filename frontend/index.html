@@ -192,6 +192,20 @@
         <div class="quote-total-line"><span>Labour subtotal</span><span id="labourTotalDisplay">0.00</span></div>
         <div class="quote-total-line quote-total-final" id="quoteTotalFinalLine"><span>Total</span><span id="quoteTotalWarning" class="quote-total-warning" hidden aria-hidden="true">⚠️ </span><span id="quoteTotalDisplay">0.00</span></div>
       </div>
+      <div class="quote-servicem8-section quote-servicem8-section--disabled" id="quoteServicem8Section" aria-live="polite">
+        <p class="quote-servicem8-title">Add to existing job (ServiceM8)</p>
+        <div class="quote-servicem8-controls">
+          <label for="servicem8JobIdInput" class="quote-servicem8-job-label">Job #</label>
+          <input type="text" id="servicem8JobIdInput" inputmode="numeric" maxlength="5" placeholder="e.g. 4999" aria-label="ServiceM8 job number (1 to 5 digits)" class="quote-servicem8-job-input" disabled />
+          <button type="button" class="quote-servicem8-btn" id="servicem8AddToJobBtn" disabled title="Enter job number and add materials to existing job">
+            <span class="quote-servicem8-btn-text">Add to Job</span>
+            <span class="quote-servicem8-btn-spinner" aria-hidden="true"></span>
+            <span class="quote-servicem8-btn-done" aria-hidden="true">✅</span>
+          </button>
+          <!-- TODO: Wire this to the ServiceM8 API response (Success/Error) after deployment. -->
+          <span id="servicem8Feedback" class="quote-servicem8-feedback quote-servicem8-feedback--success quote-servicem8-feedback--hidden" aria-live="polite">Success</span>
+        </div>
+      </div>
       <div id="quoteError" class="quote-error" role="alert" hidden></div>
       <div class="quote-modal-actions">
         <button type="button" class="btn btn-primary" id="quotePrintBtn">Print</button>

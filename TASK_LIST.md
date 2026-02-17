@@ -8,8 +8,14 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/undo-delete-polish
+- Based on: main
+- Status: Ready to merge (14.3, 28.3, 10.8, 22.28 complete)
+- Related Tasks:
+  - [x] 14.3 Ensure Cmd+Z undoes blueprint upload + element move/placement
+  - [x] 28.3 Ensure Delete key works for all elements
+  - [x] 10.8 Local server single command and documentation
+  - [x] 22.28 ServiceM8 job number field (conditional on manual entries)
 
 ---
 
@@ -104,6 +110,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **7.8** Prevent canvas drag/scroll from triggering element drag when intended (e.g. only move when drag starts on element)
 - [x] **7.9** Gutter rotation constraint: gutter elements cannot be rotated into the band 60°–80° (config in ROTATION_CONSTRAINTS.gutter); clamp to nearest boundary with hysteresis; Alt key overrides; visual feedback when at limit (cursor not-allowed, tooltip "Max angle")
 - [ ] **7.10** Revisit gutter rotation constraint: consider E2E for Alt override, hysteresis tuning, or other UX polish; feature implemented in app.js + Puppeteer tests (programmatic clamp and drag-forbidden-band).
+- [ ] **7.11** Element transform: add horizontal and vertical flip (flip controls) while preserving the element’s rotation and size.
 
 ---
 
@@ -128,6 +135,14 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ---
 
+## 33. Save/Load project files
+
+*Context: Allow users to persist and reload full diagram/blueprint state as project files.*
+
+- [ ] **33.1** Ability to save diagrams/blueprints as project files (e.g. export to .json or save to backend; load from file or backend to restore blueprint + elements + view state).
+
+---
+
 ## 10. Infrastructure and tooling
 
 - [x] **10.1** Document backend/database requirements and Supabase project (docs/BACKEND_DATABASE.md, SUPABASE_SETUP.md)
@@ -137,6 +152,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **10.5** Add Cursor rule to use Supabase MCP when working on database-related code or schema
 - [x] **10.6** Troubleshooting and README: Supabase required for server start, local testing, E2E setup
 - [x] **10.7** Add E2E test for drag-and-drop Marley product onto blueprint (simulate drop, assert element added)
+- [x] **10.8** Local server: Ensure the app can be run as a local server with a single command and clear documentation (run from backend, serve frontend, optional health check).
 
 ---
 
@@ -172,6 +188,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 - [x] **14.1** Fix jumpy/clunky behaviour when moving, resizing, or rotating elements or the uploaded blueprint: freeze the view transform (base scale and offset) during any interaction so the canvas does not re-fit every frame; re-fit only when the user releases (mode becomes null).
 - [x] **14.2** Undo most recent action: Ctrl+Z (Windows/Linux) / Cmd+Z (Mac) restores the canvas and elements to the state before the last action (element or blueprint move, resize, rotate, or new element drop); ignore when focus is in an input or textarea; cap history (e.g. 50 steps).
+- [x] **14.3** Ensure Cmd+Z / Ctrl+Z undoes blueprint diagram uploads (revert to no blueprint) and element movement/placement; maintain history cap and consistent undo stack.
 
 ---
 
@@ -339,6 +356,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 **Future Considerations (ServiceM8 Integration)**
 
 - [ ] **22.21** Document ServiceM8 integration: add section to README or docs/SERVICEM8_INTEGRATION.md noting `public.quotes` includes `servicem8_job_id` for future use; quote JSONB items designed to map to ServiceM8 material line items API; future endpoint POST `/api/sync-to-servicem8` accepting {quote_id, servicem8_job_id}.
+- [x] **22.28** ServiceM8 job number field: Add a UI field to the quote form that appears once any missing manual entries are confirmed (if applicable), for later ServiceM8 integration – ability to add materials to an existing job. Field: 1–5 digit "generated_job_id" (job number); number entry box with green fill (RGB 113, 196, 60 / #71C43C) and slight shadow.
+- [ ] **22.29** Integrate ServiceM8 API response logic to toggle the Success/Error message states in the Quote footer. Visibility logic is implemented (message hidden by default, revealed after Add to Job sequence); API wiring (Success/Error from real response) is still pending.
 
 **Testing and Polish**
 
@@ -446,8 +465,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **26.3** Every dropper used requires 4 screws (SCR-SS): extend accessory logic to infer 4 × dropper quantity and add to screw total.
 - [x] **26.4** Every saddle clip (SCL-65, SCL-80) requires 2 screws: extend accessory logic to infer 2 × saddle clip quantity and add to screw total.
 - [x] **26.5** Every adjustable clip (ACL-65, ACL-80) requires 2 screws: extend accessory logic to infer 2 × adjustable clip quantity and add to screw total.
+- [ ] **26.6** Bin sorting logic for downpipes: implement length-based bin-pack or sort order for downpipes in quote/billing (e.g. standard lengths, grouping, or display order).
 
-*Section 26 status: 26.1, 26.3, 26.4, 26.5 complete. 26.2 (manual guttering distance entry UI) pending.*
+*Section 26 status: 26.1, 26.3, 26.4, 26.5 complete. 26.2 (manual guttering distance entry UI) and 26.6 (downpipe bin sorting) pending.*
 
 ---
 
@@ -492,8 +512,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 - [x] **28.1** Delete key: Ensure Delete/Backspace removes only selected **elements**, never the blueprint image. When only the blueprint is selected, pressing Delete does nothing.
 - [x] **28.2** Badge double-click: Double-clicking the number on a gutter or downpipe measurement badge (on canvas) opens an inline length entry (e.g. input) beside the number. Once the user enters the length and confirms (Enter or blur), the module closes and the value is saved (update `el.measuredLength`); wire to the same logic as the Measurement Deck at the bottom of the screen so the deck stays in sync.
+- [x] **28.3** Ensure the Delete key works for all elements to remove them from the canvas (no edge cases; every element type removable via Delete/Backspace).
 
-*Section 28 status: Complete. Delete only removes elements; double-click badge opens length popover, save syncs to deck.*
+*Section 28 status: Complete. Delete removes elements only; toolbar and keyboard use same logic for all element types.*
 
 ---
 
@@ -620,6 +641,15 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 34. Auth, multi-tenancy, and per-user data
+
+*Context: Password protection, tenant isolation, and per-user saved files for multi-user use.*
+
+- [ ] **34.1** Password protection and multi-tenancy: implement auth (e.g. login) and tenant isolation so each tenant’s data is separated.
+- [ ] **34.2** Allow each user to have their own saved files (per-user storage for project files; depends on auth and save/load project files).
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026 (Section 30 complete: clipboard paste, HEIC, PDF; merged feature/clipboard-paste to main)*
+*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files).*

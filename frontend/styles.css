@@ -1288,6 +1288,257 @@ body {
   opacity: 0.9;
 }
 
+/* ServiceM8 "Add to existing job" footer (Task 22.28) – Slick Apple aesthetic, vertical hierarchy */
+.quote-servicem8-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  margin: 0 0 4px;
+  transition: background 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+}
+
+/* When disabled (outstanding manual entries): light grey footer, no pointer interaction */
+.quote-servicem8-section--disabled {
+  background: #f0f0f0;
+  pointer-events: none;
+}
+
+.quote-servicem8-job-input:disabled,
+.quote-servicem8-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Section title: own row, clean typography */
+.quote-servicem8-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d1d1f;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+/* Horizontal controls row: Job # label + input + button, 12px gap */
+.quote-servicem8-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quote-servicem8-job-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d1d1f;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Input: default/empty vs value-entered states (placeholder is never used as value in logic) */
+.quote-servicem8-job-input {
+  width: 100px;
+  min-height: 40px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  background: #F5F5F7;
+  color: #1d1d1f;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.quote-servicem8-job-input::placeholder {
+  color: #8e8e93;
+}
+
+.quote-servicem8-job-input:focus {
+  outline: none;
+  background: #F5F5F7;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Value entered: white bg, green border, drop shadow */
+.quote-servicem8-job-input.quote-servicem8-job-input--has-value {
+  background: #fff;
+  border: 1.5px solid #71C43C;
+  box-shadow: 0 2px 6px rgba(113, 196, 60, 0.25);
+}
+
+.quote-servicem8-job-input.quote-servicem8-job-input--has-value:focus {
+  box-shadow: 0 2px 8px rgba(113, 196, 60, 0.3);
+}
+
+.quote-servicem8-job-input:disabled {
+  background: #e5e5e7;
+  color: #8e8e93;
+  box-shadow: none;
+}
+
+.quote-servicem8-job-input.quote-servicem8-job-input--has-value:disabled {
+  background: #e5e5e7;
+  border-color: #c7c7cc;
+}
+
+/* Add to Job button: centered flex stack; Text, Spinner, Checkmark occupy same central space, toggled via opacity/visibility */
+.quote-servicem8-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  min-height: 40px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Press effect (Apple-style); spring timing for bouncy feel */
+.quote-servicem8-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* All three states occupy the same centered slot (stacked, absolute) so only one is visible at a time */
+.quote-servicem8-btn .quote-servicem8-btn-text,
+.quote-servicem8-btn .quote-servicem8-btn-spinner,
+.quote-servicem8-btn .quote-servicem8-btn-done {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.quote-servicem8-btn .quote-servicem8-btn-spinner,
+.quote-servicem8-btn .quote-servicem8-btn-done {
+  opacity: 0;
+}
+
+/* Phase 1 & 2: text hidden during loading */
+.quote-servicem8-btn.quote-servicem8-btn--loading .quote-servicem8-btn-text {
+  opacity: 0;
+}
+
+.quote-servicem8-btn.quote-servicem8-btn--loading .quote-servicem8-btn-spinner {
+  opacity: 1;
+}
+
+/* Phase 3: text stays hidden; checkmark centered with pop effect (scale 0→1, spring) */
+.quote-servicem8-btn.quote-servicem8-btn--done .quote-servicem8-btn-text {
+  opacity: 0;
+}
+
+.quote-servicem8-btn.quote-servicem8-btn--done .quote-servicem8-btn-spinner {
+  opacity: 0;
+}
+
+/* Checkmark: pop effect (scale 0→1 with spring); stays centered in same slot as text/spinner */
+.quote-servicem8-btn .quote-servicem8-btn-done {
+  transform: scale(0);
+}
+
+.quote-servicem8-btn.quote-servicem8-btn--done .quote-servicem8-btn-done {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.quote-servicem8-btn .quote-servicem8-btn-spinner {
+  width: 18px;
+  height: 18px;
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  margin-left: -9px;
+  margin-top: -9px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: quote-servicem8-spin 0.7s linear infinite;
+}
+
+@keyframes quote-servicem8-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ServiceM8 API feedback: hidden by default; shown after sequence with fade + slide. pointer-events: none. */
+.quote-servicem8-feedback {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.quote-servicem8-feedback--success {
+  color: #71C43C;
+}
+
+.quote-servicem8-feedback--error {
+  color: #E53E3E;
+}
+
+.quote-servicem8-feedback--hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-5px);
+}
+
+.quote-servicem8-feedback--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Input empty: desaturated lighter green, reduced opacity */
+.quote-servicem8-section:not(.quote-servicem8-section--disabled) .quote-servicem8-btn:not(:disabled):not(.quote-servicem8-btn--valid) {
+  background: #b8d4a8;
+  color: #fff;
+  opacity: 0.85;
+}
+
+.quote-servicem8-section:not(.quote-servicem8-section--disabled) .quote-servicem8-btn:not(:disabled):not(.quote-servicem8-btn--valid):hover {
+  opacity: 0.95;
+}
+
+/* Input valid (1–5 digits): solid #71C43C, white bold */
+.quote-servicem8-section:not(.quote-servicem8-section--disabled) .quote-servicem8-btn.quote-servicem8-btn--valid {
+  background: #71C43C;
+  color: #fff;
+  opacity: 1;
+}
+
+.quote-servicem8-section:not(.quote-servicem8-section--disabled) .quote-servicem8-btn.quote-servicem8-btn--valid:hover {
+  background: #65b035;
+}
+
+.quote-servicem8-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #e5e5e7 !important;
+  color: #8e8e93 !important;
+}
+
 .quote-error {
   margin: 0 20px 12px;
   padding: 8px 12px;
