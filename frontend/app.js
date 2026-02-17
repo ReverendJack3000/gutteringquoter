@@ -296,7 +296,35 @@ let undoHistory = [];
 let blueprintUndoHistory = []; // Separate stack for blueprint moves/resize/rotate so Ctrl+Z doesn't undo background when tweaking parts
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
+const ACCEPTED_PDF_TYPE = 'application/pdf';
 const MAX_FILE_SIZE_MB = 20;
+
+/** Phase 3, Task 30.5: Convert PDF first page to PNG File for crop modal. Backend never sees PDF. */
+async function convertPdfFirstPageToPng(file) {
+  const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
+  const pdfjs = pdfjsLib.default || pdfjsLib;
+  pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
+  const arrayBuffer = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  const page = await doc.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return reject(new Error('Failed to create PNG from PDF'));
+        const baseName = (file.name || 'page1').replace(/\.[^.]+$/, '');
+        resolve(new File([blob], baseName + '-page1.png', { type: 'image/png' }));
+      },
+      'image/png',
+      1
+    );
+  });
+}
 
 // Crop modal state (image coords in source pixels)
 const cropState = {
@@ -4388,19 +4416,32 @@ function initUpload() {
 
   uploadZone.addEventListener('click', () => fileInput.click());
 
-  fileInput.addEventListener('change', () => {
+  fileInput.addEventListener('change', async () => {
     const file = fileInput.files[0];
     if (!file) return;
     clearMessage();
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      showMessage('Please choose an image file (JPEG, PNG, GIF, or WebP).');
+    const isImage = ACCEPTED_IMAGE_TYPES.includes(file.type);
+    const isPdf = file.type === ACCEPTED_PDF_TYPE;
+    if (!isImage && !isPdf) {
+      showMessage('Please choose an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
       return;
     }
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
       return;
     }
-    showCropModal(file);
+    if (isPdf) {
+      try {
+        showMessage('Converting PDF…', 'info');
+        const pngFile = await convertPdfFirstPageToPng(file);
+        clearMessage();
+        showCropModal(pngFile);
+      } catch (err) {
+        showMessage('Could not convert PDF: ' + (err.message || String(err)));
+      }
+    } else {
+      showCropModal(file);
+    }
   });
 
   // Drag-and-drop files onto the blueprint area
@@ -4416,19 +4457,32 @@ function initUpload() {
       blueprintWrap.classList.remove('drag-over');
     }
   });
-  blueprintWrap.addEventListener('drop', (e) => {
+  blueprintWrap.addEventListener('drop', async (e) => {
     blueprintWrap.classList.remove('drag-over');
     if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
     e.preventDefault();
-    const file = Array.from(e.dataTransfer.files).find((f) => ACCEPTED_IMAGE_TYPES.includes(f.type));
-    if (file) {
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
-      } else {
-        showCropModal(file);
+    const file = Array.from(e.dataTransfer.files).find(
+      (f) => ACCEPTED_IMAGE_TYPES.includes(f.type) || f.type === ACCEPTED_PDF_TYPE
+    );
+    if (!file) {
+      showMessage('Drop an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
+    if (file.type === ACCEPTED_PDF_TYPE) {
+      try {
+        showMessage('Converting PDF…', 'info');
+        const pngFile = await convertPdfFirstPageToPng(file);
+        clearMessage();
+        showCropModal(pngFile);
+      } catch (err) {
+        showMessage('Could not convert PDF: ' + (err.message || String(err)));
       }
     } else {
-      showMessage('Drop an image file (JPEG, PNG, GIF, or WebP).');
+      showCropModal(file);
     }
   });
 

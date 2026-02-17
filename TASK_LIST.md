@@ -14,6 +14,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - Related Tasks:
   - [x] 30.3 Clipboard paste listener (Phase 1)
   - [x] 30.2, 30.4 HEIC support (Phase 2)
+  - [x] 30.5 PDF support (Phase 3)
 
 ---
 
@@ -574,10 +575,10 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **30.2** Relax backend validation: Extend backend `file.content_type` check (main.py) to accept any `image/*` type. Pipeline and response format unchanged. *(Already accepts image/*; no change needed.)*
 - [x] **30.3** Clipboard paste listener: Phase 1 — add paste listener, route image files to `showCropModal(file)`. Do not modify file input or drag-drop.
 - [x] **30.4** HEIC and OpenCV-incompatible formats: Phase 2 — add pillow-heif fallback in `blueprint_processor.py` when cv2.imdecode returns None; standard formats use existing `cv2.imdecode` path.
-- [ ] **30.5** PDF support: Phase 3 — frontend-only; pdf.js renders first page to canvas → PNG → `showCropModal()`. Backend never sees PDF.
+- [x] **30.5** PDF support: Phase 3 — frontend-only; PDF.js (dynamic import) renders first page to canvas → PNG → `showCropModal()`. Backend never sees PDF.
 - [ ] **30.6** Update docs and UX: Error messages, file input `accept` attribute, and README to reflect supported types (JPEG, PNG, WebP, HEIC, PDF via conversion).
 
-*Section 30 status: Phases 1 and 2 complete. Phase 3 (PDF) pending. BMP, TIFF, AVIF, GIF excluded from scope.*
+*Section 30 status: Phases 1, 2, and 3 complete. 30.6 (docs/UX) remaining. BMP, TIFF, AVIF, GIF excluded from scope.*
 
 ---
 
