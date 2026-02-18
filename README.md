@@ -92,6 +92,17 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 
 OpenAPI docs: http://127.0.0.1:8000/docs
 
+## Deployment (Railway)
+
+To deploy to production:
+
+1. Push the repo to GitHub (or GitLab/Bitbucket).
+2. Create a project at [railway.app](https://railway.app) and deploy from the repo.
+3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`).
+4. The repo includes a **Procfile** and **nixpacks.toml** so Railway runs `uvicorn` from `backend/` and serves the frontend.
+
+Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)**. After deploy, the live app URL is shown in the Railway dashboard (e.g. `https://quote-app-production.up.railway.app`).
+
 **Quick curl test (blueprint pipeline):** with the server running and a small image at `scripts/fixtures/tiny.png`:
 
 ```bash

@@ -296,6 +296,10 @@
       <div id="productModal" class="product-modal-backdrop" role="dialog" aria-labelledby="productModalTitle" aria-modal="true" hidden>
         <div class="product-modal-content product-modal-content--scroll">
           <h3 id="productModalTitle" class="modal-title">Add New Product</h3>
+          <div id="productModalSignInPrompt" class="product-modal-sign-in-prompt" hidden aria-live="polite">
+            <p>Sign in to add products.</p>
+            <button type="button" class="btn btn-primary" id="btnSignInFromProductModal">Sign in</button>
+          </div>
           <form id="productForm">
             <div id="dropZone" class="file-drop-zone">
               <div class="drop-zone-content">

@@ -8,8 +8,31 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/pre-deployment
+- Based on: main
+- Status: In Progress
+- Related Tasks: All uncompleted tasks below (Section 48 pre-deploy and Railway deployment)
+
+**Uncompleted tasks (by section):**
+
+| Section | Task | Description |
+|---------|------|-------------|
+| 7 | 7.10 | Revisit gutter rotation constraint (E2E Alt override, hysteresis; optional) |
+| 13 | 13.4, 13.5 | (Optional) Uploaded images uniform sizing; min/max size guards |
+| 15 | 15.5, 15.6 | (Optional) Live dimension/angle display during resize/rotate |
+| 20 | 20.2 | E2E resize test passes or update if intentional |
+| 22 | 22.20 | (Optional) Pricing edit permissions by role |
+| 22 | 22.21 | Document ServiceM8 integration |
+| 22 | 22.22–22.24 | Quote manual testing, error handling tests, optional E2E |
+| 22 | 22.29 | ServiceM8 API response Success/Error wiring |
+| 24 | 24.4 | (Optional) product_template_id for CSV diagram mapping |
+| 26 | 26.2 | Manual guttering distance entry UI |
+| 35 | 35.7, 35.8, 35.9 | Auth view switching; no regressions; manual/E2E check |
+| 36 | 36.11 | localProducts migration (optional) |
+| 41 | 41.1, 41.3 | 65/80 mm filter dropdown in Marley panel |
+| 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |
+| **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
+| 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
 
 ---
 
@@ -338,6 +361,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **22.12** Add `countCanvasElements()` in app.js: iterate state.elements, group by assetId, return object {assetId: count}; exclude blueprint from count (check assetId and not blueprint).
 - [x] **22.13** Wire Generate Quote button: on click, call countCanvasElements(), open quote modal, fetch products from state.products to map assetId → name, populate parts table with product name + quantity (no pricing yet), fetch labour rates from `/api/labour-rates` and populate dropdown, set focus to labour hours input.
 - [x] **22.14** Add Calculate Quote flow: when user enters labour hours and selects labour rate, send POST `/api/calculate-quote` with elements array (convert counts to [{assetId, quantity}]), labour_hours, labour_rate_id; on response, update modal with pricing breakdown (cost+markup % or sell price per line), materials subtotal, labour calculation, total; handle errors (show message if product pricing missing or API fails).
+- [x] **22.15** Quote modal Print button: implement `printQuote()` that opens a print window with the quote formatted as HTML (materials table, labour, totals), triggers browser print dialog, and closes the window after print.
 - [x] **22.16** Copy to Clipboard: create `copyQuoteToClipboard()` that formats quote as plain text (MATERIALS with line items, Materials Subtotal, LABOUR hours × rate, TOTAL); wire Copy button and show success message (e.g. "Quote copied to clipboard").
 
 **Manual Price Editing**
@@ -367,7 +391,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **22.26** Product cell in the empty row: allow typing to refine search (filter products by name/item number as user types); show a dropdown trigger (e.g. chevron or combobox) on the right side of the product cell to open a list of products.
 - [x] **22.27** When a product is selected from the empty row (via dropdown or search selection), convert that row to a normal quote line (set assetId, qty default 1), append a new empty invoice row below, trigger quote recalculation so unit price and totals update.
 
-*Section 22 status: In progress. 22.1–22.4, 22.5–22.14, 22.16–22.19, 22.25–22.27 complete. Unit price and totals display when quote modal is opened. Empty invoice row at bottom of table: type-to-search or dropdown to add products; selecting converts row and appends new empty row; merge into existing line when same product. Remaining: 22.15 (Print), 22.20–22.24 (optional/docs/testing).*
+*Section 22 status: In progress. 22.1–22.4, 22.5–22.14, 22.15 (Print), 22.16–22.19, 22.25–22.27 complete. Unit price and totals display when quote modal is opened. Empty invoice row at bottom of table: type-to-search or dropdown to add products; selecting converts row and appends new empty row; merge into existing line when same product. Remaining: 22.20–22.24 (optional/docs/testing).*
 
 **Quote modal: Save to Database confirmation**
 
@@ -721,10 +745,10 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Deliverable and edge cases**
 
 - [x] **36.9** User can add a product (SVG + details) when logged in; the SVG is stored in `product-diagrams`, the row in `public.products`, and the Product Library grid shows it from Supabase. Signing out and back in or opening the app on another device shows the same products.
-- [ ] **36.10** Handle “not logged in” in the Add Product flow: disable or hide “Create Product” and show “Sign in to add products,” or redirect to the login view and return to the modal after login.
+- [x] **36.10** Handle “not logged in” in the Add Product flow: disable or hide “Create Product” and show “Sign in to add products,” or redirect to the login view and return to the modal after login.
 - [ ] **36.11** Optional: migration path for existing `localProducts` (e.g. one-time “Upload my local products to Supabase” or leave localStorage as legacy and only show Supabase products in the grid).
 
-*Section 36 status: Implementation complete. 36.1–36.9 done. 36.10: auth check in uploadProductSVG; Product Management reachable only when logged in. 36.11: localStorage commented out; Supabase is source of truth.*
+*Section 36 status: Implementation complete. 36.1–36.10 done. 36.11: localStorage commented out; Supabase is source of truth.*
 
 ---
 
@@ -896,6 +920,94 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 48. Railway deployment – pre-deployment checklist
+
+*Context: Deploy the Quote App to Railway for production. Backend (FastAPI) serves the frontend; Supabase remains external. Tasks must be completed before first deploy and verified post-deploy.*
+
+**Pre-deploy: local tests to run**
+
+- [x] **48.0.1** Run `./scripts/run-server.sh` and confirm the app starts (no Supabase error); open http://127.0.0.1:8000/ and confirm the frontend loads.
+- [x] **48.0.2** Create fixtures (once): `python3 scripts/create_fixtures.py` – creates `scripts/fixtures/tiny.png` for API tests.
+- [x] **48.0.3** Run API verification: `./scripts/verify_api.sh` (or `./scripts/verify_api.sh http://127.0.0.1:8000`); all checks must pass.
+- [x] **48.0.4** Verify health endpoint: `curl http://127.0.0.1:8000/api/health` returns `{"status":"ok"}`.
+- [x] **48.0.5** Test blueprint pipeline: `curl -X POST "http://127.0.0.1:8000/api/process-blueprint?technical_drawing=true" -F "file=@scripts/fixtures/tiny.png" -o out.png && file out.png` – should output PNG.
+- [x] **48.0.6** Run E2E tests: `./scripts/run-e2e.sh` or `npm test` (backend must be running); all tests must pass.
+- [ ] **48.0.7** Manual desktop testing: resize browser to 1280×720 and 1920×1080; verify layout, panel collapse/expand, resizer drag.
+- [ ] **48.0.8** Manual smoke test – upload: upload a photo (JPEG/PNG), toggle Technical drawing, confirm blueprint displays.
+- [ ] **48.0.9** Manual smoke test – canvas: drag products onto blueprint, select/move/resize/rotate an element, export PNG.
+- [ ] **48.0.10** Manual smoke test – auth: sign in, save a diagram, load from dropdown; sign out and back in.
+- [ ] **48.0.11** Manual smoke test – quote: place products, open Generate Quote, add labour hours, verify totals; test Copy to Clipboard and Print.
+- [ ] **48.0.12** Manual smoke test – image types: test clipboard paste (Cmd+V screenshot), HEIC (if available), and PDF upload; confirm each processes correctly.
+
+**Pre-deploy: features to complete (blocking)**
+
+- [ ] **48.0.13** Section 35.7: After successful login, call `switchView('view-canvas')`; on Sign out, call `switchView('view-login')` – wire auth success/sign-out to view switching.
+- [ ] **48.0.14** Section 35.8: Verify no regressions when logged in – toolbar, panel, canvas, measurement deck, upload, export, quote, saved diagrams all work.
+- [x] **48.0.15** Section 22.15: Quote modal Print button – implement or verify Print flow works (or defer and hide button if out of scope).
+- [ ] **48.0.16** Ensure login/sign-up flow is reachable and functional (users can create accounts and sign in before using save/load).
+
+**Pre-deploy: troubleshooting to resolve**
+
+- [ ] **48.0.17** Confirm server starts without "Supabase is required" – `backend/.env` has `SUPABASE_URL` and at least one of `SUPABASE_ANON_KEY` or `SUPABASE_SERVICE_ROLE_KEY`.
+- [ ] **48.0.18** If port 8000 is in use: free it (`lsof -i :8000 -t | xargs kill`) or use another port and adjust verification scripts.
+- [ ] **48.0.19** App opened at http://127.0.0.1:8000/ only – never via file:// or a separate static server; fix if upload/API calls fail.
+- [ ] **48.0.20** Fix any failing E2E tests before deploy; check TROUBLESHOOTING.md for known issues (e.g. color swatch click, rotation/resize coords).
+- [ ] **48.0.21** Verify products load in the panel (from Supabase); if missing, check RLS policies and env vars.
+- [ ] **48.0.22** Verify blueprint image processing: no "Invalid image data" for valid uploads; HEIC needs `pillow-heif`; PDF uses frontend PDF.js.
+- [ ] **48.0.23** Document any unresolved issues in TROUBLESHOOTING.md before deploy so they can be revisited post-deploy.
+
+**Railway account and project setup**
+
+- [ ] **48.1** Create Railway account (https://railway.app) and install Railway CLI (optional, for local deploys).
+- [ ] **48.2** Create a new Railway project. Name it (e.g. `quote-app` or `jacks-quote-app`).
+- [ ] **48.3** Ensure the codebase is in a Git repo (GitHub, GitLab, or Bitbucket). Railway deploys via connected repo.
+
+**Build and run configuration (monorepo: backend + frontend)**
+
+- [ ] **48.4** Add `nixpacks.toml` at project root: configure Nixpacks to install from `backend/requirements.txt` (Nixpacks expects `requirements.txt` at root by default; use `[phases.install]` with custom `cmd` to point at `backend/requirements.txt`).
+- [ ] **48.5** Add `Procfile` at project root: `web: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT` so Railway uses `$PORT` and binds to `0.0.0.0`.
+- [ ] **48.6** Add `runtime.txt` at project root (optional): specify Python version (e.g. `python-3.11` or `python-3.12`) to match local development.
+- [ ] **48.7** Verify backend reads `FRONTEND_DIR` relative to `main.py`; with repo root deployed, `../frontend` from `backend/` will resolve correctly.
+
+**Environment variables**
+
+- [ ] **48.8** Document required env vars for Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`; optional `SUPABASE_JWT_SECRET` (if using legacy HS256).
+- [ ] **48.9** Add all required Supabase env vars in Railway dashboard (Project → Variables) or via CLI. Never commit `.env` or secrets to the repo.
+- [ ] **48.10** Confirm `backend/.env` is in `.gitignore` and that no secrets are hardcoded in the codebase.
+
+**Production behaviour**
+
+- [ ] **48.11** Ensure FastAPI/uvicorn binds to `0.0.0.0` (not `127.0.0.1`) so Railway can route traffic; `--host 0.0.0.0` in Procfile covers this.
+- [ ] **48.12** CORS: review `allow_origins=["*"]` in `main.py`; optionally restrict to the Railway app URL and known frontend origins for production.
+- [ ] **48.13** Verify `/api/health` returns `{"status":"ok"}` for Railway health checks; Railway can use this as a health check path if configured.
+
+**Security and logging**
+
+- [ ] **48.14** Ensure no debug mode or verbose error traces are enabled in production (e.g. no `debug=True` or stack traces in responses).
+- [ ] **48.15** Add or verify logging configuration (e.g. log level INFO or WARNING for production); Railway captures stdout/stderr.
+
+**Documentation and runbook**
+
+- [ ] **48.16** Add `docs/RAILWAY_DEPLOYMENT.md`: deployment steps, env vars, how to trigger a redeploy, and how to view logs.
+- [ ] **48.17** Update `README.md` with a "Deployment (Railway)" section: link to `docs/RAILWAY_DEPLOYMENT.md` and note the live URL once deployed.
+
+**Connect repo and first deploy**
+
+- [ ] **48.18** Connect the Git repo to Railway (New Project → Deploy from GitHub/GitLab/Bitbucket); select the correct branch (e.g. `main`).
+- [x] **48.19** Trigger first deploy; monitor build logs for Python install, Nixpacks phases, and start command.
+- [ ] **48.20** After deploy: open the Railway-generated URL, verify the app loads (frontend at `/`), health check (`/api/health`), and API (`/api/products`, `/api/config`).
+- [ ] **48.21** Test auth: sign in via Supabase; verify saved diagrams (save and load) work against production API and Supabase.
+- [ ] **48.22** Test blueprint upload: upload an image, verify processing and canvas display; confirm OpenCV and HEIC/PDF flows work in production.
+- [ ] **48.23** (Optional) Add custom domain in Railway if required; update Supabase Auth redirect URLs if using custom domain.
+
+**Post-deploy (ServiceM8 readiness)**
+
+- [x] **48.24** Document the production base URL (e.g. `https://quote-app-production.up.railway.app`). This URL will be used for ServiceM8 OAuth redirect_uri and webhook callbacks in future integration.
+
+*Section 48 status: Pre-deployment checklist. Complete 48.0.1–48.0.23 (local tests, features, troubleshooting) first; then 48.1–48.23 (Railway setup and deploy); 48.24 for ServiceM8 planning.*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Section 45 complete; post-45: Recenter removed, drafting compass icon for technical drawing, upload/toolbar wiring and transparency styling fixes. Diagram toolbar: upload, drafting compass (technical drawing), zoom −/fit/+, colour wheel, transparency. Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*
+*Last updated: Feb 2026. Section 48 added: Railway deployment pre-deployment checklist. Section 45 complete; Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*

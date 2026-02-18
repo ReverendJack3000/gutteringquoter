@@ -1326,6 +1326,9 @@ function initQuoteModal() {
   const btnCopy = document.getElementById('quoteCopyBtn');
   btnCopy?.addEventListener('click', () => copyQuoteToClipboard());
 
+  const btnPrint = document.getElementById('quotePrintBtn');
+  btnPrint?.addEventListener('click', () => printQuote());
+
   const editPricingBtn = document.getElementById('editPricingBtn');
   editPricingBtn?.addEventListener('click', () => {
     const table = document.getElementById('quotePartsTable');
@@ -1659,6 +1662,106 @@ function getElementsFromQuoteTable() {
 
 function formatCurrency(amount) {
   return '$' + Number(amount).toFixed(2);
+}
+
+/**
+ * Open a print window with the current quote modal content formatted as HTML.
+ * Opens a new window, writes the quote table and totals, then triggers the browser print dialog.
+ */
+function printQuote() {
+  const tableBody = document.getElementById('quoteTableBody');
+  const labourHoursInput = document.getElementById('labourHoursInput');
+  const labourRateSelect = document.getElementById('labourRateSelect');
+  const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
+  const labourTotalDisplay = document.getElementById('labourTotalDisplay');
+  const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
+
+  const escapeHtml = (s) => {
+    if (s == null || s === '') return '';
+    const t = String(s);
+    return t
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  let rowsHtml = '';
+  if (tableBody && tableBody.rows.length) {
+    for (const row of tableBody.rows) {
+      if (row.dataset.sectionHeader) {
+        const label = row.cells[0]?.textContent ?? '';
+        const total = row.cells[5]?.textContent ?? '';
+        rowsHtml += `<tr><td colspan="5"><strong>${escapeHtml(label)}</strong></td><td>${escapeHtml(total)}</td></tr>`;
+        continue;
+      }
+      if (row.dataset.emptyRow === 'true') continue;
+      const product = row.cells[0]?.textContent ?? '';
+      const qtyCell = row.cells[1];
+      const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
+      const qtyLineInput = qtyCell?.querySelector('.quote-line-qty-input');
+      let qty = '';
+      if (metresInput) qty = metresInput.value.trim() || 'Metres?';
+      else if (qtyLineInput) qty = qtyLineInput.value;
+      else qty = qtyCell?.textContent ?? '';
+      const unitPrice = row.cells[4]?.textContent ?? '—';
+      const totalCell = row.cells[5];
+      const totalVal = totalCell?.querySelector('.quote-cell-total-value');
+      const total = (totalVal ? totalVal.textContent : totalCell?.textContent) ?? '—';
+      rowsHtml += `<tr><td>${escapeHtml(product)}</td><td>${escapeHtml(qty)}</td><td></td><td></td><td>${escapeHtml(unitPrice)}</td><td>${escapeHtml(total)}</td></tr>`;
+    }
+  }
+  const hours = labourHoursInput?.value ?? '0';
+  const rateLabel = labourRateSelect?.selectedOptions?.[0]?.text ?? '';
+  const materialsSub = materialsTotalDisplay?.textContent ?? '0.00';
+  const labourSub = labourTotalDisplay?.textContent ?? '0.00';
+  const total = quoteTotalDisplay?.textContent ?? '0.00';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Quote</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; font-size: 12px; }
+    h1 { font-size: 18px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    th { background: #f5f5f5; }
+    .totals { margin-top: 12px; }
+    .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
+    .totals .final { font-weight: bold; font-size: 14px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <h1>Quote</h1>
+  <table>
+    <thead>
+      <tr><th>Product</th><th>Qty</th><th></th><th></th><th>Unit Price</th><th>Total</th></tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="totals">
+    <div>Materials subtotal: ${escapeHtml(materialsSub)}</div>
+    <div>Labour (${escapeHtml(hours)} hrs × ${escapeHtml(rateLabel)}): ${escapeHtml(labourSub)}</div>
+    <div class="final">Total: ${escapeHtml(total)}</div>
+  </div>
+</body>
+</html>`;
+
+  const printWin = window.open('', '_blank');
+  if (!printWin) {
+    showMessage('Popup blocked. Allow popups to print the quote.');
+    return;
+  }
+  printWin.document.write(html);
+  printWin.document.close();
+  printWin.focus();
+  setTimeout(() => {
+    printWin.print();
+    printWin.onafterprint = () => printWin.close();
+  }, 100);
 }
 
 /**
@@ -5820,6 +5923,8 @@ function initProductsView() {
     currentEditingProduct = null;
     pendingSvgContent = null;
     pendingSvgFile = null;
+    if (productModalSignInPrompt) productModalSignInPrompt.hidden = true;
+    if (productForm) { productForm.style.pointerEvents = ''; productForm.style.opacity = ''; }
     if (previewSvgContainer) previewSvgContainer.innerHTML = '';
     if (filePreview) filePreview.hidden = true;
     if (dropZoneContent) dropZoneContent.hidden = false;
@@ -5917,6 +6022,9 @@ function initProductsView() {
 
   const productModalTitle = document.getElementById('productModalTitle');
 
+  const productModalSignInPrompt = document.getElementById('productModalSignInPrompt');
+  const btnSignInFromProductModal = document.getElementById('btnSignInFromProductModal');
+
   openProductModal = (product = null) => {
     if (!product) {
       resetProductForm();
@@ -5926,9 +6034,20 @@ function initProductsView() {
         btnSaveProduct.disabled = true;
       }
       if (btnArchiveProduct) btnArchiveProduct.hidden = true;
+      if (!authState.token) {
+        if (productModalSignInPrompt) productModalSignInPrompt.hidden = false;
+        if (productForm) productForm.style.pointerEvents = 'none';
+        if (productForm) productForm.style.opacity = '0.5';
+      } else {
+        if (productModalSignInPrompt) productModalSignInPrompt.hidden = true;
+        if (productForm) productForm.style.pointerEvents = '';
+        if (productForm) productForm.style.opacity = '';
+      }
       productModal.hidden = false;
       return;
     }
+    if (productModalSignInPrompt) productModalSignInPrompt.hidden = true;
+    if (productForm) { productForm.style.pointerEvents = ''; productForm.style.opacity = ''; }
     currentEditingProduct = product;
     pendingSvgContent = null;
     pendingSvgFile = null;
@@ -5993,7 +6112,14 @@ function initProductsView() {
   }
 
   if (productCardNew && productModal) {
-    productCardNew.addEventListener('click', () => openProductModal(null));
+    productCardNew.addEventListener('click', () => {
+      if (!authState.token) {
+        switchView('view-login');
+        showMessage('Sign in to add products.');
+        return;
+      }
+      openProductModal(null);
+    });
   }
 
   if (btnCancelProduct && productModal) {
@@ -6081,9 +6207,22 @@ function initProductsView() {
     });
   }
 
+  if (btnSignInFromProductModal) {
+    btnSignInFromProductModal.addEventListener('click', () => {
+      productModal.hidden = true;
+      switchView('view-login');
+    });
+  }
+
   if (productForm) {
     productForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!authState.token) {
+        showMessage('Sign in to add products.');
+        switchView('view-login');
+        productModal.hidden = true;
+        return;
+      }
       const name = (inputProductName?.value || '').trim();
       const category = (inputProductCategory?.value || '').trim();
       const hasDiagram = pendingSvgContent || (currentEditingProduct && (currentEditingProduct.diagram_url || currentEditingProduct.diagramUrl));
@@ -6561,7 +6700,7 @@ function normalizeProduct(p) {
 
 /**
  * Load products for the sidebar panel. When logged in: fetch from Supabase (active only) and use those.
- * When logged out: use system products only.
+ * When logged out: fetch from GET /api/products so the panel still shows products (e.g. E2E, anonymous use).
  */
 async function loadPanelProducts() {
   if (authState.token && authState.supabase) {
@@ -6573,13 +6712,27 @@ async function loadPanelProducts() {
       if (error) throw error;
       state.products = (dbProducts || []).map(normalizeProduct);
     } catch (err) {
-      console.warn('Failed to fetch products from Supabase, using system products', err);
-      state.products = [...SYSTEM_PRODUCTS];
+      console.warn('Failed to fetch products from Supabase, using API fallback', err);
+      await fetchPanelProductsFromApi();
     }
   } else {
-    state.products = [...SYSTEM_PRODUCTS];
+    await fetchPanelProductsFromApi();
   }
   applyProductFilters();
+}
+
+/** Fetch products from backend GET /api/products (used when logged out or Supabase fails). */
+async function fetchPanelProductsFromApi() {
+  try {
+    const res = await fetch('/api/products');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    const list = (data.products || data) || [];
+    state.products = list.map(normalizeProduct);
+  } catch (err) {
+    console.warn('Failed to fetch products from API, using empty list', err);
+    state.products = [...SYSTEM_PRODUCTS];
+  }
 }
 
 function getPanelProducts() {
@@ -6986,6 +7139,7 @@ init();
 
 // E2E test hooks
 if (typeof window !== 'undefined') {
+  window.__quoteAppSwitchView = function (viewId) { switchView(viewId); };
   window.__quoteAppElementCount = function () { return state.elements.length; };
   window.__quoteAppGetSelection = function () { return state.selectedIds ? state.selectedIds.slice() : []; };
   window.__quoteAppGetViewport = function () {

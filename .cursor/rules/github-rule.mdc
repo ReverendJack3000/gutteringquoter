@@ -1,3 +1,47 @@
 ---
+description: Enforce single active feature branch and track it in TASK_LIST.md
 alwaysApply: true
 ---
+
+# Git Branch Discipline
+
+We operate with a single active feature branch at a time.
+
+## Core Rules
+
+- Never have more than ONE `feature/*` branch alive at a time.
+- If a feature branch already exists, finish it or delete it before starting another.
+- `main` must always remain stable and merge-ready.
+
+## Before Implementing a New Feature
+
+1. Run:
+   git branch
+
+2. If on `main`, create a feature branch:
+   git checkout -b feature/<short-feature-name>
+
+3. If already on a `feature/*` branch:
+   - Confirm it matches the task being worked on.
+   - If not, stop and resolve before proceeding.
+
+4. Update the top of `TASK_LIST.md` to include:
+
+## 🔁 Current Working Branch
+- Branch: feature/<short-feature-name>
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [ ] <task reference>
+
+## When Feature Is Complete
+
+1. Mark related tasks as [x] in TASK_LIST.md.
+2. Commit changes.
+3. Merge into main.
+4. Delete the feature branch.
+5. Update TASK_LIST.md to:
+
+## 🔁 Current Working Branch
+- Branch: main
+- Status: Stable

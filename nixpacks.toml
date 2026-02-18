@@ -1,0 +1,17 @@
+# Railway/Nixpacks: Quote App monorepo (backend + frontend at root)
+# Install Python deps from backend/requirements.txt; start via Procfile.
+# Force Python only so Nixpacks does not add Node/npm steps (root has package.json for E2E).
+
+providers = ["python"]
+
+[phases.setup]
+nixPkgs = ["python312", "pip"]
+
+[phases.install]
+# Default install looks for requirements.txt at root; we keep it in backend/
+# Use python -m pip so packages are installed for the same Python that runs at runtime.
+cmds = ["python -m pip install --upgrade pip", "python -m pip install -r backend/requirements.txt"]
+
+[variables]
+# Ensure Python 3.12 for compatibility with requirements
+NIXPACKS_PYTHON_VERSION = "3.12"

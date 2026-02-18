@@ -1,0 +1,29 @@
+# Git and env
+.git
+.gitignore
+.env
+backend/.env
+*.env.local
+
+# Python
+backend/.venv
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+
+# Node (E2E only, not needed in container)
+node_modules
+
+# Docs and tooling (not needed at runtime)
+docs/
+e2e/
+scripts/
+*.md
+.cursor/
+
+# Railway/Nixpacks config (Dockerfile replaces these)
+nixpacks.toml
+Procfile
+railway.json
+runtime.txt

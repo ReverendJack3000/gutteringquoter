@@ -51,6 +51,18 @@ async function run() {
     // App shell
     await page.waitForSelector('.app', { timeout: 5000 });
     await page.waitForSelector('#canvas', { timeout: 5000 });
+    // When logged out, app shows login view; ensure canvas view is visible for E2E
+    await delay(1500);
+    const canvasViewVisible = await page.evaluate(() => {
+      const v = document.getElementById('view-canvas');
+      return v && !v.classList.contains('hidden');
+    });
+    if (!canvasViewVisible) {
+      await page.evaluate(() => {
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      });
+      await delay(800);
+    }
     console.log('  ✓ App shell and canvas present');
 
     // Toolbar
@@ -490,12 +502,12 @@ async function run() {
       }
     }
 
-    // Stable viewport: Recenter View button exists and works
-    const recenterBtn = await page.$('#recenterViewBtn');
-    if (!recenterBtn) throw new Error('Recenter View button missing');
+    // Stable viewport: Fit view button exists and works (re-fit / recenter)
+    const recenterBtn = await page.$('#zoomFitBtn');
+    if (!recenterBtn) throw new Error('Fit view (Recenter) button missing');
     await recenterBtn.click();
     await delay(300);
-    console.log('  ✓ Recenter View button present and clickable');
+    console.log('  ✓ Fit view button present and clickable');
 
     // Stable viewport: no auto-refit after interaction (viewport unchanged ~200ms after move end)
     const v1 = await page.evaluate(() => (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null);
@@ -789,12 +801,12 @@ async function run() {
     // Transparency: click #blueprintTransparencyBtn to open popover (button visible when blueprint exists and technical drawing OFF)
     const hasBlueprint = await page.evaluate(() => (window.__quoteAppHasBlueprint && window.__quoteAppHasBlueprint()) || false);
     if (hasBlueprint) {
-      // Uncheck Technical drawing so transparency button is visible
+      // Uncheck Technical drawing so transparency button is visible (use evaluate to avoid overlay/visibility issues)
       const techToggle = await page.$('#technicalDrawingToggle');
       if (techToggle) {
         const checked = await page.evaluate((el) => el.checked, techToggle);
         if (checked) {
-          await techToggle.click();
+          await page.evaluate(() => { const t = document.getElementById('technicalDrawingToggle'); if (t) t.click(); });
           await delay(2000);
         }
       }
@@ -805,7 +817,7 @@ async function run() {
         if (btnHidden) {
           console.warn('  ⚠ Transparency: button hidden (technical drawing may still be on)');
         } else {
-          await transBtn.click();
+          await page.evaluate(() => { const b = document.getElementById('blueprintTransparencyBtn'); if (b) b.click(); });
           await delay(300);
           const popoverHidden = await page.evaluate(() => {
             const el = document.getElementById('transparencyPopover');

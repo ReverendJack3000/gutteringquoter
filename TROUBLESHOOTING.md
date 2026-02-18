@@ -68,6 +68,45 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Railway runtime: "No module named uvicorn" – 2026-02
+
+- **Symptom:** Deploy succeeds but app returns 502; logs show `/root/.nix-profile/bin/python: No module named uvicorn`. Build completes but runtime Python can't find installed packages.
+- **Cause:** Nixpacks installs Python packages, but the runtime Python (`/root/.nix-profile/bin/python`) doesn't see them because packages were installed to a different Python environment or location. Nixpacks Python environment isolation can cause this mismatch.
+- **Fix:** Use **Dockerfile** instead of Nixpacks for more reliable dependency installation. In **railway.json**, set `"builder": "DOCKERFILE"` and `"dockerfilePath": "Dockerfile"`. The Dockerfile uses `python:3.12-slim` base image which ensures pip-installed packages are available to the same Python interpreter at runtime. Alternative: if using Nixpacks, ensure `nixpacks.toml` uses `python -m pip install` and verify the install phase completes successfully in build logs.
+
+---
+
+## Railway build: "npm: command not found" in Nixpacks build – 2026-02
+
+- **Symptom:** Railway (Nixpacks) build fails with `npm: command not found` in a step like `RUN npm ci`.
+- **Cause:** Nixpacks detects the root `package.json` (used for E2E) and adds Node/npm phases; the image stage that runs `npm ci` may not have Node installed, or the plan mixes Python and Node incorrectly.
+- **Fix:** In **nixpacks.toml** at project root, force Python-only so Nixpacks does not add Node phases: add `providers = ["python"]`. Then commit and redeploy.
+
+---
+
+## Railway: "No start command was found" / Railpack uses Node – 2026-02
+
+- **Symptom:** Railway build uses Railpack, detects Node (because of root `package.json` for E2E), and fails with "No start command was found".
+- **Cause:** Railway’s default builder (Railpack) infers the stack from the repo; a root `package.json` makes it assume a Node app, which has no start script for the app server.
+- **Fix:** Add **railway.json** at project root so Railway uses Nixpacks and the Python app:
+  ```json
+  {
+    "build": { "builder": "NIXPACKS" },
+    "deploy": { "startCommand": "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT" }
+  }
+  ```
+  Commit and push; redeploy. See **docs/RAILWAY_DEPLOYMENT.md**.
+
+---
+
+## E2E fails: "Node not clickable", "Recenter View button missing", "Expected at least one product thumbnail" – 2026-02
+
+- **Symptom:** `./scripts/run-e2e.sh` or `npm test` fails: panel close/expand click fails, or "Recenter View button missing", or "Expected at least one product thumbnail".
+- **Cause:** (1) When logged out, the app shows the login view and the canvas/panel are inside a hidden `#view-canvas`, so Puppeteer cannot click panel elements. (2) "Recenter View" was removed; the app now has only "Fit view" (`#zoomFitBtn`). (3) When logged out, the panel used `SYSTEM_PRODUCTS` (empty), so the product grid had 0 thumbnails.
+- **Fix:** (1) E2E switches to canvas view when login view is visible: after load, if `#view-canvas` is hidden, call `window.__quoteAppSwitchView('view-canvas')` (exposed in app.js E2E hooks). (2) E2E uses `#zoomFitBtn` instead of `#recenterViewBtn`. (3) When logged out, the frontend fetches products from `GET /api/products` so the panel shows products without requiring sign-in. (4) For transparency test clicks, use `page.evaluate(() => document.getElementById('...').click())` to avoid overlay/visibility issues.
+
+---
+
 ## OpenCV rejects very small PNG (e.g. 1×1) – 2025-02
 
 - **Symptom:** `POST /api/process-blueprint` returns 400 `{"detail":"Invalid image data"}` when sending a minimal 1×1 PNG fixture.
