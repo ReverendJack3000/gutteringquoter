@@ -231,11 +231,11 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
-## ServiceM8 Add to Job: "Provided displayed_amount is incorrect" – 2026-02
+## ServiceM8 Add to Job: "inc-tax and ex-tax prices are inconsistent" – 2026-02
 
-- **Symptom:** Add to Job fails with "Failed to add job material" and 400 Bad Request. ServiceM8 returns: `Provided displayed_amount is incorrect. Expected [28.81]`.
-- **Cause:** The jobmaterial POST omits or sends incorrect `displayed_amount` / `displayed_amount_is_tax_inclusive`. ServiceM8 validates that displayed amounts match expected values (likely tax-inclusive vs exclusive).
-- **Fix:** (To be applied) Send `displayed_amount` and `displayed_amount_is_tax_inclusive` in the jobmaterial payload per ServiceM8 API. Match the expected format (e.g. string "28.81") and tax handling. See task 49.24.
+- **Symptom:** Add to Job fails with "Failed to add job material" and 400 Bad Request. ServiceM8 returns: `inc-tax and ex-tax prices are inconsistent. Expected price [116.77]`.
+- **Cause:** The material UUID (`6129948b-4f79-4fc1-b611-23bbc4f9726b`) in ServiceM8 has tax settings configured (likely tax-inclusive with GST). When we send both `price` and `displayed_amount` with `displayed_amount_is_tax_inclusive=false`, ServiceM8 calculates what the ex-tax price should be based on the material's tax configuration and finds a mismatch. The material's tax settings override or conflict with our explicit tax flags.
+- **Fix:** **Don't send `displayed_amount` or `displayed_amount_is_tax_inclusive`**. Send only `price` (ex-tax) and `cost`, and let ServiceM8 calculate `displayed_amount` automatically based on the material UUID's tax configuration. This avoids conflicts between our tax flags and the material's tax settings.
 
 ---
 

@@ -374,16 +374,13 @@ def add_job_material(
     price: str,
     cost: Optional[str] = None,
     displayed_amount: Optional[str] = None,
-    displayed_amount_is_tax_inclusive: Optional[str] = None,
     displayed_cost: Optional[str] = None,
     material_uuid: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """
     POST to ServiceM8 jobmaterial.json.
     Returns (success, error_message).
-    
-    When displayed_amount is provided, displayed_amount_is_tax_inclusive should also be provided
-    to indicate whether displayed_amount includes tax ("true") or excludes tax ("false").
+    price and displayed_amount must match; cost and displayed_cost must match.
     """
     mat_uuid = material_uuid or ADD_TO_JOB_DEFAULT_MATERIAL_UUID
     payload = {
@@ -397,9 +394,6 @@ def add_job_material(
         payload["cost"] = cost
     if displayed_amount is not None:
         payload["displayed_amount"] = displayed_amount
-        # ServiceM8 requires displayed_amount_is_tax_inclusive when displayed_amount is provided
-        if displayed_amount_is_tax_inclusive is not None:
-            payload["displayed_amount_is_tax_inclusive"] = displayed_amount_is_tax_inclusive
     if displayed_cost is not None:
         payload["displayed_cost"] = displayed_cost
     try:
