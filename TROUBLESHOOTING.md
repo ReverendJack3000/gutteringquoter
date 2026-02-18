@@ -231,6 +231,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ServiceM8 Add to Job: "Provided displayed_amount is incorrect" – 2026-02
+
+- **Symptom:** Add to Job fails with "Failed to add job material" and 400 Bad Request. ServiceM8 returns: `Provided displayed_amount is incorrect. Expected [28.81]`.
+- **Cause:** The jobmaterial POST omits or sends incorrect `displayed_amount` / `displayed_amount_is_tax_inclusive`. ServiceM8 validates that displayed amounts match expected values (likely tax-inclusive vs exclusive).
+- **Fix:** (To be applied) Send `displayed_amount` and `displayed_amount_is_tax_inclusive` in the jobmaterial payload per ServiceM8 API. Match the expected format (e.g. string "28.81") and tax handling. See task 49.24.
+
+---
+
 ## ServiceM8 OAuth: Menu button disappears after successful connection – 2026-02
 
 - **Symptom:** After successfully connecting ServiceM8 (redirected back with `?servicem8=connected`), the "Connect ServiceM8" menu item disappears from the profile dropdown instead of changing to "Disconnect ServiceM8".

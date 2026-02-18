@@ -2518,7 +2518,12 @@ body {
 }
 
 .quote-total-line span:first-child {
-  min-width: 120px;
+  min-width: 140px;
+}
+
+.quote-total-exc {
+  color: #6b7280;
+  font-weight: normal;
 }
 
 .quote-total-final {

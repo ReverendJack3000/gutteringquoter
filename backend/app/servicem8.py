@@ -361,7 +361,8 @@ def fetch_job_by_generated_id(user_id: str, generated_job_id: str) -> Optional[d
         return None
 
 
-# Default material UUID for Add to Job bundled line. TODO: Replace with per-product/bundle mapping.
+# Default material UUID for Add to Job bundled line.
+# TODO: Remind us to come back to a more detailed bundle of uuids.
 ADD_TO_JOB_DEFAULT_MATERIAL_UUID = "6129948b-4f79-4fc1-b611-23bbc4f9726b"
 
 
@@ -372,11 +373,17 @@ def add_job_material(
     quantity: str,
     price: str,
     cost: Optional[str] = None,
+    displayed_amount: Optional[str] = None,
+    displayed_amount_is_tax_inclusive: Optional[str] = None,
+    displayed_cost: Optional[str] = None,
     material_uuid: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """
     POST to ServiceM8 jobmaterial.json.
     Returns (success, error_message).
+    
+    When displayed_amount is provided, displayed_amount_is_tax_inclusive should also be provided
+    to indicate whether displayed_amount includes tax ("true") or excludes tax ("false").
     """
     mat_uuid = material_uuid or ADD_TO_JOB_DEFAULT_MATERIAL_UUID
     payload = {
@@ -388,6 +395,13 @@ def add_job_material(
     }
     if cost is not None:
         payload["cost"] = cost
+    if displayed_amount is not None:
+        payload["displayed_amount"] = displayed_amount
+        # ServiceM8 requires displayed_amount_is_tax_inclusive when displayed_amount is provided
+        if displayed_amount_is_tax_inclusive is not None:
+            payload["displayed_amount_is_tax_inclusive"] = displayed_amount_is_tax_inclusive
+    if displayed_cost is not None:
+        payload["displayed_cost"] = displayed_cost
     try:
         resp = make_api_request("POST", "/api_1.0/jobmaterial.json", access_token, json_data=payload)
         resp.raise_for_status()

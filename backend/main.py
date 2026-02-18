@@ -521,13 +521,18 @@ def api_servicem8_add_to_job(
         raise HTTPException(401, "ServiceM8 not connected")
     profile_label = "spouting"
     if body.profile and body.profile.lower() == "stormcloud":
-        profile_label = "Storm Cloud"
+        profile_label = "Stormcloud"
     elif body.profile and body.profile.lower() == "classic":
         profile_label = "Classic"
     material_name = f"{profile_label} repairs, labour & materials"
     qty_str = "1"
     price_str = f"{body.quote_total:.2f}"
     cost_str = f"{body.material_cost:.2f}"
+    displayed_amount_str = f"{body.quote_total:.2f}"
+    displayed_cost_str = f"{body.material_cost:.2f}"
+    # ServiceM8 requires displayed_amount_is_tax_inclusive when displayed_amount is provided
+    # Defaulting to "false" (tax-exclusive) - adjust if your prices are GST/tax-inclusive
+    displayed_amount_is_tax_inclusive_str = "false"
     ok, err = sm8.add_job_material(
         tokens["access_token"],
         body.job_uuid,
@@ -535,6 +540,9 @@ def api_servicem8_add_to_job(
         qty_str,
         price_str,
         cost=cost_str,
+        displayed_amount=displayed_amount_str,
+        displayed_amount_is_tax_inclusive=displayed_amount_is_tax_inclusive_str,
+        displayed_cost=displayed_cost_str,
     )
     if not ok:
         raise HTTPException(502, f"Failed to add job material: {err or 'unknown'}")
@@ -543,7 +551,6 @@ def api_servicem8_add_to_job(
     note_body = [
         body.user_name or "Quote App User",
         *lines,
-        "",
         f"Total Price = {body.quote_total:.2f}",
         f"- Time used = {body.labour_hours}",
         f"- Material Cost = {body.material_cost:.2f}",
