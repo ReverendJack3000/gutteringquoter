@@ -5966,6 +5966,7 @@ function initServiceM8Menu() {
 /**
  * Check for OAuth callback result in URL params.
  * Called on page load to handle ServiceM8 redirect.
+ * Must be called AFTER auth is restored (authState.token is set).
  */
 function checkOAuthCallback() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -5974,8 +5975,11 @@ function checkOAuthCallback() {
     showToolbarMessage('ServiceM8 connected successfully!', 'success');
     // Clean URL
     window.history.replaceState({}, '', window.location.pathname);
-    // Refresh status
-    checkServiceM8Status();
+    // Refresh status (only if auth is ready)
+    if (authState.token) {
+      checkServiceM8Status();
+    }
+    // If auth not ready yet, checkServiceM8Status() will be called by initAuth() after session restore
   } else if (servicem8Result === 'error') {
     showToolbarMessage('ServiceM8 connection failed. Please try again.', 'error');
     window.history.replaceState({}, '', window.location.pathname);
@@ -7246,7 +7250,6 @@ function init() {
   }
   try {
     initServiceM8Menu();
-    checkOAuthCallback();
   } catch (e) {
     console.warn('initServiceM8Menu failed', e);
   }
@@ -7267,6 +7270,8 @@ function init() {
       switchView('view-login');
     }
     loadPanelProducts();
+    // Check OAuth callback AFTER auth is restored (so checkServiceM8Status has token)
+    checkOAuthCallback();
   });
 
   checkBackendAvailable().then((ok) => {
