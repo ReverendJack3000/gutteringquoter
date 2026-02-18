@@ -476,14 +476,8 @@
         </thead>
         <tbody id="quoteTableBody"></tbody>
       </table>
-      <div class="quote-labour-section">
-        <label for="labourHoursInput">Labour hours</label>
-        <input type="number" id="labourHoursInput" min="0" step="0.5" value="0" aria-label="Labour hours" />
-        <label for="labourRateSelect">Labour rate</label>
-        <select id="labourRateSelect" aria-label="Labour rate">
-          <option value="">Select rate…</option>
-        </select>
-      </div>
+      <!-- Legacy labour inputs removed: labour is only via table row (Section 50). Container hidden so only table row adds labour. -->
+      <div class="quote-labour-section" id="quoteLabourSection" aria-hidden="true" style="display: none;"></div>
       <div class="quote-totals-section">
         <div class="quote-total-line"><span>Materials subtotal <span class="quote-total-exc">exc GST</span></span><span id="materialsTotalDisplay">0.00</span></div>
         <div class="quote-total-line"><span>Labour subtotal <span class="quote-total-exc">exc GST</span></span><span id="labourTotalDisplay">0.00</span></div>

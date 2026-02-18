@@ -92,6 +92,9 @@ const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
 /** Legacy placeholder product IDs – excluded from Marley panel (real products from Supabase only). */
 const PLACEHOLDER_PRODUCT_IDS = ['gutter', 'downpipe', 'bracket', 'stopend', 'outlet', 'dropper'];
 
+/** Labour product ID(s) – excluded from Marley panel and quote Add item; labour is only via dedicated labour row(s). */
+const LABOUR_PRODUCT_IDS = ['REP-LAB'];
+
 /** Max size for product diagram SVG upload (2MB). */
 const PRODUCT_SVG_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 
@@ -375,6 +378,9 @@ let messageTimeoutId = null;
 
 /** Last successful quote response for edit mode: { materials, materials_subtotal, labour_hours, labour_rate, labour_subtotal, total } */
 let lastQuoteData = null;
+
+/** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
+let cachedLabourRates = [];
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
 let hasPricingChanges = false;
@@ -870,8 +876,9 @@ function recalcQuoteFromEditTable(changedRow, changedField) {
 }
 
 /**
- * Recompute materials subtotal and quote total from current table body (data rows only).
- * Used after row remove (40.4) or inline markup change (40.2). Skips section headers and empty row.
+ * Recompute materials subtotal, labour subtotal, and quote total from current table body (Section 50).
+ * Materials = sum of material rows only (excludes labour rows, section headers, empty row).
+ * Labour = sum of labour row totals. Total = materials + labour.
  */
 function recalcQuoteTotalsFromTableBody() {
   const tableBody = document.getElementById('quoteTableBody');
@@ -880,19 +887,25 @@ function recalcQuoteTotalsFromTableBody() {
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
   if (!tableBody || !materialsTotalDisplay || !quoteTotalDisplay) return;
   let materialsSubtotal = 0;
+  let labourSubtotal = 0;
   for (const row of tableBody.rows) {
     if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true') continue;
     if (!row.cells[5]) continue;
     const totalEl = row.cells[5].querySelector('.quote-cell-total-value');
     const raw = totalEl ? totalEl.textContent : row.cells[5].textContent;
     const val = parseFloat(String(raw).replace(/[^0-9.-]/g, '')) || 0;
-    materialsSubtotal += val;
+    if (row.dataset.labourRow === 'true') {
+      labourSubtotal += val;
+    } else {
+      materialsSubtotal += val;
+    }
   }
   materialsSubtotal = Math.round(materialsSubtotal * 100) / 100;
-  const labourTotal = parseFloat(labourTotalDisplay?.textContent?.replace(/[^0-9.]/g, '')) || 0;
-  const total = Math.round((materialsSubtotal + labourTotal) * 100) / 100;
+  labourSubtotal = Math.round(labourSubtotal * 100) / 100;
+  const total = Math.round((materialsSubtotal + labourSubtotal) * 100) / 100;
   materialsTotalDisplay.textContent = formatCurrency(materialsSubtotal);
-  if (quoteTotalDisplay) quoteTotalDisplay.textContent = formatCurrency(total);
+  if (labourTotalDisplay) labourTotalDisplay.textContent = formatCurrency(labourSubtotal);
+  quoteTotalDisplay.textContent = formatCurrency(total);
   updateQuoteTotalWarning();
 }
 
@@ -912,7 +925,7 @@ function removeEmptySectionHeaders() {
     let childCount = 0;
     for (let j = i + 1; j < rows.length; j++) {
       const next = rows[j];
-      if (next.dataset.sectionHeader || next.dataset.emptyRow === 'true') break;
+      if (next.dataset.sectionHeader || next.dataset.emptyRow === 'true' || next.dataset.labourRow === 'true') break;
       if (next.dataset.assetId && next.dataset.sectionFor === sectionId) childCount += 1;
     }
     if (childCount === 0) headersToRemove.push(row);
@@ -920,11 +933,14 @@ function removeEmptySectionHeaders() {
   headersToRemove.forEach((r) => r.remove());
 }
 
-/** Filter products by search term (name or item_number). */
+/** Filter products by search term (name or item_number). Excludes labour so it cannot be added as a material line. */
 function filterProductsForQuoteSearch(term) {
   const t = (term || '').trim().toLowerCase();
-  if (!t) return state.products || [];
-  const products = state.products || [];
+  const products = (state.products || []).filter((p) => {
+    if (LABOUR_PRODUCT_IDS.includes(p.id) || (p.category || '').toLowerCase() === 'labour') return false;
+    return true;
+  });
+  if (!t) return products;
   return products.filter((p) => {
     const name = (p.name || '').toLowerCase();
     const itemNum = (p.item_number || '').toLowerCase();
@@ -988,6 +1004,146 @@ function appendEmptyQuoteRow() {
   initEmptyQuoteRow(tr);
 }
 
+/** Return the empty "Type or select product…" row, or null (Section 50). */
+function getEmptyRow() {
+  return document.getElementById('quoteTableBody')?.querySelector('tr[data-empty-row="true"]') || null;
+}
+
+/** Return labour rows in DOM order (Section 50). */
+function getLabourRowsOrdered() {
+  const tbody = document.getElementById('quoteTableBody');
+  if (!tbody) return [];
+  return Array.from(tbody.rows).filter((r) => r.dataset.labourRow === 'true');
+}
+
+/** Default unit price for labour (from labour product REP-LAB). Used when creating new labour rows. */
+function getDefaultLabourUnitPrice() {
+  const rate = cachedLabourRates.find((r) => r.id === 'REP-LAB') || cachedLabourRates[0];
+  return rate ? Number(rate.hourlyRate) : 100;
+}
+
+/** Update a single labour row's total cell and dataset from hours and unit price (Section 50, labour as product). */
+function updateLabourRowTotal(row) {
+  const hoursInput = row.querySelector('.quote-labour-hours-input');
+  const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+  const hours = parseFloat(hoursInput?.value) || 0;
+  const unitPrice = parseFloat(unitPriceInput?.value) || 0;
+  row.dataset.hourlyRate = String(unitPrice);
+  const total = Math.round(hours * unitPrice * 100) / 100;
+  const totalCell = row.cells[5];
+  if (totalCell) {
+    const valEl = totalCell.querySelector('.quote-cell-total-value');
+    if (valEl) valEl.textContent = formatCurrency(total);
+    else totalCell.textContent = formatCurrency(total);
+  }
+  recalcQuoteTotalsFromTableBody();
+}
+
+/** Create one labour row and insert before insertBefore (Section 50, labour as product). Options: { defaultHours, defaultUnitPrice }. Returns the new row. */
+function createLabourRow(insertBefore, options = {}) {
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody || !insertBefore) return null;
+  const defaultHours = options.defaultHours != null ? options.defaultHours : 0;
+  const defaultUnitPrice = options.defaultUnitPrice != null ? options.defaultUnitPrice : getDefaultLabourUnitPrice();
+
+  const tr = document.createElement('tr');
+  tr.dataset.labourRow = 'true';
+  tr.className = 'quote-row-labour';
+  const productCell = document.createElement('td');
+  productCell.className = 'quote-cell-labour-product';
+  const label = document.createElement('strong');
+  label.className = 'quote-labour-label';
+  label.textContent = 'Labour';
+  productCell.appendChild(label);
+  const dupBtn = document.createElement('button');
+  dupBtn.type = 'button';
+  dupBtn.className = 'quote-labour-dup-btn';
+  dupBtn.innerHTML = '+👷';
+  dupBtn.setAttribute('aria-label', 'Duplicate labour row');
+  dupBtn.title = 'Duplicate labour row';
+  productCell.appendChild(dupBtn);
+  tr.appendChild(productCell);
+
+  const qtyCell = document.createElement('td');
+  const hoursInput = document.createElement('input');
+  hoursInput.type = 'number';
+  hoursInput.className = 'quote-labour-hours-input';
+  hoursInput.min = '0';
+  hoursInput.step = '0.5';
+  hoursInput.value = String(defaultHours);
+  hoursInput.setAttribute('aria-label', 'Labour hours');
+  qtyCell.appendChild(hoursInput);
+  tr.appendChild(qtyCell);
+
+  tr.appendChild(document.createElement('td'));
+  tr.appendChild(document.createElement('td'));
+  const unitPriceCell = document.createElement('td');
+  const unitPriceWrap = document.createElement('span');
+  unitPriceWrap.className = 'quote-labour-unit-price-wrap';
+  const unitPricePrefix = document.createElement('span');
+  unitPricePrefix.className = 'quote-labour-unit-price-prefix';
+  unitPricePrefix.textContent = '$';
+  const unitPriceInput = document.createElement('input');
+  unitPriceInput.type = 'number';
+  unitPriceInput.className = 'quote-labour-unit-price-input';
+  unitPriceInput.min = '0';
+  unitPriceInput.step = '0.01';
+  unitPriceInput.value = String(defaultUnitPrice);
+  unitPriceInput.setAttribute('aria-label', 'Unit price per hour');
+  unitPriceWrap.appendChild(unitPricePrefix);
+  unitPriceWrap.appendChild(unitPriceInput);
+  unitPriceCell.appendChild(unitPriceWrap);
+  tr.appendChild(unitPriceCell);
+
+  const totalCell = document.createElement('td');
+  totalCell.className = 'quote-cell-total';
+  const totalVal = document.createElement('span');
+  totalVal.className = 'quote-cell-total-value';
+  totalVal.textContent = formatCurrency(0);
+  totalCell.appendChild(totalVal);
+  const removeX = document.createElement('span');
+  removeX.className = 'quote-row-remove-x';
+  removeX.setAttribute('role', 'button');
+  removeX.setAttribute('tabindex', '0');
+  removeX.setAttribute('aria-label', 'Remove line');
+  removeX.textContent = '×';
+  totalCell.appendChild(removeX);
+  tr.appendChild(totalCell);
+
+  tr.cells[2].textContent = '—';
+  tr.cells[3].textContent = '—';
+  tr.dataset.hourlyRate = String(defaultUnitPrice);
+
+  tableBody.insertBefore(tr, insertBefore);
+
+  hoursInput.addEventListener('input', () => updateLabourRowTotal(tr));
+  hoursInput.addEventListener('change', () => updateLabourRowTotal(tr));
+  unitPriceInput.addEventListener('input', () => updateLabourRowTotal(tr));
+  unitPriceInput.addEventListener('change', () => updateLabourRowTotal(tr));
+
+  dupBtn.addEventListener('click', () => {
+    const insertBeforeRow = getEmptyRow();
+    if (!insertBeforeRow) return;
+    const hrs = parseFloat(hoursInput.value) || 0;
+    const up = parseFloat(unitPriceInput.value) || getDefaultLabourUnitPrice();
+    createLabourRow(insertBeforeRow, { defaultHours: hrs, defaultUnitPrice: up });
+  });
+  tr.addEventListener('mouseenter', () => tr.classList.add('quote-row-hovered'));
+  tr.addEventListener('mouseleave', () => tr.classList.remove('quote-row-hovered'));
+
+  updateLabourRowTotal(tr);
+  return tr;
+}
+
+/** Ensure at least one labour row exists above the empty row (Section 50). */
+function ensureLabourRowsExist() {
+  const emptyRow = getEmptyRow();
+  if (!emptyRow) return;
+  if (getLabourRowsOrdered().length === 0) {
+    createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
+  }
+}
+
 function openQuoteProductList(combobox, filterTerm) {
   const list = combobox.querySelector('.quote-product-list');
   const input = combobox.querySelector('.quote-product-combobox-input');
@@ -1046,11 +1202,8 @@ function commitEmptyRow(tr, productId, qty) {
     }
     tr.remove();
     appendEmptyQuoteRow();
-    const labourRateSelect = document.getElementById('labourRateSelect');
-    const labourHoursInput = document.getElementById('labourHoursInput');
-    const labourRateId = labourRateSelect?.value?.trim() || '';
-    const labourHours = parseFloat(labourHoursInput?.value) || 0;
-    if (labourRateId && labourHours >= 0) calculateAndDisplayQuote();
+    ensureLabourRowsExist();
+    calculateAndDisplayQuote();
     return;
   }
 
@@ -1084,12 +1237,8 @@ function commitEmptyRow(tr, productId, qty) {
   if (table?.classList.contains('quote-parts-table--editing')) addEditInputsToRow(tr);
 
   appendEmptyQuoteRow();
-
-  const labourRateSelect = document.getElementById('labourRateSelect');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateId = labourRateSelect?.value?.trim() || '';
-  const labourHours = parseFloat(labourHoursInput?.value) || 0;
-  if (labourRateId && labourHours >= 0) calculateAndDisplayQuote();
+  ensureLabourRowsExist();
+  calculateAndDisplayQuote();
 }
 
 function initEmptyQuoteRow(tr) {
@@ -1160,8 +1309,6 @@ function initQuoteModal() {
   const btnCloseFooter = document.getElementById('quoteCloseBtn');
   const btnGenerate = document.getElementById('generateQuoteBtn');
   const tableBody = document.getElementById('quoteTableBody');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateSelect = document.getElementById('labourRateSelect');
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
@@ -1180,6 +1327,7 @@ function initQuoteModal() {
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
     row.remove();
+    ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
   });
@@ -1190,6 +1338,7 @@ function initQuoteModal() {
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
     row.remove();
+    ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
   });
@@ -1208,7 +1357,6 @@ function initQuoteModal() {
     if (materialsTotalDisplay) materialsTotalDisplay.textContent = '0.00';
     if (labourTotalDisplay) labourTotalDisplay.textContent = '0.00';
     if (quoteTotalDisplay) quoteTotalDisplay.textContent = '0.00';
-    if (labourHoursInput) labourHoursInput.value = '0';
 
     // Build parts table: one row per length type (e.g. Gutter 3m, Gutter 1.5m). Incomplete = type-only name + "Metres?"; complete = product name + qty only.
     elementsForQuote.forEach(({ assetId, quantity: qty, incomplete, length_mm }) => {
@@ -1259,51 +1407,29 @@ function initQuoteModal() {
       checkServiceM8Status();
     }
 
-    // Fetch labour rates and populate dropdown
+    // Fetch labour rates for labour row dropdowns (Section 50)
     try {
       const res = await fetch('/api/labour-rates');
       const data = await res.json();
       const rates = data.labour_rates || [];
-      if (labourRateSelect) {
-        labourRateSelect.innerHTML = '<option value="">Select rate…</option>';
-        rates.forEach((r) => {
-          const opt = document.createElement('option');
-          opt.value = r.id;
-          opt.textContent = `${r.rateName} — $${Number(r.hourlyRate).toFixed(2)}/hr`;
-          labourRateSelect.appendChild(opt);
-        });
-      }
+      cachedLabourRates = rates || [];
     } catch (err) {
       console.error('Failed to load labour rates', err);
-      if (labourRateSelect) labourRateSelect.innerHTML = '<option value="">Select rate…</option><option value="" disabled>Failed to load rates</option>';
+      cachedLabourRates = [];
     }
 
     appendEmptyQuoteRow();
+    ensureLabourRowsExist();
 
-    // Auto-select first labour rate and run calculation so unit price and totals display when modal opens
-    // This also ensures inferred items (brackets, screws, clips) appear immediately, even for incomplete rows
-    const firstRateOpt = labourRateSelect?.querySelector('option[value]:not([value=""])');
-    if (firstRateOpt && labourRateSelect) {
-      labourRateSelect.value = firstRateOpt.value;
-      const elements = getElementsFromQuoteTable();
-      if (elements.length > 0) {
-        await calculateAndDisplayQuote();
-      }
+    const elements = getElementsFromQuoteTable();
+    if (elements.length > 0) {
+      await calculateAndDisplayQuote();
     }
 
-    // Set focus to labour hours input
-    if (labourHoursInput) labourHoursInput.focus();
+    const firstLabourRow = getLabourRowsOrdered()[0];
+    const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
+    if (firstHoursInput) firstHoursInput.focus();
   });
-
-  // Calculate quote when labour hours or rate changes (only when both have values)
-  function runCalculateQuote() {
-    const labourHours = parseFloat(labourHoursInput?.value) || 0;
-    const labourRateId = labourRateSelect?.value?.trim() || '';
-    if (!labourRateId || labourHours < 0) return;
-    calculateAndDisplayQuote();
-  }
-  labourHoursInput?.addEventListener('input', runCalculateQuote);
-  labourRateSelect?.addEventListener('change', runCalculateQuote);
 
   // ServiceM8 job number (Task 22.28): 1–5 digits only; placeholder "e.g. 4999" is strictly placeholder, never used as value
   const servicem8JobIdInput = document.getElementById('servicem8JobIdInput');
@@ -1407,11 +1533,7 @@ function commitMetresInput(tr, input) {
     // Set placeholder text until calculateAndDisplayQuote() updates it with the actual qty
     qtyCell.textContent = String(val) + ' m';
   }
-  const labourRateSelect = document.getElementById('labourRateSelect');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateId = labourRateSelect?.value?.trim() || '';
-  const labourHours = parseFloat(labourHoursInput?.value) || 0;
-  if (labourRateId && labourHours >= 0) calculateAndDisplayQuote();
+  calculateAndDisplayQuote();
   updateQuoteTotalWarning();
 }
 
@@ -1551,16 +1673,23 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
 }
 
 /**
- * Build payload for Add to Job API from quote data.
- * Returns { job_uuid, elements, quote_total, labour_hours, material_cost, user_name, profile } or null.
+ * Build payload for Add to Job API from quote data (Section 50: labour from labour rows, people_count).
+ * Returns { job_uuid, elements, quote_total, labour_hours, material_cost, user_name, profile, people_count } or null.
  */
 function getAddToJobPayload(jobUuid) {
   if (!jobUuid) return null;
   const quoteTotalEl = document.getElementById('quoteTotalDisplay');
-  const labourHoursInput = document.getElementById('labourHoursInput');
   const quoteTotalRaw = (quoteTotalEl?.textContent || '0').replace(/[^0-9.-]/g, '');
   const quoteTotal = parseFloat(quoteTotalRaw) || 0;
-  const labourHours = parseFloat(labourHoursInput?.value) || 0;
+
+  const labourRows = getLabourRowsOrdered();
+  let labourHours = 0;
+  labourRows.forEach((row) => {
+    const input = row.querySelector('.quote-labour-hours-input');
+    labourHours += parseFloat(input?.value) || 0;
+  });
+  labourHours = Math.round(labourHours * 100) / 100;
+  const peopleCount = labourRows.length || 1;
 
   let elements = [];
   let materialCost = 0;
@@ -1579,7 +1708,7 @@ function getAddToJobPayload(jobUuid) {
     let hasSC = false;
     let hasCL = false;
     for (const row of tableBody.rows) {
-      if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true') continue;
+      if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true' || row.dataset.labourRow === 'true') continue;
       const assetId = row.dataset.assetId;
       if (!assetId) continue;
       const product = state.products?.find((p) => p.id === assetId);
@@ -1610,6 +1739,7 @@ function getAddToJobPayload(jobUuid) {
     material_cost: materialCost,
     user_name: userName,
     profile,
+    people_count: peopleCount,
   };
 }
 
@@ -1756,6 +1886,7 @@ function getElementsFromQuoteTable() {
   for (const row of tableBody.rows) {
     const assetId = row.dataset.assetId;
     if (!assetId) continue;
+    if (row.dataset.labourRow === 'true') continue; // Section 50: labour rows are not material elements
     if (row.dataset.inferred === 'true') continue; // backend infers these from gutters/clips; avoid double-counting
     const rowGutterMatch = GUTTER_PATTERN.exec(assetId.trim());
     // Skip child gutter rows when we have header length (we emitted from header above)
@@ -1857,8 +1988,6 @@ function formatCurrency(amount) {
  */
 function printQuote() {
   const tableBody = document.getElementById('quoteTableBody');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateSelect = document.getElementById('labourRateSelect');
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
@@ -1884,23 +2013,39 @@ function printQuote() {
         continue;
       }
       if (row.dataset.emptyRow === 'true') continue;
-      const product = row.cells[0]?.textContent ?? '';
+      const productCell = row.cells[0];
+      const rawProduct = (productCell?.textContent ?? '').replace(/\s*\+👷\s*/, '').trim();
+const product = row.dataset.labourRow === 'true' ? 'Labour' : (rawProduct || (productCell?.textContent ?? ''));
       const qtyCell = row.cells[1];
       const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
       const qtyLineInput = qtyCell?.querySelector('.quote-line-qty-input');
+      const hoursInput = qtyCell?.querySelector('.quote-labour-hours-input');
       let qty = '';
-      if (metresInput) qty = metresInput.value.trim() || 'Metres?';
+      if (hoursInput) qty = hoursInput.value ?? '';
+      else if (metresInput) qty = metresInput.value.trim() || 'Metres?';
       else if (qtyLineInput) qty = qtyLineInput.value;
       else qty = qtyCell?.textContent ?? '';
-      const unitPrice = row.cells[4]?.textContent ?? '—';
+      const labourUnitPriceInput = row.cells[4]?.querySelector('.quote-labour-unit-price-input');
+      const unitPrice = labourUnitPriceInput ? (Number(labourUnitPriceInput.value) ? '$' + Number(labourUnitPriceInput.value).toFixed(2) : '—') : (row.cells[4]?.textContent ?? '—');
       const totalCell = row.cells[5];
       const totalVal = totalCell?.querySelector('.quote-cell-total-value');
       const total = (totalVal ? totalVal.textContent : totalCell?.textContent) ?? '—';
       rowsHtml += `<tr><td>${escapeHtml(product)}</td><td>${escapeHtml(qty)}</td><td></td><td></td><td>${escapeHtml(unitPrice)}</td><td>${escapeHtml(total)}</td></tr>`;
     }
   }
-  const hours = labourHoursInput?.value ?? '0';
-  const rateLabel = labourRateSelect?.selectedOptions?.[0]?.text ?? '';
+  const labourRows = getLabourRowsOrdered();
+  let totalHours = 0;
+  let rateLabel = '';
+  labourRows.forEach((row) => {
+    const input = row.querySelector('.quote-labour-hours-input');
+    totalHours += parseFloat(input?.value) || 0;
+    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+    if (unitPriceInput && rateLabel === '') {
+      const up = parseFloat(unitPriceInput.value);
+      rateLabel = Number.isFinite(up) ? `$${up.toFixed(2)}/hr` : '';
+    }
+  });
+  const hours = String(totalHours);
   const materialsSub = materialsTotalDisplay?.textContent ?? '0.00';
   const labourSub = labourTotalDisplay?.textContent ?? '0.00';
   const total = quoteTotalDisplay?.textContent ?? '0.00';
@@ -1958,8 +2103,6 @@ function printQuote() {
  */
 function copyQuoteToClipboard() {
   const tableBody = document.getElementById('quoteTableBody');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateSelect = document.getElementById('labourRateSelect');
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
@@ -1968,7 +2111,8 @@ function copyQuoteToClipboard() {
   lines.push('MATERIALS');
   if (tableBody && tableBody.rows.length) {
     for (const row of tableBody.rows) {
-      if (!row.dataset.assetId) continue; // skip empty/new line rows
+      if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true' || row.dataset.labourRow === 'true') continue;
+      if (!row.dataset.assetId) continue;
       const product = row.cells[0]?.textContent ?? '';
       const qtyCell = row.cells[1];
       const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
@@ -1988,9 +2132,16 @@ function copyQuoteToClipboard() {
   lines.push('Materials Subtotal\t' + (materialsTotalDisplay?.textContent ?? '0.00'));
   lines.push('');
   lines.push('LABOUR');
-  const hours = labourHoursInput?.value ?? '0';
-  const rateLabel = labourRateSelect?.selectedOptions?.[0]?.text ?? '';
-  lines.push(`${hours} hours × ${rateLabel}`);
+  const labourRows = getLabourRowsOrdered();
+  let totalHours = 0;
+  labourRows.forEach((row) => {
+    const input = row.querySelector('.quote-labour-hours-input');
+    totalHours += parseFloat(input?.value) || 0;
+  });
+  const firstUnitPriceInput = labourRows[0]?.querySelector('.quote-labour-unit-price-input');
+  const up = firstUnitPriceInput ? parseFloat(firstUnitPriceInput.value) : NaN;
+  const rateLabel = Number.isFinite(up) ? ' × $' + up.toFixed(2) + '/hr' : '';
+  lines.push(`${totalHours} hours${rateLabel}`);
   lines.push('Labour Subtotal\t' + (labourTotalDisplay?.textContent ?? '0.00'));
   lines.push('');
   lines.push('TOTAL\t' + (quoteTotalDisplay?.textContent ?? '0.00'));
@@ -2024,8 +2175,6 @@ function copyQuoteToClipboard() {
 
 async function calculateAndDisplayQuote() {
   const tableBody = document.getElementById('quoteTableBody');
-  const labourHoursInput = document.getElementById('labourHoursInput');
-  const labourRateSelect = document.getElementById('labourRateSelect');
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
@@ -2060,15 +2209,16 @@ async function calculateAndDisplayQuote() {
   const hasIncompleteMeasurable = hasIncompleteGutter || hasIncompleteDownpipe;
 
   const elements = getElementsFromQuoteTable();
-  if (elements.length === 0) {
-    showError('No items in quote. Add products from the canvas or use Add item.');
-    return;
-  }
-
-  const labourHours = parseFloat(labourHoursInput?.value) || 0;
-  const labourRateId = labourRateSelect?.value?.trim() || '';
-  if (!labourRateId) {
-    showError('Please select a labour rate.');
+  const labourRows = getLabourRowsOrdered();
+  const labour_elements = labourRows.map((row) => {
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    const hours = parseFloat(hoursInput?.value) || 0;
+    return { assetId: 'REP-LAB', quantity: hours };
+  }).filter((e) => e.quantity > 0);
+  const hasMaterials = elements.length > 0;
+  const hasLabour = labour_elements.length > 0;
+  if (!hasMaterials && !hasLabour) {
+    showError('No items in quote. Add products from the canvas, use Add item, or add labour hours.');
     return;
   }
 
@@ -2076,7 +2226,7 @@ async function calculateAndDisplayQuote() {
     const res = await fetch('/api/calculate-quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ elements, labour_hours: labourHours, labour_rate_id: labourRateId }),
+      body: JSON.stringify({ elements, labour_elements }),
     });
     const data = await res.json().catch(() => ({}));
 
@@ -2092,14 +2242,14 @@ async function calculateAndDisplayQuote() {
     }
 
     const quote = data.quote;
-    if (!quote || !quote.materials) {
+    if (!quote) {
       showError('Invalid response from server.');
       return;
     }
     lastQuoteData = quote;
 
-    // Always process all materials, but set inferred items (brackets, screws, clips) to empty qty when incomplete
-    const materialsToProcess = quote.materials;
+    // Process materials (may be empty when quote is labour-only)
+    const materialsToProcess = quote.materials || [];
 
     // Collect all product IDs returned from backend to identify which incomplete rows should be removed
     const returnedProductIds = new Set(materialsToProcess.map(line => line.id));
@@ -2343,9 +2493,12 @@ async function calculateAndDisplayQuote() {
       }
     });
 
-    // Clear table (preserve empty row), rebuild with system-based structure
-    const rowsToRemove = Array.from(tableBody?.rows || []).filter((r) => !r.dataset.emptyRow);
+    // Clear table (preserve empty row and labour rows – Section 50), rebuild with system-based structure
+    const emptyRowRef = tableBody?.querySelector('tr[data-empty-row="true"]');
+    const labourRows = getLabourRowsOrdered();
+    const rowsToRemove = Array.from(tableBody?.rows || []).filter((r) => !r.dataset.emptyRow && !r.dataset.labourRow);
     rowsToRemove.forEach((r) => r.remove());
+    const materialInsertBefore = labourRows.length ? labourRows[0] : emptyRowRef;
 
     // Render gutter length groups: header + children. Show header for every profile that has a group OR was preserved (so one filled header can auto-populate without requiring the other)
     const profileOrder = ['SC', 'CL'];
@@ -2380,7 +2533,7 @@ async function calculateAndDisplayQuote() {
       }
       headerRow.dataset.sectionHeader = profile;
       headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"></td><td>—</td><td>—</td><td>—</td><td>${formatCurrency(headerTotal)}</td>`;
-      if (emptyRow) tableBody.insertBefore(headerRow, emptyRow);
+      if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
       if (headerMetresInput) {
@@ -2395,14 +2548,14 @@ async function calculateAndDisplayQuote() {
         if (isGutter && isIncomplete) {
           return;
         }
-        renderMaterialRow(line, emptyRow, { sectionFor: profile });
+        renderMaterialRow(line, materialInsertBefore, { sectionFor: profile });
       });
     });
 
     // Mixed repair: screws as standalone row with product column "Screws (brackets & clips)"
     if (isMixed && standaloneScrews.length > 0) {
       standaloneScrews.forEach((line) => {
-        renderMaterialRow(line, emptyRow, { productLabel: 'Screws (brackets & clips)' });
+        renderMaterialRow(line, materialInsertBefore, { productLabel: 'Screws (brackets & clips)' });
       });
     }
 
@@ -2435,7 +2588,7 @@ async function calculateAndDisplayQuote() {
       }
       headerRow.dataset.sectionHeader = sectionHeaderId;
       headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"></td><td>—</td><td>—</td><td>—</td><td>${formatCurrency(headerTotal)}</td>`;
-      if (emptyRow) tableBody.insertBefore(headerRow, emptyRow);
+      if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
       if (headerMetresInput) {
@@ -2446,20 +2599,22 @@ async function calculateAndDisplayQuote() {
       effectiveGroup.children.forEach((line) => {
         const isDownpipe = DOWNPIPE_PATTERN.test(line.id);
         if (isDownpipe && isIncomplete) return;
-        renderMaterialRow(line, emptyRow, { sectionFor: sectionHeaderId });
+        renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionHeaderId });
       });
     });
     // Downpipe-only: screws nested under Downpipe section (after downpipes and clips); no sectionFor so they don't block header removal
     if (isDownpipeOnly && standaloneScrews.length > 0) {
       standaloneScrews.forEach((line) => {
-        renderMaterialRow(line, emptyRow);
+        renderMaterialRow(line, materialInsertBefore);
       });
     }
 
     // Render ungrouped items (droppers, etc.)
     ungrouped.forEach((line) => {
-      renderMaterialRow(line, emptyRow);
+      renderMaterialRow(line, materialInsertBefore);
     });
+
+    ensureLabourRowsExist();
 
     // Remove incomplete placeholder rows that were replaced by actual product rows
     // This happens when bin-packing splits one incomplete gutter into multiple actual gutter products
@@ -2481,9 +2636,7 @@ async function calculateAndDisplayQuote() {
     }
 
     if (materialsTotalDisplay) materialsTotalDisplay.textContent = formatCurrency(quote.materials_subtotal);
-    if (labourTotalDisplay) labourTotalDisplay.textContent = formatCurrency(quote.labour_subtotal);
-    if (quoteTotalDisplay) quoteTotalDisplay.textContent = formatCurrency(quote.total);
-    updateQuoteTotalWarning();
+    recalcQuoteTotalsFromTableBody();
   } catch (err) {
     console.error('Quote calculation failed', err);
     showError(err.message || 'Failed to calculate quote. Please try again.');
@@ -7058,10 +7211,11 @@ async function fetchPanelProductsFromApi() {
 }
 
 function getPanelProducts() {
-  // Filter: exclude consumables and legacy placeholders; show only 3M gutters and 3M downpipes (manual length selectors), include all other products
+  // Filter: exclude consumables, labour, and legacy placeholders; show only 3M gutters and 3M downpipes (manual length selectors), include all other products
   let list = state.products.filter((p) => {
     if (CONSUMABLE_PRODUCT_IDS.includes(p.id)) return false;
     if (PLACEHOLDER_PRODUCT_IDS.includes(p.id)) return false;
+    if (LABOUR_PRODUCT_IDS.includes(p.id) || (p.category || '').toLowerCase() === 'labour') return false;
     return true;
   });
   

@@ -41,9 +41,8 @@ class QuoteElement(BaseModel):
 
 
 class CalculateQuoteRequest(BaseModel):
-    elements: list[QuoteElement] = Field(..., min_length=1, description="At least one element required")
-    labour_hours: float = Field(..., ge=0, description="Labour hours (>= 0)")
-    labour_rate_id: str = Field(..., min_length=1, description="UUID of the labour rate")
+    elements: list[QuoteElement] = Field(default_factory=list, description="Material elements (assetId + quantity)")
+    labour_elements: list[QuoteElement] = Field(default_factory=list, description="Labour lines (assetId e.g. REP-LAB, quantity = hours)")
 
 
 class UpdatePricingItem(BaseModel):
@@ -79,6 +78,7 @@ class AddToJobRequest(BaseModel):
     material_cost: float = Field(..., ge=0)
     user_name: str = Field("", description="Name of app user for note")
     profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
+    people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
 
 
 app = FastAPI(
@@ -176,54 +176,46 @@ async def api_import_csv(file: UploadFile = File(...)):
 
 @app.get("/api/labour-rates")
 def api_labour_rates():
-    """Return active labour rates for quote generation. Response uses camelCase."""
+    """Return labour product as a single 'rate' for backward compatibility. Frontend should use products (REP-LAB) instead."""
     try:
-        supabase = get_supabase()
-        resp = (
-            supabase.table("labour_rates")
-            .select("id, rate_name, hourly_rate")
-            .eq("active", True)
-            .execute()
-        )
-        rows = resp.data or []
-        labour_rates = [
-            {
-                "id": str(r["id"]),
-                "rateName": r.get("rate_name", ""),
-                "hourlyRate": float(r["hourly_rate"]) if r.get("hourly_rate") is not None else 0,
-            }
-            for r in rows
-        ]
-        return {"labour_rates": labour_rates}
+        pricing = get_product_pricing(["REP-LAB"])
+        if "REP-LAB" not in pricing:
+            return {"labour_rates": []}
+        p = pricing["REP-LAB"]
+        sell_price = round(p["cost_price"] * (1 + p["markup_percentage"] / 100), 2)
+        return {
+            "labour_rates": [
+                {"id": "REP-LAB", "rateName": p["name"], "hourlyRate": sell_price}
+            ]
+        }
     except Exception as e:
-        logger.exception("Failed to fetch labour rates from Supabase: %s", e)
-        raise HTTPException(500, "Failed to fetch labour rates")
+        logger.exception("Failed to fetch labour product for labour-rates: %s", e)
+        return {"labour_rates": []}
 
 
 @app.post("/api/calculate-quote")
 def api_calculate_quote(body: CalculateQuoteRequest):
     """
-    Calculate quote from materials (elements with assetId + quantity), labour hours,
-    and labour rate. Request validated by Pydantic (elements non-empty, labour_hours >= 0, etc.).
-    Auto-adds brackets (1 per 400mm gutter) and screws (3 per bracket) when gutters are present.
-    Returns 400 if any product not found or missing pricing; 404 if labour rate invalid; 500 on DB errors.
+    Calculate quote from materials (elements) and labour (labour_elements).
+    Materials: assetId + quantity; auto-adds brackets/screws for gutters.
+    Labour: labour_elements with assetId e.g. REP-LAB, quantity = hours; priced from public.products.
+    Returns 400 if any product not found or missing pricing; 500 on DB errors.
     """
-    # Expand elements with inferred brackets and screws from gutters (1 bracket/400mm, 3 screws/bracket)
+    # Expand material elements with inferred brackets and screws from gutters
     raw_elements = [
         {"assetId": e.assetId, "quantity": e.quantity, "length_mm": getattr(e, "length_mm", None)}
         for e in body.elements
     ]
     elements_for_quote = expand_elements_with_gutter_accessories(raw_elements)
 
-    # Fetch product pricing; 500 on database error
-    product_ids = list({e["assetId"] for e in elements_for_quote})
+    all_product_ids = list({e["assetId"] for e in elements_for_quote} | {e.assetId for e in body.labour_elements})
     try:
-        pricing = get_product_pricing(product_ids)
+        pricing = get_product_pricing(all_product_ids) if all_product_ids else {}
     except Exception as e:
         logger.exception("Database error while fetching product pricing: %s", e)
         raise HTTPException(500, "Failed to load product pricing")
 
-    # Build materials lines; 400 if any product missing or has no cost_price
+    # Build materials lines
     materials = []
     materials_subtotal = 0.0
     for e in elements_for_quote:
@@ -247,40 +239,36 @@ def api_calculate_quote(body: CalculateQuoteRequest):
             "line_total": line_total,
         })
         materials_subtotal += line_total
-
     materials_subtotal = round(materials_subtotal, 2)
 
-    # Fetch labour rate; 404 if not found, 500 on database error
-    try:
-        supabase = get_supabase()
-        resp = (
-            supabase.table("labour_rates")
-            .select("id, hourly_rate")
-            .eq("id", body.labour_rate_id)
-            .eq("active", True)
-            .limit(1)
-            .execute()
-        )
-        rows = resp.data or []
-        if not rows:
-            logger.warning("Labour rate not found: %s", body.labour_rate_id)
-            raise HTTPException(404, "Labour rate not found")
-        hourly_rate = float(rows[0]["hourly_rate"])
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Database error while fetching labour rate: %s", e)
-        raise HTTPException(500, "Failed to load labour rate")
+    # Labour from labour_elements (priced via products, e.g. REP-LAB)
+    labour_hours = 0.0
+    labour_subtotal = 0.0
+    labour_rate = 0.0  # sell price per hour for display
+    for e in body.labour_elements:
+        pid = e.assetId
+        if pid not in pricing:
+            logger.warning("Labour product not found or missing pricing: %s", pid)
+            raise HTTPException(400, f"Labour product {pid} not found or missing pricing")
+        p = pricing[pid]
+        cost_price = p["cost_price"]
+        markup_pct = p["markup_percentage"]
+        sell_price = round(cost_price * (1 + markup_pct / 100), 2)
+        hours = e.quantity
+        line_total = round(sell_price * hours, 2)
+        labour_hours += hours
+        labour_subtotal += line_total
+        if labour_rate == 0:
+            labour_rate = sell_price
+    labour_subtotal = round(labour_subtotal, 2)
 
-    labour_hours = body.labour_hours  # already validated >= 0 by Pydantic
-    labour_subtotal = round(labour_hours * hourly_rate, 2)
     total = round(materials_subtotal + labour_subtotal, 2)
 
     quote = {
         "materials": materials,
         "materials_subtotal": materials_subtotal,
         "labour_hours": labour_hours,
-        "labour_rate": hourly_rate,
+        "labour_rate": labour_rate,
         "labour_subtotal": labour_subtotal,
         "total": total,
     }
@@ -552,14 +540,17 @@ def api_servicem8_add_to_job(
         return f"{h_fmt} hour" if h == 1 else f"{h_fmt} hours"
 
     lines = [f"- {e.name} x {_fmt_qty(e.qty)}" for e in body.elements]
+    people_line = f"    - People Req = {body.people_count}" if body.people_count else None
     note_body = [
         body.user_name or "Quote App User",
         *lines,
         "",
         f"Total Price = ${body.quote_total:.2f} exc gst",
-        f"- Time used = {_fmt_hours(body.labour_hours)}",
-        f"- Material Cost = ${body.material_cost:.2f} exc gst",
+        f"- Total Time used = {_fmt_hours(body.labour_hours)}",
     ]
+    if people_line:
+        note_body.append(people_line)
+    note_body.append(f"- Material Cost = ${body.material_cost:.2f} exc gst")
     note_text = "\n".join(note_body)
     ok, err = sm8.add_job_note(tokens["access_token"], body.job_uuid, note_text)
     if not ok:

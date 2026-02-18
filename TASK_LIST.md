@@ -8,9 +8,12 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
-- Related Tasks: Add to Job confirmation overlay complete (49.20.1); Railway deployment complete; production URL https://quote-app-production-7897.up.railway.app
+- Branch: feature/labour-as-table-row
+- Based on: main
+- Status: In Progress (merge to main in progress)
+- Related Tasks:
+  - [x] 50.1–50.8 Labour as table row; [ ] 50.9 smoke-test
+  - [x] 50.10–50.17 Labour as product (REP-LAB); [ ] 50.18 smoke-test / Railway deploy
 
 **Uncompleted tasks (by section):**
 
@@ -33,6 +36,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
 | **49** | **49.1–49.22** | **ServiceM8 OAuth 2.0 Auth setup** |
+| **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
+| **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 
 ---
 
@@ -1065,9 +1070,50 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **49.24.3** Update `add_job_material()` function signature in `backend/app/servicem8.py` to accept `displayed_amount` and `displayed_cost` parameters (both Optional[str]).
 - [x] **49.24.4** Update jobmaterial payload in `add_job_material()` to include `displayed_amount` and `displayed_cost` fields when provided. Payload should include: job_uuid, material_uuid, quantity, name, price, displayed_amount, cost, displayed_cost.
 - [x] **49.24.5** Update `api_servicem8_add_to_job()` in `backend/main.py` to pass `displayed_amount` (from `quote_total`) and `displayed_cost` (from `material_cost`) to `add_job_material()` call.
-- [x] **49.25** Verify Add Job Note format matches exact specification: `[appUserName]\n- [Item Name] x [Qty]\n- [Item Name] x [Qty]\n...\nTotal Price = [quotePrice]\n- Time used = [labourHours]\n- Material Cost = [supabaseMaterialCost]`. Ensure no extra blank lines and format matches exactly.
+- [x] **49.25** Add Job Note formatting: Remove square brackets from element names; format quantities (whole numbers without decimal: 1 not 1.0); add blank line before totals; add dollar signs and "exc gst" to Total Price and Material Cost; format time used with singular/plural ("1 hour" vs "1.5 hours"). Format: `[appUserName]\n- Item Name x Qty\n- Item Name x Qty\n\nTotal Price = $[quotePrice] exc gst\n- Time used = [labourHours] hour(s)\n- Material Cost = $[materialCost] exc gst`.
 
-*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5): added displayed_amount and displayed_cost fields, fixed naming convention, added TODO comment. Note format verified (49.25). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5): added displayed_amount and displayed_cost fields (matching price/cost), fixed naming convention, added TODO comment. Note formatting complete (49.25): removed brackets, added exc gst labels, formatted quantities/hours. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+
+---
+
+## 50. Quote modal: Labour as table row and independent from materials
+
+*Context: Adding Labour Hours currently changes or decreases the materials subtotal and total quote price. Labour and materials should be independent: adding labour must not affect materials price/cost. We will move labour from the dropdown section into the quote table as editable row(s), and ensure calculations keep materials and labour separate. All changes must preserve existing behaviour: labour hours must still appear in "Add note to existing job" (getAddToJobPayload, job note formatting). Deployments must continue to succeed on Railway.*
+
+**Calculation independence**
+
+- [x] **50.1** Ensure labour and materials are fully independent: materials subtotal is computed only from material rows (product lines); labour contributes only to labour subtotal and total. Adding or changing labour must never alter materials subtotal or material line totals. (Backend already separates them; verify and fix any frontend logic that causes materials to change when labour is updated.)
+
+**Labour as table row(s)**
+
+- [x] **50.2** Remove the current labour UI from below the table: the "Labour hours" input and "Labour rate" dropdown in `.quote-labour-section`. Keep labour rates available (e.g. for use in labour row rate selector).
+- [x] **50.3** Add labour as a line in the quote parts table with inline editing like other rows. Position it always on the **2nd-bottom row** (immediately above the "Type or select product…" empty row). Columns: Product (bold label, e.g. "Labour"), Qty (hours), Cost/Markup/Unit Price/Total as appropriate for labour (inline editable where applicable).
+- [x] **50.4** Style the labour row product cell text in **bold** font, unlike other product rows.
+- [x] **50.5** Add a small clickable icon on the right of the labour row’s product column: **"+👷"** with a thin border, visible **only on hover**. On click, duplicate the labour row (insert another labour line above the empty row; new row has same structure, default hours/rate as needed).
+
+**Preserve existing behaviour**
+
+- [x] **50.6** Ensure **Add note to existing job** still shows labour hours: `getAddToJobPayload()` and job note formatting must derive **total labour hours** (sum of all labour row hours when 2+ labour lines) and **number of people** (number of labour rows). Job note format: "Total Time used = X hour(s)" and under it "    - People Req = N" (e.g. "People Req = 2"). Backend must accept and include `people_count` in the note.
+- [x] **50.7** Update **Print** and **Copy to Clipboard** to use labour from the labour table row(s) instead of the removed `labourHoursInput` / `labourRateSelect` (hours and rate from labour row(s), labour subtotal from sum of labour row totals).
+
+**Totals and API**
+
+- [x] **50.8** Quote totals: materials subtotal = sum of material row totals only; labour subtotal = sum of labour row totals; total = materials subtotal + labour subtotal. Ensure `calculateAndDisplayQuote` (or equivalent) and any `/api/calculate-quote` usage send only material elements for materials; labour is applied from labour row(s) so materials response is never affected by labour.
+- [ ] **50.9** After implementation: smoke-test quote modal (add materials, add/edit labour row(s), duplicate labour row, verify materials subtotal unchanged when labour changes; verify Add to Job note still shows labour hours; verify Print/Copy; confirm app still deploys to Railway).
+
+**Labour as product (remove labour rate dropdown)** — *See docs/PLAN_LABOUR_AS_PRODUCT.md. Use product id REP-LAB, name "Technician Repair Labour", cost 35 / price 100 exc GST, servicem8_material_uuid per plan. Keep existing labour row CSS; add delete X and inline editable unit price.*
+
+- [x] **50.10** Supabase: Migration to insert labour product into `public.products`: id=REP-LAB, item_number=REP-LAB, servicem8_material_uuid=6129948b-4f79-4fc1-b611-23bbc4f9726b, name=Technician Repair Labour, cost_price=35, price 100 exc GST (via markup_percentage or price_exc_gst per plan), unit=hour, category=labour, profile=other; thumbnail_url/diagram_url placeholder. Migration name e.g. `add_labour_product`.
+- [x] **50.11** Backend: Change POST `/api/calculate-quote` to price labour from `public.products` (labour product id REP-LAB or category labour). Accept labour as elements (e.g. labour_elements or include in elements and split by id/category). Use `get_product_pricing` for labour; stop reading `labour_rates`. Response: keep labour_subtotal / labour_hours (and labour line details) for frontend compatibility.
+- [x] **50.12** Backend: Remove or repurpose GET `/api/labour-rates` once frontend no longer uses it (frontend will use labour product from products).
+- [x] **50.13** Frontend: Labour row — remove rate dropdown (`.quote-labour-rate-select`). Replace with inline editable unit price (input) with default value from labour product sell price (from state.products or calculate-quote response). Labour row total = hours × unit price; recalc on hours or unit price change.
+- [x] **50.14** Frontend: Add delete X to labour row total cell (same `quote-row-remove-x` as material rows; keep existing labour row CSS). Ensure remove handler continues to call `ensureLabourRowsExist()` so at least one labour row remains after delete.
+- [x] **50.15** Frontend: Exclude labour product from Marley panel: in `getPanelProducts()`, exclude id REP-LAB (or category === 'labour'). Use constant e.g. LABOUR_PRODUCT_IDS = ['REP-LAB'] and filter.
+- [x] **50.16** Frontend: Exclude labour product from quote "Add item" search: in `filterProductsForQuoteSearch` (or equivalent), exclude products with id REP-LAB or category labour so labour cannot be added as a material line.
+- [x] **50.17** Frontend: Quote modal open and calculate-quote — ensure labour product (REP-LAB) is loaded (in state.products or via API); labour rows use its sell price as default unit price; send labour_elements (assetId REP-LAB, quantity = hours) per labour row when calling calculate-quote.
+- [ ] **50.18** After labour-as-product implementation: smoke-test (labour row unit price default, inline edit, delete X, multiple labour rows, calculate quote, Add to Job note, Print/Copy); confirm app still deploys to Railway. No new env vars or build steps.
+
+*Section 50 status: Labour as table row(s) (50.1–50.8). Labour as product (50.10–50.17) implemented: REP-LAB in products, calculate-quote uses labour_elements, labour row has inline unit price and delete X, REP-LAB excluded from panel and Add item. Pending: 50.9 and 50.18 smoke-test and Railway deploy check.*
 
 ---
 

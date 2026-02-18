@@ -2260,6 +2260,63 @@ body {
   color: #c62828;
 }
 
+/* Section 50: Labour as table row – text on cell background, button pinned right */
+.quote-row-labour .quote-cell-labour-product {
+  position: relative;
+  padding-right: 40px;
+}
+.quote-row-labour .quote-labour-label {
+  font-weight: bold;
+}
+.quote-labour-dup-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.quote-row-labour:hover .quote-labour-dup-btn,
+.quote-labour-dup-btn:focus {
+  opacity: 1;
+}
+.quote-labour-dup-btn:hover {
+  border-color: #007aff;
+  background: #fff;
+}
+.quote-row-labour .quote-labour-hours-input {
+  width: 100%;
+  max-width: 80px;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.quote-row-labour .quote-labour-unit-price-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.quote-row-labour .quote-labour-unit-price-prefix {
+  flex-shrink: 0;
+  color: #1a1a1a;
+  font-size: inherit;
+}
+.quote-row-labour .quote-labour-unit-price-input {
+  width: 80px;
+  max-width: 120px;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
 .quote-parts-table.quote-parts-table--editing td input.quote-input {
   width: 100%;
   max-width: 100%;
@@ -2484,8 +2541,9 @@ body {
   font-size: 14px;
 }
 
+/* Section 50: Labour is only via table row; legacy inputs removed – keep section hidden */
 .quote-labour-section {
-  display: flex;
+  display: none !important;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
