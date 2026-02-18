@@ -202,6 +202,38 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ServiceM8 OAuth: "Authorization required (Bearer token)" error – 2026-02
+
+- **Symptom:** Clicking "Connect ServiceM8" returns `{"detail":"Authorization required (Bearer token)"}` from the backend. The authorize endpoint `/api/servicem8/oauth/authorize` is protected and requires a Bearer token, but browser navigation (`window.location.href`) does not send Authorization headers.
+- **Cause:** The backend endpoint returned a `RedirectResponse` directly. When the frontend navigates to it via `window.location.href`, the browser makes a GET request without the `Authorization: Bearer <token>` header, so the backend rejects it with 401.
+- **Fix:** 
+  1. **Backend:** Change `/api/servicem8/oauth/authorize` to return JSON `{"url": "https://go.servicem8.com/oauth/authorize?..."}` instead of `RedirectResponse`.
+  2. **Frontend:** Fetch the authorize endpoint with `fetch('/api/servicem8/oauth/authorize', { headers: { 'Authorization': 'Bearer ' + authState.token } })`, parse the JSON response, then redirect to `data.url` with `window.location.href = data.url`. This ensures the Bearer token is sent in the fetch request, then the browser navigates to ServiceM8.
+
+---
+
+## ServiceM8 OAuth: "No redirect URI was supplied or stored" error – 2026-02
+
+- **Symptom:** ServiceM8 returns `{"error":"invalid_uri","error_description":"No redirect URI was supplied or stored"}` when trying to authorize.
+- **Cause:** The authorize request was built without `redirect_uri` parameter (we omitted it thinking it was optional for internal use). ServiceM8 requires `redirect_uri` to match the Activation URL (Return URL) set in Store Connect exactly, character-for-character.
+- **Fix:** 
+  1. **ServiceM8 Store Connect:** Set the "Activation URL" (Return URL) to: `https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback`
+  2. **Backend:** Always include `redirect_uri` in the authorize URL params. In `build_authorize_url()`, always add `"redirect_uri": get_redirect_uri()` to the params dictionary. The `redirect_uri` must match the Activation URL exactly (same protocol, host, path, no trailing slash differences).
+  3. **Environment:** Ensure `APP_BASE_URL` in Railway is set to `https://quote-app-production-7897.up.railway.app` (no trailing slash) so `get_redirect_uri()` returns the correct URL.
+
+---
+
+## ServiceM8 OAuth: Menu button disappears after successful connection – 2026-02
+
+- **Symptom:** After successfully connecting ServiceM8 (redirected back with `?servicem8=connected`), the "Connect ServiceM8" menu item disappears from the profile dropdown instead of changing to "Disconnect ServiceM8".
+- **Cause:** `checkOAuthCallback()` was called immediately in `init()` before `initAuth()` restored the session. When it called `checkServiceM8Status()`, `authState.token` was still `null`, so the function hid the menu item (`display: 'none'`). Even after auth restored later, the menu stayed hidden.
+- **Fix:** 
+  1. Move `checkOAuthCallback()` to run **after** `initAuth()` completes (in the `.then()` callback).
+  2. Add a guard in `checkOAuthCallback()` to only call `checkServiceM8Status()` if `authState.token` exists.
+  3. Ensure `checkServiceM8Status()` is also called after auth state changes (in `onAuthStateChange` callback) so the menu updates correctly.
+
+---
+
 <!-- Example entry format:
 
 ## Short title (optional: date)
