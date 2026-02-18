@@ -1014,14 +1014,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **Partner and app registration**
 
-- [ ] **49.1** Register as a ServiceM8 Development Partner at [servicem8.com/developer-registration](https://www.servicem8.com/developer-registration).
-- [ ] **49.2** Create a Public Application in the ServiceM8 developer account (Store Connect).
-- [ ] **49.3** Obtain App ID and App Secret from Store Connect; document where they are shown (Store Connect page).
+- [x] **49.1** Register as a ServiceM8 Development Partner at [servicem8.com/developer-registration](https://www.servicem8.com/developer-registration).
+- [x] **49.2** Create a Public Application in the ServiceM8 developer account (Store Connect).
+- [x] **49.3** Obtain App ID and App Secret from Store Connect; document where they are shown (Store Connect page).
 
 **Store Connect configuration**
 
-- [ ] **49.4** Configure Return URL in Store Connect: set to `https://{RAILWAY_APP_URL}/api/servicem8/oauth/callback` (or equivalent path) so it matches the OAuth redirect_uri host.
-- [ ] **49.5** Ensure Return URL host matches the Railway production URL exactly (e.g. `https://quote-app-production-7897.up.railway.app`).
+- [x] **49.4** Configure Return URL in Store Connect: set to `https://{RAILWAY_APP_URL}/api/servicem8/oauth/callback` (or equivalent path) so it matches the OAuth redirect_uri host.
+- [x] **49.5** Ensure Return URL host matches the Railway production URL exactly (e.g. `https://quote-app-production-7897.up.railway.app`).
 
 **Backend OAuth flow – authorize**
 
@@ -1044,7 +1044,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Environment and Railway**
 
 - [x] **49.15** Add `SERVICEM8_APP_ID` and `SERVICEM8_APP_SECRET` to backend `.env.example` (with placeholder values); document in `docs/RAILWAY_DEPLOYMENT.md`.
-- [ ] **49.16** Add `SERVICEM8_APP_ID` and `SERVICEM8_APP_SECRET` to Railway project variables; never commit secrets.
+- [x] **49.16** Add `SERVICEM8_APP_ID` and `SERVICEM8_APP_SECRET` to Railway project variables; never commit secrets.
 - [x] **49.17** Ensure OAuth callback URL uses `$PORT` and `0.0.0.0` binding (Procfile) so Railway routes correctly; verify HTTPS in production.
 
 **Security**
@@ -1054,14 +1054,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **Integration with Quote flow**
 
-- [ ] **49.20** Link ServiceM8 OAuth connection to the authenticated user (e.g. Supabase user id → stored ServiceM8 tokens); provide UI for "Connect ServiceM8" and "Disconnect".
+- [x] **49.20** Link ServiceM8 OAuth connection to the authenticated user (e.g. Supabase user id → stored ServiceM8 tokens); provide UI for "Connect ServiceM8" and "Disconnect".
 - [ ] **49.21** Use access token for API calls when user adds materials to a ServiceM8 job: include `Authorization: Bearer {access_token}` (or `access_token` POST param per ServiceM8 docs).
 - [ ] **49.22** Wire 22.29: Use real ServiceM8 API responses to toggle Success/Error states in the Quote footer after Add to Job.
 
-*Section 49 status: Backend OAuth flow implemented (49.6–49.15, 49.17–49.19). Routes: /api/servicem8/oauth/authorize, callback, status, disconnect. Supabase table servicem8_oauth for token storage. Remaining: 49.1–49.5 (Store Connect config), 49.16 (Railway vars), 49.20 (Connect/Disconnect UI), 49.21–49.22 (Add to Job API wiring). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+*Section 49 status: OAuth 2.0 authentication complete and working (49.1–49.20). Backend routes: /api/servicem8/oauth/authorize (returns JSON URL), callback, status, disconnect. Frontend: Connect/Disconnect menu item with status check. Supabase table servicem8_oauth stores tokens per user. Token auto-refresh before expiry. Activation URL configured in Store Connect. Railway env vars set. Remaining: 49.21–49.22 (Add to Job API wiring - use tokens to call ServiceM8 API, wire Success/Error states). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
 
 ---
 
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Section 49 added: ServiceM8 OAuth 2.0 Auth setup (49.1–49.22). Section 48: Railway deployment pre-deployment checklist. Section 45 complete; Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*
+*Last updated: Feb 2026. Section 49: ServiceM8 OAuth 2.0 Auth complete (49.1–49.20); authentication working, users can connect/disconnect ServiceM8 accounts. Remaining: 49.21–49.22 (Add to Job API integration). Section 48: Railway deployment pre-deployment checklist. Section 45 complete; Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*
