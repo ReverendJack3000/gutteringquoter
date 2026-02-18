@@ -53,6 +53,7 @@ const state = {
   marqueeCurrent: null, // { x, y } canvas coords during drag
   nextSequenceId: 1, // Digital Takeoff: assign sequenceId to measurable elements (gutters, downpipes, droppers)
   bboxRecalcDeferredUntil: null, // timestamp: skip full-doc bbox recalc until after this (debounce after drag)
+  projectName: '', // editable project name in header; drives save modal default
   debounceBboxTimerId: null, // timeout id for 100ms debounce
   // Ghost preview while dragging from panel over canvas (40% opacity, 150px max)
   dragPreviewImage: null,
@@ -80,6 +81,9 @@ let openProductModal = null;
 
 /** Full list of products fetched for the Product Library; used for search/filter without re-fetching. */
 let allLibraryProducts = [];
+
+/** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
+let preLoadSnapshot = null;
 
 /** Product IDs that are consumables (billing only); excluded from canvas/panel drag-drop. */
 const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
@@ -434,6 +438,15 @@ function clearMessage() {
   if (el) el.setAttribute('hidden', '');
   if (messageTimeoutId) clearTimeout(messageTimeoutId);
   messageTimeoutId = null;
+}
+
+function updateToolbarBreadcrumbs(projectName) {
+  const input = document.getElementById('toolbarProjectNameInput');
+  if (!input) return;
+  const name = projectName && projectName.trim() ? projectName.trim() : '';
+  state.projectName = name;
+  input.value = name;
+  input.placeholder = 'Untitled';
 }
 
 function getAspectRatioValue(ratio) {
@@ -2263,6 +2276,75 @@ function initColorPalette() {
   });
 }
 
+/** Header colour wheel: re-colour all diagram elements. Separate popover and handler from #colorPalettePopover (per-element). */
+function initHeaderColorPalette() {
+  const btn = document.getElementById('headerColorDiagramBtn');
+  const popover = document.getElementById('headerColorPalettePopover');
+  if (!btn || !popover) return;
+
+  function closeHeaderColorPopover() {
+    popover.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function positionHeaderColorPopover() {
+    const rect = btn.getBoundingClientRect();
+    const paletteW = 220;
+    const gap = 8;
+    let left = rect.left + rect.width / 2 - paletteW / 2;
+    left = Math.max(8, Math.min(window.innerWidth - paletteW - 8, left));
+    popover.style.left = left + 'px';
+    popover.style.top = (rect.bottom + gap) + 'px';
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !popover.hasAttribute('hidden');
+    if (isOpen) {
+      closeHeaderColorPopover();
+      return;
+    }
+    if (state.elements.length === 0) {
+      showMessage('Add elements to the diagram first, then use this to colour them all.');
+      return;
+    }
+    positionHeaderColorPopover();
+    popover.removeAttribute('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+  });
+
+  popover.addEventListener('click', (e) => {
+    const swatch = e.target.closest('.color-swatch');
+    if (!swatch) return;
+    const color = swatch.dataset.color || null;
+    const colorValue = color ? color : null;
+
+    pushUndoSnapshot();
+    state.elements.forEach((el) => {
+      el.color = colorValue;
+      el.tintedCanvas = null;
+      el.tintedCanvasColor = null;
+      el.tintedCanvasWidth = null;
+      el.tintedCanvasHeight = null;
+      el._tintedCanvasFailureKey = undefined;
+    });
+    draw();
+    closeHeaderColorPopover();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (popover.hasAttribute('hidden')) return;
+    if (btn.contains(e.target) || popover.contains(e.target)) return;
+    closeHeaderColorPopover();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (popover.hasAttribute('hidden')) return;
+    closeHeaderColorPopover();
+  });
+}
+
 function initFloatingToolbar() {
   const toolbar = document.getElementById('floatingToolbar');
   const lockBtn = document.getElementById('floatingToolbarLock');
@@ -2523,7 +2605,7 @@ function initTransparencyPopover() {
   });
 }
 
-/** Position and show/hide #blueprintTransparencyBtn outside blueprint top-left. Visible only when blueprint exists and technical drawing off. */
+/** Show/hide #blueprintTransparencyBtn (lives in #diagramFloatingToolbar). Visible only when blueprint exists and technical drawing off. */
 function updateTransparencyButtonPositionAndVisibility(rect, scale) {
   const btnEl = document.getElementById('blueprintTransparencyBtn');
   if (!btnEl) return;
@@ -2531,24 +2613,6 @@ function updateTransparencyButtonPositionAndVisibility(rect, scale) {
     btnEl.setAttribute('hidden', '');
     return;
   }
-  const bt = state.blueprintTransform;
-  const buttonWidth = 32;
-  const buttonHeight = 32;
-  const gap = 4;
-  const blueprintScreenX = rect.left + state.offsetX + bt.x * scale;
-  const blueprintScreenY = rect.top + state.offsetY + bt.y * scale;
-  let buttonLeft = blueprintScreenX - buttonWidth - gap;
-  let buttonTop = blueprintScreenY - buttonHeight - gap;
-  const toolbarEl = document.querySelector('.toolbar');
-  if (toolbarEl) {
-    const toolbarRect = toolbarEl.getBoundingClientRect();
-    const minButtonTop = toolbarRect.bottom + 4;
-    if (buttonTop < minButtonTop) {
-      buttonTop = minButtonTop;
-    }
-  }
-  btnEl.style.left = buttonLeft + 'px';
-  btnEl.style.top = buttonTop + 'px';
   btnEl.removeAttribute('hidden');
 }
 
@@ -3218,6 +3282,47 @@ async function undo() {
   state.snapshotAtActionStart = null;
   const snapshot = undoHistory.pop();
   await restoreStateFromSnapshot(snapshot);
+  updatePlaceholderVisibility();
+  renderMeasurementDeck();
+  draw();
+}
+
+/** Capture full state (canvas, view, project name) before loading a saved diagram. */
+function capturePreLoadSnapshot() {
+  const base = cloneStateForUndo();
+  return {
+    ...base,
+    baseScale: state.baseScale,
+    baseOffsetX: state.baseOffsetX,
+    baseOffsetY: state.baseOffsetY,
+    viewZoom: state.viewZoom,
+    viewPanX: state.viewPanX,
+    viewPanY: state.viewPanY,
+    offsetX: state.offsetX,
+    offsetY: state.offsetY,
+    projectName: state.projectName,
+    nextSequenceId: state.nextSequenceId,
+  };
+}
+
+/** Restore state from pre-load snapshot (go back to previous). */
+async function restoreFromPreLoadSnapshot(snapshot) {
+  if (!snapshot) return;
+  state.mode = null;
+  state.resizeHandle = null;
+  state.snapshotAtActionStart = null;
+  await restoreStateFromSnapshot(snapshot);
+  state.baseScale = snapshot.baseScale;
+  state.baseOffsetX = snapshot.baseOffsetX;
+  state.baseOffsetY = snapshot.baseOffsetY;
+  state.viewZoom = snapshot.viewZoom;
+  state.viewPanX = snapshot.viewPanX;
+  state.viewPanY = snapshot.viewPanY;
+  state.offsetX = snapshot.offsetX;
+  state.offsetY = snapshot.offsetY;
+  state.projectName = snapshot.projectName ?? '';
+  state.nextSequenceId = snapshot.nextSequenceId ?? 1;
+  updateToolbarBreadcrumbs(snapshot.projectName ?? '');
   updatePlaceholderVisibility();
   renderMeasurementDeck();
   draw();
@@ -4389,7 +4494,14 @@ function initCanvas() {
   resizeCanvas();
   const canvas = getCanvasElement();
   const placeholder = document.getElementById('canvasPlaceholder');
+  const diagramToolbar = document.getElementById('diagramFloatingToolbar');
   if (!canvas) return;
+
+  // Prevent diagram toolbar clicks from reaching the canvas (so zoom/recenter/upload work reliably)
+  if (diagramToolbar) {
+    diagramToolbar.addEventListener('pointerdown', (e) => e.stopPropagation());
+    diagramToolbar.addEventListener('click', (e) => e.stopPropagation());
+  }
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -5057,6 +5169,7 @@ async function processFileAsBlueprint(file) {
       state.viewPanX = 0;
       state.viewPanY = 0;
       URL.revokeObjectURL(url);
+      updatePlaceholderVisibility();
       draw(); // Trigger full view re-fit to new blueprint
     };
     img.onerror = () => {
@@ -5077,7 +5190,8 @@ function initUpload() {
   const toggle = document.getElementById('technicalDrawingToggle');
   const blueprintWrap = document.getElementById('blueprintWrap');
 
-  uploadZone.addEventListener('click', () => fileInput.click());
+  // Do not add a click handler to uploadZone: the label's for="fileInput" already activates the file input.
+  // A redundant uploadZone.addEventListener('click', () => fileInput.click()) would open the file dialog twice.
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files[0];
@@ -5215,6 +5329,7 @@ function initUpload() {
         state.viewPanX = 0;
         state.viewPanY = 0;
         URL.revokeObjectURL(url);
+        updatePlaceholderVisibility();
       };
       img.onerror = () => showMessage('Failed to display the updated blueprint.');
       img.src = url;
@@ -5225,22 +5340,30 @@ function initUpload() {
 }
 
 function initZoomControls() {
-  document.getElementById('zoomOutBtn')?.addEventListener('click', () => {
+  function stopAndPrevent(e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomFitBtn = document.getElementById('zoomFitBtn');
+
+  zoomOutBtn?.addEventListener('click', (e) => {
+    stopAndPrevent(e);
     state.viewZoom = Math.max(MIN_VIEW_ZOOM, state.viewZoom / ZOOM_BUTTON_FACTOR);
+    draw();
   });
-  document.getElementById('zoomInBtn')?.addEventListener('click', () => {
+  zoomInBtn?.addEventListener('click', (e) => {
+    stopAndPrevent(e);
     state.viewZoom = Math.min(MAX_VIEW_ZOOM, state.viewZoom * ZOOM_BUTTON_FACTOR);
+    draw();
   });
-  document.getElementById('zoomFitBtn')?.addEventListener('click', () => {
+  zoomFitBtn?.addEventListener('click', (e) => {
+    stopAndPrevent(e);
     state.viewZoom = 1;
     state.viewPanX = 0;
     state.viewPanY = 0;
-    draw();
-  });
-  // Recenter View: force full view re-fit (baseScale, baseOffset) to content
-  document.getElementById('recenterViewBtn')?.addEventListener('click', () => {
-    cancelBboxRecalcDebounce();
-    state.bboxRecalcDeferredUntil = null;
     draw();
   });
 }
@@ -6115,7 +6238,66 @@ function initDiagrams() {
   const saveDiagramCancelBtn = document.getElementById('saveDiagramCancelBtn');
   const saveDiagramModalBackdrop = document.getElementById('saveDiagramModalBackdrop');
   const saveDiagramError = document.getElementById('saveDiagramError');
+  const projectNameInput = document.getElementById('toolbarProjectNameInput');
+  const breadcrumbsNav = document.getElementById('toolbarBreadcrumbsNav');
+  const projectHistoryDropdown = document.getElementById('projectHistoryDropdown');
+  const projectHistoryDropdownList = document.getElementById('projectHistoryDropdownList');
+  const projectHistoryDropdownEmpty = document.getElementById('projectHistoryDropdownEmpty');
   if (!saveDiagramBtn || !diagramsDropdownBtn) return;
+
+  // Project name input: sync state on blur/change; Enter to commit; placeholder when empty
+  if (projectNameInput) {
+    const commitProjectName = () => {
+      const val = (projectNameInput.value || '').trim();
+      state.projectName = val;
+      projectNameInput.value = val;
+      projectNameInput.placeholder = 'Untitled';
+    };
+    projectNameInput.addEventListener('change', commitProjectName);
+    projectNameInput.addEventListener('blur', commitProjectName);
+    projectNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        projectNameInput.blur();
+      }
+    });
+    // Clicking anywhere outside should blur (finish typing)
+    document.addEventListener('mousedown', (e) => {
+      if (document.activeElement !== projectNameInput) return;
+      const t = e.target;
+      if (projectNameInput.contains(t)) return;
+      if (projectHistoryDropdown?.contains(t)) return;
+      projectNameInput.blur();
+    });
+    // Initial sync
+    updateToolbarBreadcrumbs(state.projectName);
+  }
+
+  const goBackBtn = document.getElementById('breadcrumbGoBackBtn');
+  function updateGoBackButtonVisibility() {
+    if (goBackBtn) goBackBtn.hidden = !preLoadSnapshot;
+  }
+
+  if (goBackBtn) {
+    goBackBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!preLoadSnapshot) return;
+      const snap = preLoadSnapshot;
+      preLoadSnapshot = null;
+      updateGoBackButtonVisibility();
+      closeDropdown();
+      closeProjectHistoryDropdown();
+      try {
+        await restoreFromPreLoadSnapshot(snap);
+        showMessage('Restored previous state.', 'success');
+      } catch (err) {
+        showMessage('Could not restore previous state.', 'error');
+        preLoadSnapshot = snap;
+        updateGoBackButtonVisibility();
+      }
+    });
+  }
 
   function authHeaders() {
     return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
@@ -6124,6 +6306,14 @@ function initDiagrams() {
   function closeDropdown() {
     if (diagramsDropdown) diagramsDropdown.hidden = true;
     if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'false');
+  }
+  function closeProjectHistoryDropdown() {
+    if (projectHistoryDropdown) projectHistoryDropdown.hidden = true;
+  }
+  function openProjectHistoryDropdown() {
+    closeDropdown();
+    if (projectHistoryDropdown) projectHistoryDropdown.hidden = false;
+    refreshDiagramsList();
   }
 
   saveDiagramBtn.addEventListener('click', () => {
@@ -6136,7 +6326,8 @@ function initDiagrams() {
       showMessage('Add a photo or products to the canvas before saving.');
       return;
     }
-    saveDiagramName.value = 'Diagram ' + new Date().toLocaleDateString();
+    const base = (state.projectName || projectNameInput?.value || '').trim();
+    saveDiagramName.value = base || 'Project';
     if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
     saveDiagramModal.hidden = false;
   });
@@ -6158,6 +6349,7 @@ function initDiagrams() {
         throw new Error(err.detail || res.statusText || 'Save failed');
       }
       saveDiagramModal.hidden = true;
+      updateToolbarBreadcrumbs(name);
       showMessage('Diagram saved.', 'success');
       refreshDiagramsList();
     } catch (err) {
@@ -6180,6 +6372,7 @@ function initDiagrams() {
       closeDropdown();
       return;
     }
+    closeProjectHistoryDropdown();
     refreshDiagramsList();
     if (diagramsDropdown) diagramsDropdown.hidden = false;
     if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'true');
@@ -6187,55 +6380,90 @@ function initDiagrams() {
 
   document.addEventListener('click', (e) => {
     if (diagramsDropdown && !diagramsDropdown.hidden && !diagramsDropdown.contains(e.target) && !diagramsDropdownBtn.contains(e.target)) closeDropdown();
+    if (projectHistoryDropdown && !projectHistoryDropdown.hidden && !projectHistoryDropdown.contains(e.target) && !breadcrumbsNav?.contains(e.target)) closeProjectHistoryDropdown();
   });
 
-  async function refreshDiagramsList() {
-    if (!diagramsDropdownList || !diagramsDropdownEmpty) return;
-    try {
-      const res = await fetch('/api/diagrams', { headers: authHeaders() });
-      if (!res.ok) { diagramsDropdownList.innerHTML = ''; diagramsDropdownEmpty.hidden = false; return; }
-      const json = await res.json();
-      const list = json.diagrams || [];
-      diagramsDropdownEmpty.hidden = list.length > 0;
-      diagramsDropdownList.innerHTML = '';
-      list.forEach((item) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'diagram-item';
-        btn.setAttribute('role', 'menuitem');
-        const thumb = document.createElement('img');
-        thumb.className = 'diagram-item-thumb';
-        thumb.alt = '';
-        thumb.src = item.thumbnailUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect fill="%23eee" width="64" height="48"/><text x="32" y="26" text-anchor="middle" fill="%23999" font-size="12">No preview</text></svg>';
-        const info = document.createElement('div');
-        info.className = 'diagram-item-info';
-        const nameEl = document.createElement('div');
-        nameEl.className = 'diagram-item-name';
-        nameEl.textContent = item.name || 'Untitled';
-        const dateEl = document.createElement('div');
-        dateEl.className = 'diagram-item-date';
-        dateEl.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
-        info.appendChild(nameEl);
-        info.appendChild(dateEl);
-        btn.appendChild(thumb);
-        btn.appendChild(info);
+  // Breadcrumb click opens project history dropdown (46.3–46.4)
+  if (breadcrumbsNav) {
+    breadcrumbsNav.addEventListener('click', (e) => {
+      if (e.target === projectNameInput || e.target === goBackBtn) return;
+      e.preventDefault();
+      if (!authState.token) {
+        showMessage('Sign in to open saved diagrams.', 'error');
+        return;
+      }
+      const open = projectHistoryDropdown && !projectHistoryDropdown.hidden;
+      if (open) {
+        closeProjectHistoryDropdown();
+        return;
+      }
+      openProjectHistoryDropdown();
+    });
+  }
+
+  function createDiagramItem(item) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'diagram-item';
+    btn.setAttribute('role', 'menuitem');
+    const thumb = document.createElement('img');
+    thumb.className = 'diagram-item-thumb';
+    thumb.alt = '';
+    thumb.src = item.thumbnailUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect fill="%23eee" width="64" height="48"/><text x="32" y="26" text-anchor="middle" fill="%23999" font-size="12">No preview</text></svg>';
+    const info = document.createElement('div');
+    info.className = 'diagram-item-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'diagram-item-name';
+    nameEl.textContent = item.name || 'Untitled';
+    const dateEl = document.createElement('div');
+    dateEl.className = 'diagram-item-date';
+    dateEl.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+    info.appendChild(nameEl);
+    info.appendChild(dateEl);
+    btn.appendChild(thumb);
+    btn.appendChild(info);
         btn.addEventListener('click', async () => {
           closeDropdown();
+          closeProjectHistoryDropdown();
           try {
+            preLoadSnapshot = capturePreLoadSnapshot();
+            updateGoBackButtonVisibility();
             const r = await fetch('/api/diagrams/' + item.id, { headers: authHeaders() });
             if (!r.ok) throw new Error('Failed to load');
             const diagram = await r.json();
             await restoreStateFromApiSnapshot(diagram);
+            updateToolbarBreadcrumbs(diagram.name || null);
             showMessage('Diagram loaded.', 'success');
           } catch (err) {
+            preLoadSnapshot = null;
+            updateGoBackButtonVisibility();
             showMessage('Could not load diagram.', 'error');
           }
         });
-        diagramsDropdownList.appendChild(btn);
+    return btn;
+  }
+
+  async function refreshDiagramsList() {
+    const listTargets = [
+      { list: diagramsDropdownList, empty: diagramsDropdownEmpty },
+      { list: projectHistoryDropdownList, empty: projectHistoryDropdownEmpty },
+    ].filter((t) => t.list && t.empty);
+    if (listTargets.length === 0) return;
+    try {
+      const res = await fetch('/api/diagrams', { headers: authHeaders() });
+      if (!res.ok) {
+        listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
+        return;
+      }
+      const json = await res.json();
+      const diagramList = json.diagrams || [];
+      listTargets.forEach(({ list, empty }) => {
+        empty.hidden = diagramList.length > 0;
+        list.innerHTML = '';
+        diagramList.forEach((item) => list.appendChild(createDiagramItem(item)));
       });
     } catch (_) {
-      diagramsDropdownList.innerHTML = '';
-      diagramsDropdownEmpty.hidden = false;
+      listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
     }
   }
 }
@@ -6518,6 +6746,9 @@ function renderMeasurementDeck() {
     const displayLabel = getMeasurementDisplayLabel(el, measurable);
     const mVal = mmToM(el.measuredLength);
     card.setAttribute('aria-label', `${prefix} #${displayLabel}, length ${mVal != null ? mVal + ' m' : '0 m'}`);
+    const dot = document.createElement('span');
+    dot.className = 'measurement-deck-card-dot';
+    dot.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.className = 'measurement-deck-card-label';
     label.textContent = `${prefix} #${displayLabel}`;
@@ -6537,6 +6768,7 @@ function renderMeasurementDeck() {
     suffix.setAttribute('aria-hidden', 'true');
     wrap.appendChild(input);
     wrap.appendChild(suffix);
+    card.appendChild(dot);
     card.appendChild(label);
     card.appendChild(wrap);
     container.appendChild(card);
@@ -6664,6 +6896,11 @@ function init() {
     initColorPalette();
   } catch (e) {
     console.warn('initColorPalette failed', e);
+  }
+  try {
+    initHeaderColorPalette();
+  } catch (e) {
+    console.warn('initHeaderColorPalette failed', e);
   }
   try {
     initTransparencyPopover();

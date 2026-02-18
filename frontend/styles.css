@@ -34,27 +34,260 @@ body {
   display: none;
 }
 
-/* ----- Toolbar ----- */
+/* ----- Toolbar (floating / minimalist) ----- */
 .toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid #e0e0e0;
+  padding: 12px 20px;
   flex-shrink: 0;
+  gap: 16px;
+}
+
+.toolbar-floating {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  z-index: 100;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.toolbar-breadcrumbs-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.project-history-dropdown {
+  left: 0;
+  min-width: 280px;
+}
+.toolbar-breadcrumbs {
+  font-size: 15px;
+  color: #666;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.breadcrumb-prefix {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #333;
+}
+
+.breadcrumb-project-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 220px;
+  font: inherit;
+  font-size: 15px;
+  color: #666;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 6px;
+  margin: -3px -6px;
+  outline: none;
+  cursor: text;
+}
+
+.breadcrumb-project-input:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.breadcrumb-project-input:focus {
+  background: #fff;
+  border-color: #18a0fb;
+  color: #1a1a1a;
+}
+
+.breadcrumb-project-input::placeholder {
+  color: #999;
+}
+
+.breadcrumb-go-back {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #007aff;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.breadcrumb-go-back:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: #0056b3;
+}
+
+.breadcrumb-go-back[hidden] {
+  display: none;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.toolbar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.toolbar-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-pill-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toolbar-pill-btn .toolbar-icon {
+  flex-shrink: 0;
+}
+
+.toolbar-pill .upload-zone {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.toolbar-pill .upload-zone:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toolbar-pill .toggle-label-compact {
+  padding: 0;
+  margin: 0;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-pill .toggle-label-compact input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toolbar-pill .toggle-label-compact input:checked + .toolbar-icon {
+  color: #007aff;
+}
+
+.toolbar-header-color-wrap {
+  position: relative;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.toolbar-actions-secondary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1a1a1a;
+}
+
+.toolbar-icon {
+  flex-shrink: 0;
+}
+
+.btn-cta {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #007aff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-cta:hover {
+  background: #0066dd;
+}
+
+/* Generate Quote button: quote modal green (#71C43C) */
+#generateQuoteBtn.btn-cta {
+  background: #71C43C;
+}
+#generateQuoteBtn.btn-cta:hover {
+  background: #65b035;
+}
+
+.btn-cta:active {
+  transform: scale(0.98);
 }
 
 .toolbar-right .hint {
@@ -248,6 +481,25 @@ body {
 }
 
 .color-palette-popover[hidden] {
+  display: none;
+}
+
+/* Header colour wheel popover (re-colour whole diagram) – same look as contextual palette */
+.toolbar-header-color-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.header-color-popover {
+  position: fixed;
+  z-index: 100;
+  top: auto;
+  left: auto;
+  /* Position set via JS under headerColorDiagramBtn; outside pill so fixed positioning is correct */
+}
+
+.header-color-popover[hidden] {
   display: none;
 }
 
@@ -620,10 +872,115 @@ body {
   -webkit-user-select: none;
 }
 
-.blueprint-wrap.drag-over {
-  background: #d0e4ff;
-  outline: 3px dashed #007aff;
-  outline-offset: -4px;
+/* Floating diagram toolbar (Canva/Freeform style) – overlays blueprint, contains upload/zoom/transparency etc. */
+.diagram-floating-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  min-height: 44px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  pointer-events: auto;
+}
+.diagram-floating-toolbar .toolbar-pill-btn,
+.diagram-floating-toolbar .upload-zone {
+  flex-shrink: 0;
+  min-width: 36px;
+  min-height: 36px;
+}
+.diagram-floating-toolbar .upload-zone {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 50%;
+}
+.diagram-floating-toolbar .upload-zone:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.diagram-floating-toolbar .toggle-label-compact {
+  padding: 0;
+  margin: 0;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.diagram-floating-toolbar .toggle-label-compact input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.diagram-floating-toolbar .toggle-label-compact input:checked + .toolbar-icon {
+  color: #007aff;
+}
+.diagram-floating-toolbar .toolbar-header-color-wrap {
+  position: relative;
+}
+/* Transparency button when inside diagram toolbar – match pill button size and style; position: relative so ::before is scoped to button, not toolbar */
+.diagram-floating-toolbar .blueprint-transparency-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  box-shadow: none;
+}
+.diagram-floating-toolbar .blueprint-transparency-btn:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(0, 0, 0, 0.06);
+}
+.diagram-floating-toolbar .blueprint-transparency-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #007aff;
+}
+.diagram-floating-toolbar .blueprint-transparency-btn[hidden] {
+  display: none;
+}
+.diagram-floating-toolbar .blueprint-transparency-btn:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  background-image: none;
+}
+.diagram-floating-toolbar .blueprint-transparency-btn:not([hidden])::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background-color: white;
+  background-image:
+    linear-gradient(45deg, #a8a8a8 25%, transparent 25%),
+    linear-gradient(-45deg, #a8a8a8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #a8a8a8 75%),
+    linear-gradient(-45deg, transparent 75%, #a8a8a8 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.diagram-floating-toolbar .blueprint-transparency-btn:not([hidden]):hover::before {
+  opacity: 0.95;
+}
+
+.blueprint-wrap.drag-over .canvas-placeholder .placeholder-card {
+  background: #eef5ff;
+  border-color: #007aff;
 }
 
 .blueprint-wrap.drag-over .canvas-placeholder .placeholder-title {
@@ -693,15 +1050,30 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.canvas-placeholder .placeholder-card {
+  pointer-events: auto;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  max-width: 500px;
+  min-height: 150px;
+  padding: 28px 32px;
+  background: #f9f9f9;
+  border: 2px dashed #999;
+  border-radius: 12px;
   color: #888;
   font-size: 16px;
-  pointer-events: none;
   text-align: center;
-  padding: 24px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .canvas-placeholder .placeholder-title {
@@ -1568,6 +1940,8 @@ body {
 /* ----- Diagrams dropdown (clock icon) ----- */
 .toolbar-diagrams-wrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 .btn-icon {
   display: inline-flex;
@@ -1584,6 +1958,41 @@ body {
   background: #f0f0f0;
   border-color: #999;
 }
+/* Save button: text label, light blue fill, light shadow */
+.btn-save-diagram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0066cc;
+  background: rgba(0, 122, 255, 0.12);
+  border: 1px solid rgba(0, 122, 255, 0.25);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-save-diagram:hover {
+  background: rgba(0, 122, 255, 0.22);
+  color: #0052a3;
+  border-color: rgba(0, 122, 255, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.2);
+}
+
+/* Toolbar icon buttons (Export, clock): borderless to match header style */
+.toolbar-actions-secondary .toolbar-icon-btn.btn-icon {
+  border: none;
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+.toolbar-actions-secondary .toolbar-icon-btn.btn-icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: transparent;
+}
 .diagrams-dropdown {
   position: absolute;
   top: 100%;
@@ -1595,7 +2004,7 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   min-width: 280px;
   max-width: 360px;
-  max-height: 400px;
+  max-height: calc(100vh - 140px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2392,12 +2801,14 @@ body {
   padding: 0 20px;
 }
 
-/* ----- Measurement Deck (Digital Takeoff) ----- */
+/* ----- Measurement Deck (Digital Takeoff) – horizontal tray, glassmorphism, refined pills ----- */
 .measurement-deck {
   flex-shrink: 0;
   height: 72px;
-  background: #fff;
-  border-top: 1px solid #e0e0e0;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   align-items: center;
   z-index: 10;
@@ -2406,13 +2817,28 @@ body {
 .measurement-deck-scroll {
   display: flex;
   gap: 12px;
-  padding: 0 16px;
+  padding: 0 20px;
   overflow-x: auto;
   overflow-y: hidden;
   align-items: center;
   height: 100%;
   flex: 1;
   min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.measurement-deck-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.measurement-deck-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.measurement-deck-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
 }
 
 .measurement-deck-card {
@@ -2420,39 +2846,45 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
   min-width: 140px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-/* Empty state: red to indicate missing input */
-.measurement-deck-card.no-length {
-  border-color: #e57373;
-  background: #ffebee;
+.measurement-deck-card:hover {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: rgba(24, 160, 251, 0.25);
+}
+
+/* Contextual dot: matches badge on canvas (red = missing, green = filled) */
+.measurement-deck-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.measurement-deck-card.no-length .measurement-deck-card-dot {
+  background: #c62828;
+}
+
+.measurement-deck-card.has-length .measurement-deck-card-dot {
+  background: #2e7d32;
 }
 
 .measurement-deck-card.no-length .measurement-deck-card-label {
-  color: #b71c1c;
-}
-
-/* Filled state: green to show value entered */
-.measurement-deck-card.has-length {
-  border-color: #2e7d32;
-  background: #e8f5e9;
+  color: #555;
 }
 
 .measurement-deck-card.has-length .measurement-deck-card-label,
 .measurement-deck-card.has-length .measurement-deck-card-unit {
   color: #1b5e20;
   font-weight: 600;
-}
-
-.measurement-deck-card:hover {
-  background: #e8f4fd;
-  border-color: #18A0FB;
 }
 
 .measurement-deck-card.has-length:hover .measurement-deck-card-label,
@@ -2481,13 +2913,14 @@ body {
   width: 64px;
   padding: 4px 6px;
   font-size: 13px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: #fff;
 }
 
 .measurement-deck-card.has-length input {
   color: #1b5e20;
-  border-color: #66bb6a;
+  border-color: rgba(46, 125, 50, 0.4);
 }
 
 .measurement-deck-card input:focus {

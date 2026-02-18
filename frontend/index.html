@@ -9,32 +9,43 @@
 <body>
   <div class="app">
     <div id="view-canvas" class="app-view hidden">
-    <header class="toolbar">
+    <header class="toolbar toolbar-floating">
       <div class="toolbar-left">
-        <label class="upload-zone" id="uploadZone" title="Choose a property photo or PDF (JPEG, PNG, GIF, WebP, HEIC, or PDF; max 20 MB)">
-          <input type="file" id="fileInput" accept="image/*,application/pdf" hidden />
-          <span class="upload-label">Upload property photo</span>
-        </label>
-        <label class="toggle-label">
-          <input type="checkbox" id="technicalDrawingToggle" checked />
-          <span>Technical drawing</span>
-        </label>
-        <button type="button" class="btn btn-zoom" id="zoomOutBtn" title="Zoom out">−</button>
-        <button type="button" class="btn btn-zoom" id="zoomFitBtn" title="Fit view">Fit</button>
-        <button type="button" class="btn btn-zoom" id="recenterViewBtn" title="Recenter view to fit content">Recenter View</button>
-        <button type="button" class="btn btn-zoom" id="zoomInBtn" title="Zoom in">+</button>
-        <button type="button" class="btn btn-export" id="exportBtn" title="Download blueprint with all products as PNG">Export PNG</button>
-        <button type="button" class="btn btn-export" id="saveDiagramBtn" title="Save diagram (requires login)" aria-label="Save diagram">Save</button>
-        <div class="toolbar-diagrams-wrap">
-          <button type="button" class="btn btn-icon" id="diagramsDropdownBtn" title="Saved diagrams" aria-label="Open saved diagrams" aria-haspopup="true" aria-expanded="false">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </button>
-          <div class="diagrams-dropdown" id="diagramsDropdown" role="menu" aria-label="Saved diagrams" hidden>
+        <div class="toolbar-breadcrumbs-wrap">
+          <nav class="toolbar-breadcrumbs" aria-label="Project" id="toolbarBreadcrumbsNav">
+            <span class="breadcrumb-prefix">Projects / </span>
+            <input type="text" class="breadcrumb-project-input" id="toolbarProjectNameInput" value="" placeholder="Untitled" maxlength="255" aria-label="Project name" />
+            <button type="button" class="breadcrumb-go-back" id="breadcrumbGoBackBtn" title="Go back to previous state" aria-label="Go back to previous state" hidden>← Previous</button>
+          </nav>
+          <div class="project-history-dropdown diagrams-dropdown" id="projectHistoryDropdown" role="menu" aria-label="Project history" hidden>
             <div class="diagrams-dropdown-header">Saved diagrams</div>
-            <div class="diagrams-dropdown-list" id="diagramsDropdownList"></div>
-            <div class="diagrams-dropdown-empty" id="diagramsDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
+            <div class="diagrams-dropdown-list" id="projectHistoryDropdownList"></div>
+            <div class="diagrams-dropdown-empty" id="projectHistoryDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
           </div>
         </div>
+      </div>
+
+      <div class="toolbar-center"></div>
+
+      <div class="toolbar-right">
+        <div class="toolbar-actions-secondary">
+          <button type="button" class="toolbar-icon-btn btn-icon" id="exportBtn" title="Download blueprint with all products as PNG" aria-label="Export PNG">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button type="button" class="btn-save-diagram" id="saveDiagramBtn" title="Save diagram (requires login)" aria-label="Save diagram">Save</button>
+          <div class="toolbar-diagrams-wrap">
+            <button type="button" class="toolbar-icon-btn btn-icon" id="diagramsDropdownBtn" title="Saved diagrams" aria-label="Open saved diagrams" aria-haspopup="true" aria-expanded="false">
+              <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <div class="diagrams-dropdown" id="diagramsDropdown" role="menu" aria-label="Saved diagrams" hidden>
+              <div class="diagrams-dropdown-header">Saved diagrams</div>
+              <div class="diagrams-dropdown-list" id="diagramsDropdownList"></div>
+              <div class="diagrams-dropdown-empty" id="diagramsDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-cta" id="generateQuoteBtn" title="Generate quote from canvas elements">Generate Quote</button>
+        <div class="toolbar-message" id="toolbarMessage" role="alert" aria-live="polite" hidden></div>
         <div id="userProfileWrap" class="user-profile-wrap" hidden>
           <div id="userAvatar" class="user-avatar" role="button" aria-haspopup="true" aria-expanded="false" aria-label="User menu"></div>
           <div id="profileDropdown" class="profile-dropdown" role="menu" aria-label="Profile menu" hidden>
@@ -50,22 +61,66 @@
           </div>
         </div>
       </div>
-      <div class="toolbar-right">
-        <button type="button" class="btn btn-export" id="generateQuoteBtn" title="Generate quote from canvas elements">Generate Quote</button>
-        <span class="hint" id="toolbarHint">Whiteboard: drag photos and products — select to move, resize, rotate</span>
-        <div class="toolbar-message" id="toolbarMessage" role="alert" aria-live="polite" hidden></div>
-      </div>
     </header>
+    <div class="header-color-popover color-palette-popover" id="headerColorPalettePopover" role="menu" aria-label="Colour all diagram elements" hidden>
+      <button type="button" class="color-swatch color-swatch-default" data-color="" title="Default (no tint)"><span aria-hidden="true">×</span></button>
+      <button type="button" class="color-swatch" data-color="#FF3B30" title="Red" style="--swatch:#FF3B30"></button>
+      <button type="button" class="color-swatch" data-color="#FF9500" title="Orange" style="--swatch:#FF9500"></button>
+      <button type="button" class="color-swatch" data-color="#FFCC00" title="Yellow" style="--swatch:#FFCC00"></button>
+      <button type="button" class="color-swatch" data-color="#34C759" title="Green" style="--swatch:#34C759"></button>
+      <button type="button" class="color-swatch" data-color="#007AFF" title="Blue" style="--swatch:#007AFF"></button>
+      <button type="button" class="color-swatch" data-color="#AF52DE" title="Purple" style="--swatch:#AF52DE"></button>
+    </div>
 
     <div class="workspace">
       <div class="blueprint-wrap" id="blueprintWrap" title="Drop a photo or drag products onto the whiteboard">
+        <div class="diagram-floating-toolbar" id="diagramFloatingToolbar" role="toolbar" aria-label="Diagram tools">
+          <label class="toolbar-pill-btn upload-zone" id="uploadZone" for="fileInput" title="Upload property photo or PDF (JPEG, PNG, GIF, WebP, HEIC, or PDF; max 20 MB)">
+            <input type="file" id="fileInput" accept="image/*,application/pdf" hidden />
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </label>
+          <label class="toolbar-pill-btn toggle-label toggle-label-compact" title="Technical drawing (blueprint view)">
+            <input type="checkbox" id="technicalDrawingToggle" checked />
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="5" r="2" />
+              <path d="m9.47 12.43-3-4.43" />
+              <path d="m14.53 12.43 3-4.43" />
+              <path d="m16 16-4-4-4 4" />
+              <path d="m12 21v-9" />
+            </svg>
+          </label>
+          <button type="button" class="toolbar-pill-btn btn-icon" id="zoomOutBtn" title="Zoom out" aria-label="Zoom out">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button type="button" class="toolbar-pill-btn btn-icon" id="zoomFitBtn" title="Fit view" aria-label="Fit view">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+          <button type="button" class="toolbar-pill-btn btn-icon" id="zoomInBtn" title="Zoom in" aria-label="Zoom in">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="toolbar-header-color-wrap">
+            <button type="button" class="toolbar-pill-btn btn-icon" id="headerColorDiagramBtn" title="Colour all diagram elements" aria-label="Colour all diagram elements" aria-haspopup="true" aria-expanded="false">
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" class="header-color-wheel-icon">
+                <path fill="#FF3B30" d="M12 12 L22 12 A10 10 0 0 1 17 20.66 Z"/>
+                <path fill="#FF9500" d="M12 12 L17 20.66 A10 10 0 0 1 7 20.66 Z"/>
+                <path fill="#FFCC00" d="M12 12 L7 20.66 A10 10 0 0 1 2 12 Z"/>
+                <path fill="#34C759" d="M12 12 L2 12 A10 10 0 0 1 7 3.34 Z"/>
+                <path fill="#007AFF" d="M12 12 L7 3.34 A10 10 0 0 1 17 3.34 Z"/>
+                <path fill="#AF52DE" d="M12 12 L17 3.34 A10 10 0 0 1 22 12 Z"/>
+                <circle cx="12" cy="12" r="5" fill="#fff" stroke="#e5e5ea" stroke-width="1"/>
+              </svg>
+            </button>
+          </div>
+          <button type="button" class="blueprint-transparency-btn diagram-toolbar-transparency" id="blueprintTransparencyBtn" title="Transparency" aria-label="Toggle transparency slider" aria-expanded="false" hidden></button>
+        </div>
         <canvas id="canvas" aria-label="Blueprint canvas"></canvas>
         <div class="canvas-placeholder" id="canvasPlaceholder">
-          <span class="placeholder-title">Upload or drop a photo to add to the whiteboard</span>
-          <span class="placeholder-steps">Open the panel (→) and drag products here — move, resize, and rotate like a Canva board</span>
+          <div class="placeholder-card">
+            <span class="placeholder-title">Upload or drop a photo to add to the whiteboard</span>
+            <span class="placeholder-steps">Open the panel (→) and drag products here — move, resize, and rotate like a Canva board</span>
+          </div>
         </div>
         <div class="canvas-tooltip" id="canvasTooltip" aria-live="polite" hidden></div>
-        <button type="button" class="blueprint-transparency-btn" id="blueprintTransparencyBtn" title="Transparency" aria-label="Toggle transparency slider" aria-expanded="false" hidden></button>
         <div class="transparency-popover" id="transparencyPopover" role="group" aria-label="Blueprint transparency" hidden>
           <label class="transparency-label" for="transparencyRange">Transparency</label>
           <div class="transparency-controls">

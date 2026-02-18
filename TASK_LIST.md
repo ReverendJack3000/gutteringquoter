@@ -772,6 +772,121 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 41. Marley panel: 65/80 mm filter and placeholder cleanup
+
+*Context: Add a second dropdown in the Marley panel to filter products by downpipe/clip size (65 mm or 80 mm). Remove legacy placeholder or original elements from the UI now that real diagram assets are in use.*
+
+- [ ] **41.1** Add a second dropdown filter in the Marley panel with 65 mm or 80 mm filter options (alongside the existing profile filter); wire filtering so the product list shows only products matching the selected size where applicable.
+- [ ] **41.2** Remove the placeholder/original elements from the UI; they are no longer needed now that real Marley diagram assets are in place.
+
+---
+
+## 42. Canvas view: header text, empty-state copy, and drop-zone UI
+
+*Context: Reduce clutter in the canvas view and improve empty-state UX. Remove redundant header text; make the “upload or drop a photo” message hide when a blueprint is uploaded (not only when an element is dropped); and give the empty canvas a clear dashed drop-zone instead of plain grey.*
+
+- [x] **42.1** Permanently remove the text “Whiteboard: drag photos and products — select to move, resize, rotate” from the head of the canvas view (currently top right); it is cluttering the UI.
+- [x] **42.2** Make the “upload or drop a photo to add to the whiteboard” message disappear when the blueprint image is uploaded (in addition to when an element is dragged on); either action should hide it. Currently it only disappears when an element is placed.
+- [x] **42.3** When the canvas is empty, change the UI to show a dashed border box around the upload/drop area (with the “upload or drop a photo” text inside) so it is clear where to drag or drop a file; replace the current large grey canvas with no visual drop target.
+
+*Section 42 status: 42.1–42.3 complete (header text removed, placeholder hides on blueprint upload, dashed drop-zone when empty).*
+
+---
+
+## 43. Header colour wheel (re-colour whole diagram)
+
+*Context: Add a colour control in the toolbar to the left of Export PNG that uses the same palette image and primary colours as the pop-up toolbar that opens when an element is selected. Choosing a colour from this header control applies it to all elements on the canvas at once (re-colour the whole diagram). Existing per-element colour (floating toolbar palette) and all existing header/toolbar behaviour must remain unchanged.*
+
+*Section 43 status: 43.1–43.6 complete. Header colour wheel button and #headerColorPalettePopover added; apply-to-all with single undo; outside click and Escape close popover.*
+
+**Plan (from project files):**
+
+- **Placement:** In `index.html`, `.toolbar-left` currently has: upload, technical drawing toggle, zoom buttons, Export PNG, Save, diagrams dropdown, user profile. The new control goes immediately to the left of the Export PNG button (same row, same toolbar).
+- **Existing palette reference:** `#colorPalettePopover` (in `.blueprint-wrap`) contains seven swatches: default (×, `data-color=""`), Red `#FF3B30`, Orange `#FF9500`, Yellow `#FFCC00`, Green `#34C759`, Blue `#007AFF`, Purple `#AF52DE`. Styled with `.color-swatch`; positioning is fixed and controlled by `updateColorPalettePositionAndVisibility`. Colour is applied in `initColorPalette` by setting `el.color`, invalidating tint cache on the selected element, then `draw()` (and undo is pushed elsewhere for other actions; single-element colour change does not push undo in the visible snippet — batch change should push one snapshot).
+- **Apply-to-all logic:** Reuse the same tint pipeline: for each `state.elements` set `el.color`, clear `tintedCanvas` / `tintedCanvasColor` / `tintedCanvasWidth` / `tintedCanvasHeight` / `_tintedCanvasFailureKey`, then one `draw()` and one `pushUndoSnapshot()` so Cmd+Z reverts the whole diagram colour.
+- **Isolation:** A separate header popover (e.g. `#headerColorPalettePopover`) and its own click handler so `#colorPalettePopover` and `initColorPalette` remain used only for the floating-toolbar colour button and selected-element colouring.
+
+**Tasks:**
+
+- [x] **43.1** HTML: Add a header “Colour diagram” (or colour wheel icon) button to the left of the Export PNG button in `.toolbar-left`. Use the same button style as existing toolbar controls (e.g. `btn btn-export` or icon button). Give it a unique id (e.g. `headerColorDiagramBtn`) and an accessible label/tooltip (e.g. “Colour all diagram elements”).
+- [x] **43.2** HTML: Add a dedicated header colour popover element (e.g. `#headerColorPalettePopover`) containing the same seven swatches as `#colorPalettePopover`: default (no tint), Red, Orange, Yellow, Green, Blue, Purple — same `data-color` values and structure so existing `.color-swatch` CSS applies. Place it so it can be positioned under the header button (e.g. in the toolbar area or a fixed container); hidden by default.
+- [x] **43.3** CSS: Style the header colour popover so it matches the existing colour palette popover (same swatch layout and appearance). Position it fixed below the header colour button when visible. Reuse `.color-swatch` and related classes; add a wrapper class/id for the header popover only if needed for positioning.
+- [x] **43.4** JS – Open/close: On click of the header colour button, toggle visibility of `#headerColorPalettePopover` and position it under the button (e.g. via getBoundingClientRect). Close the popover on outside click (or Escape) so it does not affect canvas interaction. Do not open or control `#colorPalettePopover` or `state.colorPaletteOpen` from this button; keep floating-toolbar colour button and existing palette logic unchanged.
+- [x] **43.5** JS – Apply to all: When the user selects a colour in `#headerColorPalettePopover`, apply that colour to every element in `state.elements`: set `el.color` (or null for default), invalidate each element’s tint cache (`tintedCanvas`, `tintedCanvasColor`, etc.), call `draw()`, then push a single undo snapshot so one Cmd+Z reverts the whole diagram colour. If there are no elements, close the popover and optionally show a short message; do not change selection or per-element colour behaviour.
+- [x] **43.6** Regression check: Confirm Export PNG, Save, and all other toolbar items work as before; the existing element colour palette (floating toolbar) still opens only when an element is selected and the Colour button is clicked, and still applies only to the selected element. No changes to the `initColorPalette` handler for `#colorPalettePopover`; use a separate handler for the header popover.
+
+---
+
+## 44. Canvas UI: transparency in pill, editable project name for save
+
+*Context: Further refine the canvas page UI by moving the blueprint transparency control into the center pill toolbar, and making the top-left project name editable so it drives the save name (with today’s date appended when saving).*
+
+- [ ] **44.1** Move the transparency icon (`#blueprintTransparencyBtn`) into the pill toolbar at the top (center). Currently it is positioned outside the blueprint top-left; relocate it as a pill button (same style as upload, zoom, colour wheel) and keep the existing transparency popover behaviour (visibility when blueprint exists and technical drawing off; slider and number input unchanged).
+- [ ] **44.2** Make the project name at the top left interactable: replace the read-only breadcrumb text with an editable control (e.g. inline editable span or input) that displays “Projects / [name]”. When the user saves the file, use the entered project name with today’s date appended (e.g. “Property HO3776 – 18 Feb 2026”) as the save name, and update the breadcrumb to that value after a successful save.
+
+---
+
+## 45. Floating diagram toolbar (Canva/Freeform style)
+
+*Context: Consolidate diagram controls into a single floating toolbar that overlays the canvas, similar to Canva or Apple Freeform. Move the existing center pill (Source A) and the transparency button (Source B) into one container positioned over the blueprint area, leaving the white header for breadcrumbs and right-side actions only.*
+
+**Sources:**
+- **Source A:** The existing central "pill toolbar" in the white top header (`.toolbar-center .toolbar-pill`): upload, technical drawing toggle, recenter, zoom out, fit, zoom in, colour wheel.
+- **Source B:** The transparency/background icon (`#blueprintTransparencyBtn`) anchored to the top-left of the blueprint image area (`.blueprint-wrap`).
+
+**Destination:** A new single container acting as the floating diagram toolbar, overlaying the blueprint area, pill-shaped, with all controls from A and B inside it.
+
+- [x] **45.1** Create the new floating diagram toolbar container: add a single DOM element (e.g. `#diagramFloatingToolbar`) inside the diagram container (e.g. `.blueprint-wrap`) so it can be positioned relative to the diagram. Style it as a pill (rounded corners, background colour that separates it from the map). Use flexbox with a consistent gap so icons are spaced evenly. Do not move any controls yet; ensure the container is present and styled.
+- [x] **45.2** Move controls from Source A into the new toolbar: relocate upload zone, technical drawing toggle, recenter, zoom out, fit, zoom in, and colour wheel (and header colour popover positioning logic) from `.toolbar-center .toolbar-pill` into `#diagramFloatingToolbar`. Remove or empty the center pill from the header so the white header no longer contains the pill. Preserve all existing behaviour and event listeners (upload, toggle, zoom, recenter, header colour popover).
+- [x] **45.3** Move the transparency control from Source B into the new toolbar: relocate `#blueprintTransparencyBtn` into `#diagramFloatingToolbar`. Keep `#transparencyPopover` behaviour (open/close from button; visibility when blueprint exists and technical drawing off; slider and number input). Update `updateBlueprintTransparencyButtonVisibility` and any popover positioning so the button lives in the new toolbar and the popover still opens correctly.
+- [x] **45.4** Position the new toolbar over the diagram: position it so it overlays the blueprint area, horizontally centered, just below the main white header block. Use absolute positioning relative to the diagram container (e.g. `.blueprint-wrap` or a direct parent with `position: relative`); set an appropriate z-index so it floats above the canvas and placeholder. Ensure it does not overlap the header and remains visible when the canvas is scrolled or panned (position relative to viewport or diagram container as specified).
+- [x] **45.5** Final styling and regression: ensure the merged toolbar maintains pill shape, rounded corners, and background; confirm flexbox gap gives even, consistent spacing between all icons (upload, technical drawing, recenter, zoom −/fit/+, colour wheel, transparency). Verify no existing functionality is broken: upload, technical drawing, zoom, recenter, colour-all, transparency popover, and selection floating toolbar all work as before.
+
+**Post-45 refinements (done):** Recenter button removed from diagram toolbar (Fit view only for re-fit). Technical drawing toggle icon replaced with drafting compass (blueprint/drafting context). Upload wiring fixed (label only, no double file dialog). Toolbar click wiring fixed (diagram toolbar stops propagation; zoom/Fit handlers stopPropagation). Transparency button ::before fix (position: relative so checkerboard scoped to button). Toolbar padding and spacing tightened (10px 16px, min-width/height on buttons).
+
+---
+
+## 46. Editable project name, project history dropdown, and history clock fix
+
+*Context: Make the "Projects / Untitled" text in the white header (top left) editable so users can name their project. When saving, the project name should auto-map into the save modal with today's date appended. Clicking the project name should show the user's project history (saved diagrams) as a dropdown, ordered by date, matching the style of the existing diagrams dropdown. The history clock button/icon has been affected during recent UI changes and should be fixed at the same time.*
+
+**Editable project name**
+
+- [x] **46.1** Make the project name editable: replace the read-only `#toolbarBreadcrumbs` span with an inline-editable control (e.g. contenteditable span or input that looks like text) so users can type a project name. Display format: "Projects / [name]" where [name] is editable; default "Untitled" when empty. Persist the current project name in state (e.g. `state.projectName`) so it survives operations and is available when opening the save modal.
+
+- [x] **46.2** Wire the editable project name to the save flow: when the user opens the save modal (clicks Save), pre-fill `#saveDiagramName` with the current project name plus today's date (e.g. "Property HO3776 – 18 Feb 2026"). If project name is empty or "Untitled", use a sensible default such as "Project – [today's date]". After successful save, update the breadcrumb to the saved name (existing behaviour) and keep `state.projectName` in sync.
+
+**Project history dropdown (click on project name)**
+
+- [x] **46.3** Add click handler on the project name / breadcrumb area: when the user clicks on "Projects / [name]" (or the project name portion), show a dropdown listing the user's saved diagrams (project history). Use the same data as the clock icon dropdown (GET `/api/diagrams`), ordered by date (API already returns `order("created_at", desc=True)`). Style the dropdown to match the existing `.diagrams-dropdown` (header, list, empty state, item layout with thumbnail, name, date). Position the dropdown below the breadcrumb (left-aligned with toolbar-left).
+
+- [x] **46.4** When the user selects a project from the breadcrumb dropdown: load that diagram (same flow as clock icon: fetch `/api/diagrams/{id}`, restore state, update breadcrumb). Close the dropdown on selection. Ensure both the breadcrumb dropdown and the clock icon dropdown share the same refresh logic (e.g. `refreshDiagramsList()`) so the lists stay in sync. When user is not signed in, clicking the project name can show a prompt to sign in (or show empty state) instead of the history list.
+
+**History clock button/icon fix**
+
+- [x] **46.5** Fix the history clock button/icon: investigate and correct any regressions introduced during recent UI changes (e.g. toolbar restructuring, floating diagram toolbar). Ensure the clock icon button (`#diagramsDropdownBtn`) displays correctly, is properly styled with `.toolbar-icon-btn` / `.btn-icon`, and its dropdown (`.diagrams-dropdown`) positions and displays correctly. Verify the clock icon SVG renders, the button is clickable, and the dropdown opens below the button with correct z-index and visibility. Fix any layout, alignment, or visual issues so it matches the Export and Save buttons in `.toolbar-actions-secondary`.
+
+*Section 46 status: Complete. 46.1–46.5 implemented: editable project name, save modal auto-mapping, breadcrumb project history dropdown, history clock button fix.*
+
+---
+
+## 47. Header toolbar polish and UX refinements
+
+*Context: Polish the header toolbar and project name UX based on feedback. Save button as text label with light blue styling; Generate Quote uses quote modal green; dropdowns constrained to viewport; breadcrumb styling; "Go back to previous" after loading a diagram.*
+
+- [x] **47.1** Remove date from project name: save modal pre-fill uses project name only; date is shown in saved diagrams list.
+- [x] **47.2** Dropdown viewport fix: diagrams dropdown max-height `calc(100vh - 140px)` so project history and clock dropdowns don’t go off screen.
+- [x] **47.3** Breadcrumb styling: increased gap (10px), bold "Projects /", font size 15px; input placeholder "Untitled" instead of value when empty.
+- [x] **47.4** Project name input UX: placeholder clears on focus; click anywhere blurs; Enter commits; mousedown outside triggers blur.
+- [x] **47.5** Toolbar z-index: `.toolbar-floating` z-index 100 so dropdowns render above canvas.
+- [x] **47.6** "Go back to previous": capture pre-load snapshot when loading a diagram; show "← Previous" button to restore previous state.
+- [x] **47.7** Save button: replace icon with text "Save"; light blue fill, light shadow; hover: more vivid blue.
+- [x] **47.8** Generate Quote button: use quote modal green `#71C43C` (hover `#65b035`) to match quote modal styling.
+
+*Section 47 status: Complete. All refinements implemented.*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Added: Section 40 (quote modal: 50% wider, markup column inline edit, row remove X); plan in docs/PLAN_QUOTE_MODAL_40.md. Section 39 follow-up: Gutter Length / Downpipe Length headers, one-header auto-populate.*
+*Last updated: Feb 2026. Section 45 complete; post-45: Recenter removed, drafting compass icon for technical drawing, upload/toolbar wiring and transparency styling fixes. Diagram toolbar: upload, drafting compass (technical drawing), zoom −/fit/+, colour wheel, transparency. Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*
