@@ -8,9 +8,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
-- Related Tasks: Railway deployment complete; production URL https://quote-app-production-7897.up.railway.app
+- Branch: feature/add-to-job-canvas-modal
+- Based on: main
+- Status: In Progress
+- Related Tasks: Add to Job button – job lookup, confirmation UI (Add to current Job / Make new job)
 
 **Uncompleted tasks (by section):**
 
@@ -1055,6 +1056,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Integration with Quote flow**
 
 - [x] **49.20** Link ServiceM8 OAuth connection to the authenticated user (e.g. Supabase user id → stored ServiceM8 tokens); provide UI for "Connect ServiceM8" and "Disconnect".
+- [x] **49.20.1** Add to Job confirmation flow: Enter Job # → GET job by generated_job_id → show confirmation modal with job_address, total_invoice_amount, before→after amounts → "Add to current Job" / "Make new job" (no action yet). Extended ServiceM8 scopes for future manage_job_materials, create_jobs, etc.
 - [ ] **49.21** Use access token for API calls when user adds materials to a ServiceM8 job: include `Authorization: Bearer {access_token}` (or `access_token` POST param per ServiceM8 docs).
 - [ ] **49.22** Wire 22.29: Use real ServiceM8 API responses to toggle Success/Error states in the Quote footer after Add to Job.
 

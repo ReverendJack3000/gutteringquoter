@@ -23,8 +23,29 @@ logger = logging.getLogger(__name__)
 AUTHORIZE_URL = "https://go.servicem8.com/oauth/authorize"
 TOKEN_URL = "https://go.servicem8.com/oauth/access_token"
 
-# Scopes for quote sync (Add to Job): read/manage jobs and job materials
-DEFAULT_SCOPES = ["read_jobs", "manage_jobs", "read_job_materials", "manage_job_materials"]
+# Scopes for quote sync (Add to Job) and future job/materials/schedule operations
+DEFAULT_SCOPES = [
+    "manage_job_contacts",
+    "manage_schedule",
+    "create_jobs",
+    "read_job_categories",
+    "manage_job_materials",
+    "read_job_materials",
+    "read_inventory",
+    "read_job_payments",
+    "read_job_contacts",
+    "read_jobs",
+    "manage_badges",
+    "publish_job_notes",
+    "read_customers",
+    "read_job_notes",
+    "read_schedule",
+    "read_staff",
+    "read_forms",
+    "read_inbox",
+    "read_messages",
+    "vendor_email",
+]
 
 
 def _get_app_credentials() -> tuple[str, str]:
@@ -311,3 +332,30 @@ def make_api_request(
             raise ValueError(f"Unsupported method: {method}")
     
     return resp
+
+
+def fetch_job_by_generated_id(user_id: str, generated_job_id: str) -> Optional[dict[str, Any]]:
+    """
+    Fetch a ServiceM8 job by generated_job_id.
+    Uses filter: $filter=generated_job_id eq 'VALUE' (value must be in single quotes per ServiceM8 docs).
+
+    Returns the first matching job or None if not found/error.
+    """
+    tokens = get_tokens(user_id)
+    if not tokens:
+        return None
+    filter_value = str(generated_job_id).strip()
+    if not filter_value:
+        return None
+    # ServiceM8 requires value in single quotes for eq operator
+    filter_expr = f"generated_job_id eq '{filter_value}'"
+    params = {"$filter": filter_expr}
+    try:
+        resp = make_api_request("GET", "/api_1.0/job.json", tokens["access_token"], params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        jobs = data if isinstance(data, list) else []
+        return jobs[0] if jobs else None
+    except Exception as e:
+        logger.warning("ServiceM8 job lookup failed for generated_job_id=%s: %s", filter_value, e)
+        return None
