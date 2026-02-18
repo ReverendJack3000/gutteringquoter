@@ -8,19 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/app-views-navigation
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 35.1 Wrap canvas view in #view-canvas
-  - [x] 35.2 Add #view-login and #view-products
-  - [x] 35.3 Canvas container safety (#blueprintWrap height)
-  - [x] 35.4 switchView(viewId) + resizeCanvas on show
-  - [x] 35.5 init() auth-driven view (switchView on load)
-  - [x] 35.6 Move login form into #view-login
-  - [ ] 35.7 Wire login/sign-out to switchView
-  - [ ] 35.8 Verify no regressions
-  - [ ] 35.9 Manual/E2E deliverable
+- Branch: main
+- Status: Stable
 
 ---
 
