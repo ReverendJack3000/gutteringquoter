@@ -51,6 +51,9 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key from Supabase (backend API, products, diagrams). |
 | `SUPABASE_ANON_KEY` | Yes | Anon/public key (frontend auth; exposed via `GET /api/config`). |
 | `SUPABASE_JWT_SECRET` | No | Only if your Supabase project uses legacy HS256 JWT secret; leave unset if using ECC (P-256). |
+| `SERVICEM8_APP_ID` | No (ServiceM8) | ServiceM8 App ID from Store Connect (for OAuth 2.0). |
+| `SERVICEM8_APP_SECRET` | No (ServiceM8) | ServiceM8 App Secret from Store Connect (for OAuth 2.0). |
+| `APP_BASE_URL` | No (ServiceM8) | Base URL for OAuth callback, e.g. `https://quote-app-production-7897.up.railway.app`. Defaults to `http://127.0.0.1:8000` for local dev. Must match Return URL in ServiceM8 Store Connect. |
 
 Do **not** commit `.env` or paste these values into the repo. Railway injects them at runtime.
 
@@ -97,6 +100,13 @@ If users sign in with Supabase Auth:
 
 1. In [Supabase Dashboard](https://supabase.com/dashboard/project/rlptjmkejfykisaefkeh/auth/url-configuration) go to **Authentication → URL Configuration**.
 2. Add your Railway URL to **Redirect URLs**, e.g. `https://YOUR-RAILWAY-URL/**`.
+
+**ServiceM8 OAuth (Internal Use):** 
+- **Important:** ServiceM8 Store Connect UI doesn't allow entering a redirect/callback URL.
+- For internal use: `redirect_uri` is **omitted** from the authorize request (optional per ServiceM8 docs).
+- `redirect_uri` is still **required** in token exchange and uses `APP_BASE_URL + /api/servicem8/oauth/callback`.
+- Add `SERVICEM8_APP_ID`, `SERVICEM8_APP_SECRET`, and `APP_BASE_URL` to Railway variables.
+- Default `APP_BASE_URL`: `https://quote-app-production-7897.up.railway.app`
 
 ## 8. Redeploys and logs
 

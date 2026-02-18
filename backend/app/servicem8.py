@@ -1,0 +1,317 @@
+"""
+ServiceM8 OAuth 2.0 integration for Quote App.
+See https://developer.servicem8.com/docs/authentication
+"""
+import base64
+import hashlib
+import hmac
+import logging
+import os
+import secrets
+import time
+from datetime import datetime, timezone
+from typing import Any, Optional
+from urllib.parse import urlencode
+
+import httpx
+
+from app.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
+
+# ServiceM8 OAuth endpoints
+AUTHORIZE_URL = "https://go.servicem8.com/oauth/authorize"
+TOKEN_URL = "https://go.servicem8.com/oauth/access_token"
+
+# Scopes for quote sync (Add to Job): read/manage jobs and job materials
+DEFAULT_SCOPES = ["read_jobs", "manage_jobs", "read_job_materials", "manage_job_materials"]
+
+
+def _get_app_credentials() -> tuple[str, str]:
+    app_id = os.environ.get("SERVICEM8_APP_ID", "").strip()
+    app_secret = os.environ.get("SERVICEM8_APP_SECRET", "").strip()
+    if not app_id or not app_secret or app_id == "your_app_id" or app_secret == "your_app_secret":
+        raise ValueError(
+            "SERVICEM8_APP_ID and SERVICEM8_APP_SECRET must be set in .env (from ServiceM8 Store Connect)"
+        )
+    return app_id, app_secret
+
+
+def get_redirect_uri() -> str:
+    """
+    Get OAuth callback URL for token exchange.
+    
+    Note: For internal use, redirect_uri is optional in authorize request per ServiceM8 docs,
+    but REQUIRED in token exchange and must match what was sent (or omitted) in authorize.
+    Since ServiceM8 Store Connect UI doesn't allow entering redirect URL, we use our Railway URL.
+    """
+    base = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        # Default to Railway production URL
+        base = "https://quote-app-production-7897.up.railway.app"
+    return f"{base}/api/servicem8/oauth/callback"
+
+
+def build_authorize_url(state: str, include_redirect_uri: bool = False) -> str:
+    """
+    Build the ServiceM8 OAuth authorize URL.
+    User must be redirected here to start the OAuth flow.
+    
+    Per ServiceM8 docs: redirect_uri is optional in authorize request, but if provided
+    must match the Return URL host from Store Connect settings. For internal use where
+    Store Connect UI doesn't allow entering redirect URL, omit redirect_uri here.
+    
+    Args:
+        state: CSRF protection state token
+        include_redirect_uri: If True, include redirect_uri param. Default False for internal use.
+    """
+    app_id, _ = _get_app_credentials()
+    scope = " ".join(DEFAULT_SCOPES)
+    params = {
+        "response_type": "code",
+        "client_id": app_id,
+        "scope": scope,
+        "state": state,
+    }
+    # For internal use: omit redirect_uri in authorize (optional per docs)
+    # We'll still send it in token exchange (required there)
+    if include_redirect_uri:
+        redirect_uri = get_redirect_uri()
+        params["redirect_uri"] = redirect_uri
+    return f"{AUTHORIZE_URL}?{urlencode(params)}"
+
+
+def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None) -> dict[str, Any]:
+    """
+    Exchange authorization code for access and refresh tokens.
+    POST to ServiceM8 token endpoint.
+    
+    Per ServiceM8 docs: redirect_uri is REQUIRED in token exchange and must match
+    what was sent (or omitted) in authorize request. For internal use where redirect_uri
+    was omitted in authorize, we still send it here using our Railway callback URL.
+    """
+    app_id, app_secret = _get_app_credentials()
+    # Use provided redirect_uri or default to our callback URL
+    if redirect_uri is None:
+        redirect_uri = get_redirect_uri()
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "code": code,
+        "redirect_uri": redirect_uri,
+    }
+    with httpx.Client() as client:
+        resp = client.post(TOKEN_URL, data=data)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def refresh_access_token(refresh_token: str) -> dict[str, Any]:
+    """
+    Refresh the access token using the refresh token.
+    POST to ServiceM8 token endpoint.
+    """
+    app_id, app_secret = _get_app_credentials()
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "refresh_token": refresh_token,
+    }
+    with httpx.Client() as client:
+        resp = client.post(TOKEN_URL, data=data)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def store_tokens(
+    user_id: str,
+    access_token: str,
+    refresh_token: str,
+    expires_in: int,
+    scope: Optional[str] = None,
+) -> None:
+    """Store OAuth tokens in Supabase for the given user."""
+    expires_at = datetime.fromtimestamp(time.time() + expires_in, tz=timezone.utc).isoformat()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    supabase = get_supabase()
+    supabase.table("servicem8_oauth").upsert(
+        {
+            "user_id": user_id,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": expires_at,
+            "scope": scope,
+            "updated_at": updated_at,
+        },
+        on_conflict="user_id",
+    ).execute()
+
+
+def _parse_expires_at(val: Any) -> float:
+    """Parse expires_at (ISO string or number) to Unix timestamp."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except Exception:
+        return 0.0
+
+
+def get_tokens(user_id: str) -> Optional[dict[str, Any]]:
+    """
+    Get tokens for user. If access token is expired, refresh it first.
+    Returns dict with access_token, refresh_token, expires_at, scope or None if not connected.
+    """
+    supabase = get_supabase()
+    resp = (
+        supabase.table("servicem8_oauth")
+        .select("access_token, refresh_token, expires_at, scope")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = resp.data or []
+    if not rows:
+        return None
+
+    row = rows[0]
+    expires_at = _parse_expires_at(row.get("expires_at"))
+    # Refresh if expires within 5 minutes
+    if time.time() >= expires_at - 300:
+        try:
+            new = refresh_access_token(row["refresh_token"])
+            store_tokens(
+                user_id,
+                new["access_token"],
+                new["refresh_token"],
+                new.get("expires_in", 3600),
+                new.get("scope"),
+            )
+            return {
+                "access_token": new["access_token"],
+                "refresh_token": new["refresh_token"],
+                "expires_at": time.time() + new.get("expires_in", 3600),
+                "scope": new.get("scope"),
+            }
+        except Exception as e:
+            logger.warning("ServiceM8 token refresh failed for user %s: %s", user_id, e)
+            delete_tokens(user_id)
+            return None
+
+    return {
+        "access_token": row["access_token"],
+        "refresh_token": row["refresh_token"],
+        "expires_at": expires_at,
+        "scope": row.get("scope"),
+    }
+
+
+def delete_tokens(user_id: str) -> None:
+    """Remove ServiceM8 OAuth tokens for user (disconnect)."""
+    supabase = get_supabase()
+    supabase.table("servicem8_oauth").delete().eq("user_id", user_id).execute()
+
+
+def generate_state(user_id: str) -> str:
+    """Generate a signed state for CSRF protection. Encodes user_id for callback."""
+    _, app_secret = _get_app_credentials()
+    nonce = secrets.token_urlsafe(16)
+    payload = f"{user_id}.{nonce}"
+    sig = hmac.new(
+        app_secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    raw = f"{payload}.{sig}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def verify_state(state: str) -> Optional[str]:
+    """
+    Verify state and return user_id. Returns None if invalid.
+    """
+    try:
+        _, app_secret = _get_app_credentials()
+        padding = 4 - len(state) % 4
+        if padding != 4:
+            state = state + "=" * padding
+        raw = base64.urlsafe_b64decode(state).decode()
+        parts = raw.rsplit(".", 1)
+        if len(parts) != 2:
+            return None
+        payload, sig = parts
+        expected = hmac.new(
+            app_secret.encode("utf-8"),
+            payload.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        return payload.split(".")[0]
+    except Exception as e:
+        logger.warning("ServiceM8 state verification failed: %s", e)
+        return None
+
+
+def make_api_request(
+    method: str,
+    endpoint: str,
+    access_token: str,
+    params: Optional[dict[str, Any]] = None,
+    json_data: Optional[dict[str, Any]] = None,
+    use_bearer_header: bool = True,
+) -> httpx.Response:
+    """
+    Make a ServiceM8 API request with access token.
+    
+    Per ServiceM8 docs (https://developer.servicem8.com/docs/authentication):
+    - Option 1: Authorization header with "Bearer {token}" (recommended)
+    - Option 2: POST parameter access_token (for POST requests)
+    
+    Args:
+        method: HTTP method (GET, POST, PUT, DELETE)
+        endpoint: API endpoint path (e.g. "/api_1.0/job.json")
+        access_token: OAuth access token
+        params: Query parameters (for GET) or form data (for POST)
+        json_data: JSON body (for POST/PUT)
+        use_bearer_header: If True, use Authorization header; else use POST param
+    
+    Returns:
+        httpx.Response
+    """
+    base_url = "https://api.servicem8.com"
+    url = f"{base_url}{endpoint}"
+    
+    headers = {"Content-Type": "application/json"}
+    
+    if use_bearer_header:
+        headers["Authorization"] = f"Bearer {access_token}"
+        data = json_data if json_data else params
+    else:
+        # Use POST parameter (only for POST requests)
+        if method.upper() == "POST" and params:
+            params = params.copy()
+            params["access_token"] = access_token
+        data = json_data if json_data else params
+    
+    with httpx.Client() as client:
+        if method.upper() == "GET":
+            resp = client.get(url, params=params, headers=headers)
+        elif method.upper() == "POST":
+            if json_data:
+                resp = client.post(url, json=json_data, headers=headers)
+            else:
+                resp = client.post(url, data=data, headers=headers)
+        elif method.upper() == "PUT":
+            resp = client.put(url, json=json_data, headers=headers)
+        elif method.upper() == "DELETE":
+            resp = client.delete(url, params=params, headers=headers)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+    
+    return resp

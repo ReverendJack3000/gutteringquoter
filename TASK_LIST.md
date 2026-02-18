@@ -32,6 +32,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
+| **49** | **49.1–49.22** | **ServiceM8 OAuth 2.0 Auth setup** |
 
 ---
 
@@ -995,8 +996,8 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **48.18** Connect the Git repo to Railway (New Project → Deploy from GitHub/GitLab/Bitbucket); select the correct branch (e.g. `main`).
 - [x] **48.19** Trigger first deploy; monitor build logs for Python install, Nixpacks phases, and start command.
 - [x] **48.20** After deploy: open the Railway-generated URL, verify the app loads (frontend at `/`), health check (`/api/health`), and API (`/api/products`, `/api/config`).
-- [ ] **48.21** Test auth: sign in via Supabase; verify saved diagrams (save and load) work against production API and Supabase.
-- [ ] **48.22** Test blueprint upload: upload an image, verify processing and canvas display; confirm OpenCV and HEIC/PDF flows work in production.
+- [x] **48.21** Test auth: sign in via Supabase; verify saved diagrams (save and load) work against production API and Supabase.
+- [x] **48.22** Test blueprint upload: upload an image, verify processing and canvas display; confirm OpenCV and HEIC/PDF flows work in production.
 - [ ] **48.23** (Optional) Add custom domain in Railway if required; update Supabase Auth redirect URLs if using custom domain.
 
 **Post-deploy (ServiceM8 readiness)**
@@ -1007,6 +1008,60 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 49. ServiceM8 OAuth 2.0 Auth setup
+
+*Context: Enable Quote App as a ServiceM8 Public Application so users can connect their ServiceM8 accounts and sync quotes/jobs. ServiceM8 uses OAuth 2.0 (authorization code grant) for public apps. See [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication). Production base URL (Railway) will be used for OAuth redirect_uri. Deployments must remain compatible with Railway.*
+
+**Partner and app registration**
+
+- [ ] **49.1** Register as a ServiceM8 Development Partner at [servicem8.com/developer-registration](https://www.servicem8.com/developer-registration).
+- [ ] **49.2** Create a Public Application in the ServiceM8 developer account (Store Connect).
+- [ ] **49.3** Obtain App ID and App Secret from Store Connect; document where they are shown (Store Connect page).
+
+**Store Connect configuration**
+
+- [ ] **49.4** Configure Return URL in Store Connect: set to `https://{RAILWAY_APP_URL}/api/servicem8/oauth/callback` (or equivalent path) so it matches the OAuth redirect_uri host.
+- [ ] **49.5** Ensure Return URL host matches the Railway production URL exactly (e.g. `https://quote-app-production-7897.up.railway.app`).
+
+**Backend OAuth flow – authorize**
+
+- [x] **49.6** Add backend route (e.g. GET `/api/servicem8/oauth/authorize`) that redirects the user to `https://go.servicem8.com/oauth/authorize` with query params: `response_type=code`, `client_id` (App ID), `scope` (space-separated), `redirect_uri` (must match Store Connect Return URL).
+- [x] **49.7** Add CSRF protection: generate and store a `state` value (e.g. in session or signed cookie); include `state` in the authorize redirect; validate on callback.
+- [x] **49.8** Define required scopes (e.g. `read_jobs`, `manage_jobs`, `read_job_materials`, `manage_job_materials` for quote sync); document scope rationale in docs.
+
+**Backend OAuth flow – token exchange**
+
+- [x] **49.9** Add OAuth callback route (e.g. GET `/api/servicem8/oauth/callback`): receive `code` and `state` from ServiceM8; validate `state` (CSRF); exchange `code` for tokens.
+- [x] **49.10** Implement token exchange: POST to `https://go.servicem8.com/oauth/access_token` with `grant_type=authorization_code`, `client_id`, `client_secret`, `code`, `redirect_uri`.
+- [x] **49.11** Store access token and refresh token securely (e.g. per-user in Supabase; encrypted; never expose App Secret or refresh token to frontend).
+- [x] **49.12** Handle token response: parse `access_token`, `expires_in` (3600 s), `refresh_token`, `scope`; handle errors (invalid code, revoked, etc.).
+
+**Backend OAuth flow – token refresh**
+
+- [x] **49.13** Implement refresh: before expiry, POST to `https://go.servicem8.com/oauth/access_token` with `grant_type=refresh_token`, `client_id`, `client_secret`, `refresh_token`.
+- [x] **49.14** Update stored tokens on successful refresh; handle refresh failures (prompt user to re-authorize).
+
+**Environment and Railway**
+
+- [x] **49.15** Add `SERVICEM8_APP_ID` and `SERVICEM8_APP_SECRET` to backend `.env.example` (with placeholder values); document in `docs/RAILWAY_DEPLOYMENT.md`.
+- [ ] **49.16** Add `SERVICEM8_APP_ID` and `SERVICEM8_APP_SECRET` to Railway project variables; never commit secrets.
+- [x] **49.17** Ensure OAuth callback URL uses `$PORT` and `0.0.0.0` binding (Procfile) so Railway routes correctly; verify HTTPS in production.
+
+**Security**
+
+- [x] **49.18** Keep App Secret server-side only; never send to frontend or log.
+- [x] **49.19** Validate `redirect_uri` on callback matches the configured Return URL exactly.
+
+**Integration with Quote flow**
+
+- [ ] **49.20** Link ServiceM8 OAuth connection to the authenticated user (e.g. Supabase user id → stored ServiceM8 tokens); provide UI for "Connect ServiceM8" and "Disconnect".
+- [ ] **49.21** Use access token for API calls when user adds materials to a ServiceM8 job: include `Authorization: Bearer {access_token}` (or `access_token` POST param per ServiceM8 docs).
+- [ ] **49.22** Wire 22.29: Use real ServiceM8 API responses to toggle Success/Error states in the Quote footer after Add to Job.
+
+*Section 49 status: Backend OAuth flow implemented (49.6–49.15, 49.17–49.19). Routes: /api/servicem8/oauth/authorize, callback, status, disconnect. Supabase table servicem8_oauth for token storage. Remaining: 49.1–49.5 (Store Connect config), 49.16 (Railway vars), 49.20 (Connect/Disconnect UI), 49.21–49.22 (Add to Job API wiring). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Section 48 added: Railway deployment pre-deployment checklist. Section 45 complete; Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*
+*Last updated: Feb 2026. Section 49 added: ServiceM8 OAuth 2.0 Auth setup (49.1–49.22). Section 48: Railway deployment pre-deployment checklist. Section 45 complete; Section 44 (44.1–44.2) not started. See docs/CANVAS_UI_HANDOFF.md for next-session pack-up.*

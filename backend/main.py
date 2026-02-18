@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user_id
@@ -24,7 +25,9 @@ from app.gutter_accessories import expand_elements_with_gutter_accessories
 from app.pricing import get_product_pricing
 from app.products import get_products
 from app.supabase_client import get_supabase
+from app import servicem8 as sm8
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -384,6 +387,88 @@ def api_delete_diagram(diagram_id: str, user_id: Any = Depends(get_current_user_
         raise HTTPException(404, "Diagram not found")
     if not delete_diagram(user_id, did):
         raise HTTPException(404, "Diagram not found")
+    return {"success": True}
+
+
+# --- ServiceM8 OAuth 2.0 ---
+
+
+@app.get("/api/servicem8/oauth/authorize")
+def api_servicem8_authorize(user_id: Any = Depends(get_current_user_id)):
+    """
+    Start ServiceM8 OAuth flow. Requires Bearer token.
+    Redirects user to ServiceM8 authorize URL with state containing user_id.
+    
+    For internal use: redirect_uri is omitted from authorize request (ServiceM8 Store Connect
+    UI doesn't allow entering it). redirect_uri is still sent in token exchange.
+    """
+    try:
+        state = sm8.generate_state(str(user_id))
+        # Omit redirect_uri for internal use (optional per ServiceM8 docs)
+        url = sm8.build_authorize_url(state, include_redirect_uri=False)
+        return RedirectResponse(url=url, status_code=302)
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.get("/api/servicem8/oauth/callback")
+def api_servicem8_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+):
+    """
+    ServiceM8 OAuth callback. Receives code and state, exchanges for tokens, stores per user.
+    Redirects to frontend with ?servicem8=connected or ?servicem8=error.
+    """
+    if error:
+        logger.warning("ServiceM8 OAuth error: %s", error)
+        base = sm8.get_redirect_uri().replace("/api/servicem8/oauth/callback", "")
+        return RedirectResponse(url=f"{base}/?servicem8=error", status_code=302)
+
+    if not code or not state:
+        raise HTTPException(400, "Missing code or state")
+
+    user_id = sm8.verify_state(state)
+    if not user_id:
+        raise HTTPException(400, "Invalid or expired state")
+
+    try:
+        # redirect_uri required in token exchange (even if omitted in authorize)
+        # Use our Railway callback URL
+        redirect_uri = sm8.get_redirect_uri()
+        tokens = sm8.exchange_code_for_tokens(code, redirect_uri)
+    except httpx.HTTPStatusError as e:
+        logger.exception("ServiceM8 token exchange failed: %s", e)
+        base = sm8.get_redirect_uri().replace("/api/servicem8/oauth/callback", "")
+        return RedirectResponse(url=f"{base}/?servicem8=error", status_code=302)
+
+    sm8.store_tokens(
+        user_id,
+        tokens["access_token"],
+        tokens["refresh_token"],
+        tokens.get("expires_in", 3600),
+        tokens.get("scope"),
+    )
+
+    base = sm8.get_redirect_uri().replace("/api/servicem8/oauth/callback", "")
+    return RedirectResponse(url=f"{base}/?servicem8=connected", status_code=302)
+
+
+@app.get("/api/servicem8/oauth/status")
+def api_servicem8_status(user_id: Any = Depends(get_current_user_id)):
+    """Check if user has connected ServiceM8. Requires Bearer token."""
+    try:
+        tokens = sm8.get_tokens(str(user_id))
+        return {"connected": tokens is not None}
+    except ValueError:
+        return {"connected": False, "config": "ServiceM8 OAuth not configured"}
+
+
+@app.post("/api/servicem8/oauth/disconnect")
+def api_servicem8_disconnect(user_id: Any = Depends(get_current_user_id)):
+    """Disconnect ServiceM8. Remove stored tokens. Requires Bearer token."""
+    sm8.delete_tokens(str(user_id))
     return {"success": True}
 
 
