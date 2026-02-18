@@ -8,10 +8,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/add-to-job-canvas-modal
-- Based on: main
-- Status: In Progress
-- Related Tasks: Add to Job button – job lookup, confirmation UI (Add to current Job / Make new job)
+- Branch: main
+- Status: Stable
+- Related Tasks: Add to Job confirmation overlay complete (49.20.1); Railway deployment complete; production URL https://quote-app-production-7897.up.railway.app
 
 **Uncompleted tasks (by section):**
 
