@@ -372,6 +372,14 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 *Section 22 status: In progress. 22.1–22.4, 22.5–22.14, 22.16–22.19, 22.25–22.27 complete. Unit price and totals display when quote modal is opened. Empty invoice row at bottom of table: type-to-search or dropdown to add products; selecting converts row and appends new empty row; merge into existing line when same product. Remaining: 22.15 (Print), 22.20–22.24 (optional/docs/testing).*
 
+**Quote modal: Save to Database confirmation**
+
+*Context: The "Save to Database" button in the quote modal (Edit Pricing mode) persists cost/markup to Supabase and affects ServiceM8. Require explicit confirmation before proceeding so the user (e.g. Jack) does not accidentally overwrite prices — only continue after they confirm, or Jack will be grumpy 😠.*
+
+- [x] **22.28** When "Save to Database" is clicked, show a confirmation step before calling the API: display a warning with the message "Are you sure? This will change the price permanently in ServiceM8 and the app." and optional note "Only continue if you've confirmed — otherwise Jack will be grumpy 😠".
+- [x] **22.29** Only proceed with the POST to `/api/products/update-pricing` if the user confirms (e.g. OK / Continue); if the user cancels or dismisses the confirmation, do nothing and leave the quote modal in Edit Pricing mode (no API call).
+- [x] **22.30** Implement the confirmation UI: use either a native `confirm()` dialog for MVP or a styled modal matching the quote modal; ensure the Save to Database click handler runs the confirmation first, then the existing save logic only on confirm.
+
 **Consumables (billing only, not on canvas):** SCR-SS (screws), GL-MAR (glue), MS-GRY (sealant) are excluded from the Marley products panel; they remain in the quote Add item dropdown and are used for backend billing (e.g. screws auto-added from gutters).
 
 **Diagram SVG mapping (CSV import):** Non-consumable products map to unique SVGs under `/assets/marley/` – see `backend/app/csv_import.py` DIAGRAM_MAP. All required diagram SVGs are uploaded (gutters, corners, joiners, stopends, outlets, brackets, downpipes, elbows, clips). Source assets organised in `marley-assets/`. Re-import CSV to apply mapping to existing products.
@@ -780,7 +788,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 *Context: Add a second dropdown in the Marley panel to filter products by downpipe/clip size (65 mm or 80 mm). Remove legacy placeholder or original elements from the UI now that real diagram assets are in use.*
 
 - [ ] **41.1** Add a second dropdown filter in the Marley panel with 65 mm or 80 mm filter options (alongside the existing profile filter); wire filtering so the product list shows only products matching the selected size where applicable.
-- [ ] **41.2** Remove the placeholder/original elements from the UI; they are no longer needed now that real Marley diagram assets are in place.
+- [x] **41.2** Remove the placeholder/original elements from the UI; they are no longer needed now that real Marley diagram assets are in place.
 - [ ] **41.3** Secondary 65 mm / 80 mm dropdown: include any relevant part (e.g. downpipes, clips, joiners). Dropdown should be blank by default until a matching part is uploaded; once a matching part exists, the thumbnail should automatically reflect 65 mm or 80 mm (e.g. show the correct size variant in the panel).
 
 ---

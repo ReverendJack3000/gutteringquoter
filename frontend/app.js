@@ -29,6 +29,7 @@ const state = {
   resizeHandle: null,
   products: [],
   profileFilter: '', // '' | 'storm_cloud' | 'classic' | 'other'
+  sizeFilter: '', // '' | '65' | '80' – Marley panel 65 mm / 80 mm dropdown
   technicalDrawing: true,
   snapshotAtActionStart: null, // for undo: state before current interaction
   hoveredId: null, // element id under cursor when not dragging (for hover outline/cursor)
@@ -88,21 +89,17 @@ let preLoadSnapshot = null;
 /** Product IDs that are consumables (billing only); excluded from canvas/panel drag-drop. */
 const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
 
+/** Legacy placeholder product IDs – excluded from Marley panel (real products from Supabase only). */
+const PLACEHOLDER_PRODUCT_IDS = ['gutter', 'downpipe', 'bracket', 'stopend', 'outlet', 'dropper'];
+
 /** Max size for product diagram SVG upload (2MB). */
 const PRODUCT_SVG_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 
 /** SVG dimension threshold above which we warn about performance (px). */
 const PRODUCT_SVG_DIMENSION_WARN_PX = 5000;
 
-/** System products (hardcoded fallback) shown when user is logged out. */
-const SYSTEM_PRODUCTS = [
-  { id: 'gutter', name: 'Gutter', diagramUrl: '/assets/marley/gutter.svg', thumbnailUrl: '/assets/marley/gutter.svg', profile: 'other' },
-  { id: 'downpipe', name: 'Downpipe', diagramUrl: '/assets/marley/downpipe.svg', thumbnailUrl: '/assets/marley/downpipe.svg', profile: 'other' },
-  { id: 'bracket', name: 'Bracket', diagramUrl: '/assets/marley/bracket.svg', thumbnailUrl: '/assets/marley/bracket.svg', profile: 'other' },
-  { id: 'stopend', name: 'Stop End', diagramUrl: '/assets/marley/stopend.svg', thumbnailUrl: '/assets/marley/stopend.svg', profile: 'other' },
-  { id: 'outlet', name: 'Outlet', diagramUrl: '/assets/marley/outlet.svg', thumbnailUrl: '/assets/marley/outlet.svg', profile: 'other' },
-  { id: 'dropper', name: 'Dropper', diagramUrl: '/assets/marley/dropper.svg', thumbnailUrl: '/assets/marley/dropper.svg', profile: 'other' },
-];
+/** System products fallback when user is logged out (empty; real products come from Supabase when signed in). */
+const SYSTEM_PRODUCTS = [];
 
 /** Gutter pattern: GUT-{SC|CL}-MAR-{1.5|3|5}M (matches backend). */
 const GUTTER_PATTERN = /^GUT-(SC|CL)-MAR-(\d+(?:\.\d+)?)M$/i;
@@ -176,6 +173,19 @@ function isDownpipeElement(assetId) {
 function getDownpipeSizeFromAssetId(assetId) {
   const m = DOWNPIPE_PATTERN.exec(String(assetId || '').trim());
   return m ? m[1] : null;
+}
+
+/**
+ * Extract 65 or 80 mm size from any product ID (downpipes, joiners, clips, elbows, outlets, etc.), or null if size-agnostic.
+ * Used by the Marley panel 65/80 mm filter.
+ */
+function getProductSizeMm(productId) {
+  if (!productId || typeof productId !== 'string') return null;
+  const id = String(productId).trim();
+  const dp = getDownpipeSizeFromAssetId(id);
+  if (dp) return dp;
+  const m = id.match(/-65$|-80$/i);
+  return m ? (id.endsWith('65') ? '65' : '80') : null;
 }
 
 /** Get downpipe length in metres from asset ID (e.g. DP-65-3M -> 3). */
@@ -1340,6 +1350,11 @@ function initQuoteModal() {
       updates.push({ id: productId, cost_price, markup_percentage });
     }
     if (updates.length === 0) return;
+
+    const confirmMessage =
+      'Are you sure? This will change the price permanently in ServiceM8 and the app.\n\nOnly continue if you\'ve confirmed — otherwise Jack will be grumpy 😠';
+    if (!confirm(confirmMessage)) return;
+
     savePricingBtn.disabled = true;
     try {
       const res = await fetch('/api/products/update-pricing', {
@@ -6568,8 +6583,12 @@ async function loadPanelProducts() {
 }
 
 function getPanelProducts() {
-  // Filter: exclude consumables, show only 3M gutters and 3M downpipes (manual length selectors), include all other products
-  let list = state.products.filter((p) => !CONSUMABLE_PRODUCT_IDS.includes(p.id));
+  // Filter: exclude consumables and legacy placeholders; show only 3M gutters and 3M downpipes (manual length selectors), include all other products
+  let list = state.products.filter((p) => {
+    if (CONSUMABLE_PRODUCT_IDS.includes(p.id)) return false;
+    if (PLACEHOLDER_PRODUCT_IDS.includes(p.id)) return false;
+    return true;
+  });
   
   // For gutters: only show 3M versions (GUT-SC-MAR-3M, GUT-CL-MAR-3M); hide 1.5M and 5M
   list = list.filter((p) => {
@@ -6589,6 +6608,15 @@ function getPanelProducts() {
   const profileVal = (state.profileFilter || '').trim();
   if (profileVal) {
     list = list.filter((p) => (p.profile || 'other') === profileVal);
+  }
+
+  // 65 / 80 mm filter: when set, show only products for that size or size-agnostic (gutters, brackets, etc.)
+  const sizeVal = (state.sizeFilter || '').trim();
+  if (sizeVal === '65' || sizeVal === '80') {
+    list = list.filter((p) => {
+      const productSize = getProductSizeMm(p.id);
+      return productSize === null || productSize === sizeVal;
+    });
   }
 
   return list;
@@ -6811,6 +6839,13 @@ function initProducts() {
   const profileFilter = document.getElementById('profileFilter');
   profileFilter?.addEventListener('change', (e) => {
     state.profileFilter = (e.target.value || '').trim();
+    applyProductFilters();
+  });
+
+  const sizeFilter = document.getElementById('sizeFilter');
+  sizeFilter?.addEventListener('change', (e) => {
+    state.sizeFilter = (e.target.value || '').trim();
+    sizeFilter.classList.toggle('size-filter-default', !state.sizeFilter);
     applyProductFilters();
   });
 

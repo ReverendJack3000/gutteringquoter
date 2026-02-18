@@ -1216,6 +1216,15 @@ body {
   cursor: pointer;
 }
 
+.panel-filters select + select {
+  margin-top: 8px;
+}
+
+#sizeFilter.size-filter-default {
+  background: #f2f2f2;
+  color: #888;
+}
+
 .panel-filters select:focus {
   outline: none;
   border-color: #007aff;
