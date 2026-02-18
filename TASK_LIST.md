@@ -8,12 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/labour-as-table-row
-- Based on: main
-- Status: In Progress (merge to main in progress)
-- Related Tasks:
-  - [x] 50.1–50.8 Labour as table row; [ ] 50.9 smoke-test
-  - [x] 50.10–50.17 Labour as product (REP-LAB); [ ] 50.18 smoke-test / Railway deploy
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
