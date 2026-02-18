@@ -8,8 +8,11 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/panel-profile-filter-fix
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [ ] Panel profile/thumbnail filter bugs (getPanelProducts not using state.profileFilter; dropdown options vs backend)
 
 ---
 
@@ -778,6 +781,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [ ] **41.1** Add a second dropdown filter in the Marley panel with 65 mm or 80 mm filter options (alongside the existing profile filter); wire filtering so the product list shows only products matching the selected size where applicable.
 - [ ] **41.2** Remove the placeholder/original elements from the UI; they are no longer needed now that real Marley diagram assets are in place.
+- [ ] **41.3** Secondary 65 mm / 80 mm dropdown: include any relevant part (e.g. downpipes, clips, joiners). Dropdown should be blank by default until a matching part is uploaded; once a matching part exists, the thumbnail should automatically reflect 65 mm or 80 mm (e.g. show the correct size variant in the panel).
 
 ---
 

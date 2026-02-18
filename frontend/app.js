@@ -6584,7 +6584,13 @@ function getPanelProducts() {
     if (!id.startsWith('DP-')) return true; // not a downpipe, include it
     return p.id === 'DP-65-3M' || p.id === 'DP-80-3M';
   });
-  
+
+  // Profile filter: when set, show only products matching the selected profile (matches backend: storm_cloud, classic, other)
+  const profileVal = (state.profileFilter || '').trim();
+  if (profileVal) {
+    list = list.filter((p) => (p.profile || 'other') === profileVal);
+  }
+
   return list;
 }
 
