@@ -8,10 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/downpipe-bin-sorting
-- Based on: main
-- Status: In Progress
-- Related Tasks: 26.6 (downpipe bin sorting), Section 40 (quote modal)
+- Branch: main
+- Status: Stable
 
 ---
 
