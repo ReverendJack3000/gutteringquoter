@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="app">
+    <div id="view-canvas" class="app-view hidden">
     <header class="toolbar">
       <div class="toolbar-left">
         <label class="upload-zone" id="uploadZone" title="Choose a property photo or PDF (JPEG, PNG, GIF, WebP, HEIC, or PDF; max 20 MB)">
@@ -34,7 +35,20 @@
             <div class="diagrams-dropdown-empty" id="diagramsDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
           </div>
         </div>
-        <button type="button" class="btn btn-export" id="authBtn" title="Sign in to save and load diagrams" aria-label="Sign in">Sign in</button>
+        <div id="userProfileWrap" class="user-profile-wrap" hidden>
+          <div id="userAvatar" class="user-avatar" role="button" aria-haspopup="true" aria-expanded="false" aria-label="User menu"></div>
+          <div id="profileDropdown" class="profile-dropdown" role="menu" aria-label="Profile menu" hidden>
+            <div class="profile-menu-item" id="menuItemProducts" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              <span>Product Management</span>
+            </div>
+            <div class="profile-menu-separator"></div>
+            <div class="profile-menu-item destructive" id="menuItemSignOut" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <span>Sign Out</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="toolbar-right">
         <button type="button" class="btn btn-export" id="generateQuoteBtn" title="Generate quote from canvas elements">Generate Quote</button>
@@ -153,6 +167,168 @@
     <div class="measurement-deck" id="measurementDeck" role="region" aria-label="Measurement runs">
       <div class="measurement-deck-scroll" id="measurementDeckScroll"></div>
     </div>
+    </div>
+
+    <div id="view-login" class="app-view hidden" role="region" aria-label="Sign in">
+      <div class="view-login-inner">
+        <h2 id="authModalTitle" class="auth-modal-title">Sign in</h2>
+        <p class="auth-modal-desc">Sign in to save and load your diagrams.</p>
+        <div id="authError" class="auth-error" role="alert" hidden></div>
+        <form id="authForm" class="auth-form">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" required placeholder="you@example.com" autocomplete="email" />
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" required placeholder="••••••••" autocomplete="current-password" />
+          <div class="auth-actions">
+            <button type="submit" class="btn btn-primary" id="authSubmitBtn">Sign in</button>
+            <button type="button" class="btn" id="authSignUpBtn">Create account</button>
+          </div>
+        </form>
+        <div class="auth-user" id="authUserSection" hidden>
+          <p>Signed in as <strong id="authUserEmail"></strong></p>
+          <button type="button" class="btn" id="authSignOutBtn">Sign out</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-products" class="app-view hidden" role="region" aria-label="Product management">
+      <div class="products-view-container">
+        <header class="products-header">
+          <div class="header-left">
+            <button type="button" id="btnBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="header-title">Product Library</div>
+          <div class="products-controls">
+            <div class="products-search-wrap">
+              <span class="products-search-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input type="text" id="productLibrarySearch" placeholder="Search products..." aria-label="Search products by name" />
+            </div>
+            <select id="productFilterProfile" aria-label="Filter by profile">
+              <option value="">All Profiles</option>
+              <option value="classic">Classic</option>
+              <option value="storm_cloud">Storm Cloud</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="header-right">
+            <div id="productsProfileWrap" class="user-profile-wrap" hidden>
+              <div id="productsUserAvatar" class="user-avatar" role="button" aria-haspopup="true" aria-label="User menu"></div>
+            </div>
+          </div>
+        </header>
+        <main class="products-grid-container">
+          <div id="productsPageGrid" class="products-page-grid">
+            <div id="productCardNew" class="product-card product-card-new" role="button" tabindex="0">
+              <div class="new-icon-wrap">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <span>New Product</span>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <div id="productModal" class="product-modal-backdrop" role="dialog" aria-labelledby="productModalTitle" aria-modal="true" hidden>
+        <div class="product-modal-content product-modal-content--scroll">
+          <h3 id="productModalTitle" class="modal-title">Add New Product</h3>
+          <form id="productForm">
+            <div id="dropZone" class="file-drop-zone">
+              <div class="drop-zone-content">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p class="drop-text">Drag SVG here or click to upload</p>
+                <input type="file" id="productModalFileInput" accept=".svg" hidden />
+              </div>
+              <div id="filePreview" class="file-preview" hidden>
+                <div id="previewSvgContainer"></div>
+                <button type="button" id="btnRemoveFile" class="btn-text-destructive">Remove</button>
+              </div>
+            </div>
+            <div class="form-row form-row--two">
+              <div class="form-group">
+                <label for="inputProductId">Product ID</label>
+                <input type="text" id="inputProductId" placeholder="Auto from name if empty" />
+              </div>
+              <div class="form-group">
+                <label for="inputProductName">Product Name <span class="required">*</span></label>
+                <input type="text" id="inputProductName" required placeholder="e.g. Gutter Storm Cloud 3m" />
+              </div>
+            </div>
+            <div class="form-row form-row--two">
+              <div class="form-group">
+                <label for="inputProductCategory">Category <span class="required">*</span></label>
+                <input type="text" id="inputProductCategory" required placeholder="e.g. Guttering" />
+              </div>
+              <div class="form-group">
+                <label for="inputItemNumber">Item Number</label>
+                <input type="text" id="inputItemNumber" placeholder="e.g. GUT-SC-MAR-3M" />
+              </div>
+            </div>
+            <div class="form-section-label">Pricing</div>
+            <div class="form-row form-row--two">
+              <div class="form-group">
+                <label for="inputCostPrice">Cost Price</label>
+                <input type="number" id="inputCostPrice" placeholder="0.00" step="0.01" min="0" />
+              </div>
+              <div class="form-group">
+                <label for="inputMarkupPercentage">Markup %</label>
+                <input type="number" id="inputMarkupPercentage" placeholder="30" value="30" step="0.01" min="0" />
+              </div>
+            </div>
+            <div class="form-row form-row--two">
+              <div class="form-group">
+                <label for="inputPriceExcGst">Price ex. GST (optional)</label>
+                <input type="number" id="inputPriceExcGst" placeholder="Overrides cost + markup" step="0.01" min="0" />
+              </div>
+              <div class="form-group">
+                <label for="inputUnit">Unit</label>
+                <select id="inputUnit" aria-label="Unit">
+                  <option value="each">Each</option>
+                  <option value="metre">Metre</option>
+                  <option value="m">m</option>
+                  <option value="pack">Pack</option>
+                  <option value="box">Box</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-section-label">Classification</div>
+            <div class="form-row form-row--two">
+              <div class="form-group">
+                <label for="inputProfile">Profile</label>
+                <select id="inputProfile" aria-label="Product profile">
+                  <option value="">—</option>
+                  <option value="storm_cloud">Storm Cloud</option>
+                  <option value="classic">Classic</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-section-label">URLs (optional)</div>
+            <div class="form-group">
+              <label for="inputThumbnailUrl">Thumbnail URL</label>
+              <input type="url" id="inputThumbnailUrl" placeholder="https://..." />
+            </div>
+            <div class="form-group">
+              <label for="inputDiagramUrl">Diagram URL</label>
+              <input type="url" id="inputDiagramUrl" placeholder="https://..." />
+            </div>
+            <div class="form-group">
+              <label for="inputServicem8Uuid">ServiceM8 Material UUID</label>
+              <input type="text" id="inputServicem8Uuid" placeholder="For ServiceM8 integration" />
+            </div>
+            <div class="modal-actions">
+              <button type="button" id="btnArchiveProduct" class="btn-secondary btn-archive" hidden>Archive</button>
+              <button type="button" id="btnCancelProduct" class="btn-secondary">Cancel</button>
+              <button type="submit" id="btnSaveProduct" class="btn-primary" disabled>Create Product</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Crop modal: crop image before processing -->
@@ -183,29 +359,10 @@
     </div>
   </div>
 
-  <!-- Auth modal: sign in / sign up -->
-  <div class="auth-modal" id="authModal" role="dialog" aria-labelledby="authModalTitle" aria-modal="true" hidden>
+  <!-- Auth modal: no longer primary; login UI is in #view-login. Kept for any legacy refs. -->
+  <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" hidden>
     <div class="auth-modal-backdrop" id="authModalBackdrop"></div>
-    <div class="auth-modal-content">
-      <h2 id="authModalTitle" class="auth-modal-title">Sign in</h2>
-      <p class="auth-modal-desc">Sign in to save and load your diagrams.</p>
-      <div id="authError" class="auth-error" role="alert" hidden></div>
-      <form id="authForm" class="auth-form">
-        <label for="authEmail">Email</label>
-        <input type="email" id="authEmail" required placeholder="you@example.com" autocomplete="email" />
-        <label for="authPassword">Password</label>
-        <input type="password" id="authPassword" required placeholder="••••••••" autocomplete="current-password" />
-        <div class="auth-actions">
-          <button type="submit" class="btn btn-primary" id="authSubmitBtn">Sign in</button>
-          <button type="button" class="btn" id="authSignUpBtn">Create account</button>
-          <button type="button" class="btn" id="authModalClose">Cancel</button>
-        </div>
-      </form>
-      <div class="auth-user" id="authUserSection" hidden>
-        <p>Signed in as <strong id="authUserEmail"></strong></p>
-        <button type="button" class="btn" id="authSignOutBtn">Sign out</button>
-      </div>
-    </div>
+    <div class="auth-modal-content"></div>
   </div>
 
   <!-- Save diagram name modal -->

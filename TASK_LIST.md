@@ -12,12 +12,12 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - Based on: main
 - Status: In Progress
 - Related Tasks:
-  - [ ] 35.1 Wrap canvas view in #view-canvas
-  - [ ] 35.2 Add #view-login and #view-products
-  - [ ] 35.3 Canvas container safety (#blueprintWrap height)
-  - [ ] 35.4 switchView(viewId) + resizeCanvas on show
-  - [ ] 35.5 init() auth-driven view (switchView on load)
-  - [ ] 35.6 Move login form into #view-login
+  - [x] 35.1 Wrap canvas view in #view-canvas
+  - [x] 35.2 Add #view-login and #view-products
+  - [x] 35.3 Canvas container safety (#blueprintWrap height)
+  - [x] 35.4 switchView(viewId) + resizeCanvas on show
+  - [x] 35.5 init() auth-driven view (switchView on load)
+  - [x] 35.6 Move login form into #view-login
   - [ ] 35.7 Wire login/sign-out to switchView
   - [ ] 35.8 Verify no regressions
   - [ ] 35.9 Manual/E2E deliverable
@@ -663,24 +663,24 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **HTML structure (index.html)**
 
-- [ ] **35.1** Wrap the existing canvas view into a single container: create `<div id="view-canvas" class="app-view">` and move inside it (as direct children) the toolbar (`header.toolbar`), the workspace (`.workspace`: blueprint-wrap, resizer, panel), and the Measurement Deck (`#measurementDeck`). No change to the DOM order of those elements; only wrap them in the new div.
-- [ ] **35.2** Create two new sibling container divs (siblings to `#view-canvas`, not inside it): `<div id="view-login" class="app-view hidden">` and `<div id="view-products" class="app-view hidden">`. Add CSS rule for `.app-view.hidden { display: none; }` (e.g. in styles.css) so hidden views are not shown and take no layout space.
+- [x] **35.1** Wrap the existing canvas view into a single container: create `<div id="view-canvas" class="app-view">` and move inside it (as direct children) the toolbar (`header.toolbar`), the workspace (`.workspace`: blueprint-wrap, resizer, panel), and the Measurement Deck (`#measurementDeck`). No change to the DOM order of those elements; only wrap them in the new div.
+- [x] **35.2** Create two new sibling container divs (siblings to `#view-canvas`, not inside it): `<div id="view-login" class="app-view hidden">` and `<div id="view-products" class="app-view hidden">`. Add CSS rule for `.app-view.hidden { display: none; }` (e.g. in styles.css) so hidden views are not shown and take no layout space.
 
 **Canvas container safety (avoid zero-size wrap)**
 
-- [ ] **35.3** Ensure `#blueprintWrap` (the canvas parent) has a defined CSS height so it fills the `#view-canvas` container as soon as that view becomes visible. For example: give `#view-canvas` a flex layout (e.g. `display: flex; flex-direction: column; flex: 1; min-height: 0`) and ensure the workspace / `#blueprintWrap` has `flex-grow: 1` (or `height: 100%` where the chain from `#view-canvas` down has explicit heights). This way, when `switchView('view-canvas')` makes the view visible, the wrap has non-zero dimensions before `resizeCanvas()` runs.
+- [x] **35.3** Ensure `#blueprintWrap` (the canvas parent) has a defined CSS height so it fills the `#view-canvas` container as soon as that view becomes visible. For example: give `#view-canvas` a flex layout (e.g. `display: flex; flex-direction: column; flex: 1; min-height: 0`) and ensure the workspace / `#blueprintWrap` has `flex-grow: 1` (or `height: 100%` where the chain from `#view-canvas` down has explicit heights). This way, when `switchView('view-canvas')` makes the view visible, the wrap has non-zero dimensions before `resizeCanvas()` runs.
 
 **switchView(viewId) – robust view transition (app.js)**
 
-- [ ] **35.4** Implement `switchView(viewId)` with the following logic: (1) Hide all `.app-view` elements (e.g. add `.hidden` class to each). (2) Remove `.hidden` from the element with id equal to `viewId` so only that view is visible. (3) **CRITICAL:** If `viewId === 'view-canvas'`, call `resizeCanvas()` immediately after making it visible so the canvas is never measured while its container is hidden. (4) Call `draw()` to repaint the canvas content. Expose `switchView` where needed (e.g. after auth check and on login/sign-out).
+- [x] **35.4** Implement `switchView(viewId)` with the following logic: (1) Hide all `.app-view` elements (e.g. add `.hidden` class to each). (2) Remove `.hidden` from the element with id equal to `viewId` so only that view is visible. (3) **CRITICAL:** If `viewId === 'view-canvas'`, call `resizeCanvas()` immediately after making it visible so the canvas is never measured while its container is hidden. (4) Call `draw()` to repaint the canvas content. Expose `switchView` where needed (e.g. after auth check and on login/sign-out).
 
 **init() and first render – auth-driven view (app.js)**
 
-- [ ] **35.5** On page load, do not rely on CSS or initial HTML classes for which view is shown. After all inits (including `initAuth()` and any async auth setup), check authentication (e.g. `authState.token` or session from `getSession()`). If **logged out:** call `switchView('view-login')`. If **logged in:** call `switchView('view-canvas')`. This ensures the correct view is set by JavaScript on first render and the canvas is never measured while hidden.
+- [x] **35.5** On page load, do not rely on CSS or initial HTML classes for which view is shown. After all inits (including `initAuth()` and any async auth setup), check authentication (e.g. `authState.token` or session from `getSession()`). If **logged out:** call `switchView('view-login')`. If **logged in:** call `switchView('view-canvas')`. This ensures the correct view is set by JavaScript on first render and the canvas is never measured while hidden.
 
 **Login migration**
 
-- [ ] **35.6** Move the existing login form into `#view-login`: relocate the auth form content from the current auth modal (`#authModal`: form, email/password inputs, Sign in / Create account / Cancel, and optionally the “Signed in as” / Sign out block) into `#view-login` so the login screen is a full-screen view, not a modal. Remove or repurpose `#authModal` so it is no longer the primary login UI (e.g. keep modal for “Sign in” button from toolbar if desired, or remove and use only view-login).
+- [x] **35.6** Move the existing login form into `#view-login`: relocate the auth form content from the current auth modal (`#authModal`: form, email/password inputs, Sign in / Create account / Cancel, and optionally the “Signed in as” / Sign out block) into `#view-login` so the login screen is a full-screen view, not a modal. Remove or repurpose `#authModal` so it is no longer the primary login UI (e.g. keep modal for “Sign in” button from toolbar if desired, or remove and use only view-login).
 - [ ] **35.7** After successful login (from `#view-login`), call `switchView('view-canvas')` so the user sees the Canvas. On Sign out (from canvas), call `switchView('view-login')`. Wire these to the existing auth success/sign-out handlers.
 
 **No regressions and deliverable**
@@ -692,6 +692,63 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 36. Product Management: Supabase persistence
+
+*Context: The Product Library currently creates products that exist only in the browser’s localStorage. To make them permanent, available on other devices, and usable when loading products into the Canvas, the Add Product flow must use Supabase: upload the SVG to Storage, save the product row (including the SVG URL) in `public.products`, and load products from the database to populate the grid.*
+
+**Supabase state (verified via MCP):**
+
+- **Storage:** Bucket `product-diagrams` created (public, 1MB limit, `image/svg+xml` only). Policies: authenticated users can INSERT; public can SELECT. *Migration: `add_product_diagrams_storage_bucket`.*
+- **Database:** `public.products` has RLS with SELECT (public read), INSERT (public), UPDATE (public). No backend change required for inserts from the client.
+- **Retrieval:** Backend already exposes `GET /api/products` (from Supabase). Product Library grid currently uses `localProducts` from localStorage only.
+
+**Three actions:**
+
+**1. Storage – upload dropped SVG to Supabase**
+
+- [x] **36.1** In the Add Product flow (on form submit or after file drop), use the Supabase client (`authState.supabase`) to upload the SVG file to the `product-diagrams` bucket. Use a deterministic path, e.g. `{productId}.svg` or `{userId}/{productId}.svg`, so the same product always maps to the same URL. Require the user to be authenticated (redirect to login or show error if not).
+- [x] **36.2** After a successful upload, obtain the public URL for the object (e.g. via `getPublicUrl()` or the bucket’s public base URL + path). This URL will be stored in `public.products.diagram_url` (and optionally `thumbnail_url` if you derive a thumbnail later).
+
+**2. Database – save product row to `public.products`**
+
+- [x] **36.3** On “Create Product” submit, build the product payload from the form (id, name, category, cost_price, markup_percentage, unit, profile, active, item_number, servicem8_material_uuid, price_exc_gst, thumbnail_url, diagram_url). Set `diagram_url` (and optionally `thumbnail_url`) to the Storage URL from step 36.2. Do **not** store raw `svgContent` in the database; the canonical source is the file in Storage.
+- [x] **36.4** Insert the row into `public.products` via the Supabase client (`authState.supabase.from('products').insert(...)`). Handle duplicate `id` (e.g. upsert on conflict or validate unique id) and surface errors to the user (e.g. “Product ID already exists” or “Upload failed”).
+- [x] **36.5** After a successful insert, stop persisting that product to localStorage only. Optionally keep a local cache or merge strategy for offline/fallback, but the source of truth for “saved” products is Supabase.
+
+**3. Retrieval – fetch products and populate the grid**
+
+- [x] **36.6** When the Product Library view is shown (e.g. on `switchView('view-products')` or when `#view-products` becomes visible), fetch products from Supabase: either call existing `GET /api/products` (backend reads from Supabase) or use the Supabase client directly (`from('products').select(...)`). Ensure the response includes the columns needed for the grid (id, name, category, thumbnail_url, diagram_url, profile, etc.).
+- [x] **36.7** Update `renderProductLibrary()` (or equivalent) so the grid is populated from the fetched list instead of (or merged with) `localProducts`. Display diagram via `diagram_url` (load the SVG from the URL, e.g. in an `<img>` or fetch and inject) and show name/category as today. Keep the “New Product” card first in the grid.
+- [x] **36.8** Ensure products created in the Product Library and stored in Supabase are available to the Canvas panel (e.g. the existing product fetch used for the drag-drop panel includes or can include these products so they can be dragged onto the blueprint). If the panel currently only uses `GET /api/products`, confirm the backend returns Supabase rows including new inserts; no change needed if so.
+
+**Deliverable and edge cases**
+
+- [x] **36.9** User can add a product (SVG + details) when logged in; the SVG is stored in `product-diagrams`, the row in `public.products`, and the Product Library grid shows it from Supabase. Signing out and back in or opening the app on another device shows the same products.
+- [ ] **36.10** Handle “not logged in” in the Add Product flow: disable or hide “Create Product” and show “Sign in to add products,” or redirect to the login view and return to the modal after login.
+- [ ] **36.11** Optional: migration path for existing `localProducts` (e.g. one-time “Upload my local products to Supabase” or leave localStorage as legacy and only show Supabase products in the grid).
+
+*Section 36 status: Implementation complete. 36.1–36.9 done. 36.10: auth check in uploadProductSVG; Product Management reachable only when logged in. 36.11: localStorage commented out; Supabase is source of truth.*
+
+---
+
+## 37. Product Library: archive UX, sorting, filters, search, and upload validation
+
+*Context: Refine the Product Library so archive is controlled only by the Archive/Unarchive button (no separate Active checkbox), archived products sort to the bottom, and users can filter and search. Optionally add diagram upload validation if different product sizes break the app.*
+
+**Archive button (edit modal):** The Archive/Unarchive button is the leftmost in the modal actions (Archive | Cancel | Create Product / Save Changes). Shown only in Edit mode; hidden in Create mode. Archive sets `active` to false (product hidden in Canvas sidebar); Unarchive sets `active` to true. Confirmation before change; on success, modal closes and Product Library grid and sidebar refresh.
+
+**Tasks:**
+
+- [x] **37.1** Consolidate archive control: Remove the "Active Product" checkbox from the edit product modal. Use only the existing Archive/Unarchive button to toggle active state. Style that button with a light red fill (sleek Apple light design); keep it in the same position (leftmost in modal actions). Ensure Create mode has no archive control; Edit mode shows Archive or Unarchive label and toggles `active` on confirm.
+- [x] **37.2** Sort archived to bottom: When rendering the Product Library grid, sort products so active items appear first and archived items appear at the bottom of the page (e.g. order by `active` DESC then by `created_at` or name).
+- [x] **37.3** Dropdown filters: Add dropdown filters to the Product Library in a sleek Apple light design. Filter by profile (e.g. Storm Cloud | Classic | Other | All) and by parts/category (e.g. by category or a suitable "parts" dimension). Filters apply to the grid without changing the source of truth (fetch remains full list; filter client-side or via API if available).
+- [x] **37.4** Search bar: Add a search bar to the Product Library so users can search products by name. Style to match the Apple light design; filter the grid as the user types (client-side or via API).
+- [x] **37.5** Product diagram upload validation (conditional): Determine whether different product diagram (SVG) sizes or formats can break the app (e.g. canvas placement, aspect ratio, or storage). If yes: add recommended image size and format in the UI, validate on upload, prevent invalid files from being accepted, and display a clear error message when an invalid upload is attempted. If no: document that no validation is required and skip implementation.
+
+*Section 37 status: Complete. 37.1–37.5 implemented (archive UX, sort, profile filter, search, SVG validation: type, 2MB limit, large-dimension warning, Create Product disabled when invalid).*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files), Section 35 (app views: login/canvas/products navigation – to implement in feature branch).*
+*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files), Section 35 (app views: login/canvas/products navigation – to implement in feature branch), Section 37 (Product Library: archive UX, sort, filters, search, upload validation).*

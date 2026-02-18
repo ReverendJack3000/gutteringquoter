@@ -66,11 +66,39 @@ const state = {
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
 };
 
-/** Auth: token and Supabase client for saved diagrams. */
-const authState = { token: null, email: null, supabase: null };
+/** Auth: token, user, and Supabase client for saved diagrams and product uploads. */
+const authState = { token: null, email: null, user: null, supabase: null };
+
+/** Custom products (Product Library): persisted in localStorage under 'custom_products'. */
+let localProducts = [];
+
+/** Product currently being edited in the modal; null when in Create mode. */
+let currentEditingProduct = null;
+
+/** Opens the product modal in Create or Edit mode. Set by initProductsView. */
+let openProductModal = null;
+
+/** Full list of products fetched for the Product Library; used for search/filter without re-fetching. */
+let allLibraryProducts = [];
 
 /** Product IDs that are consumables (billing only); excluded from canvas/panel drag-drop. */
 const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
+
+/** Max size for product diagram SVG upload (2MB). */
+const PRODUCT_SVG_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+
+/** SVG dimension threshold above which we warn about performance (px). */
+const PRODUCT_SVG_DIMENSION_WARN_PX = 5000;
+
+/** System products (hardcoded fallback) shown when user is logged out. */
+const SYSTEM_PRODUCTS = [
+  { id: 'gutter', name: 'Gutter', diagramUrl: '/assets/marley/gutter.svg', thumbnailUrl: '/assets/marley/gutter.svg', profile: 'other' },
+  { id: 'downpipe', name: 'Downpipe', diagramUrl: '/assets/marley/downpipe.svg', thumbnailUrl: '/assets/marley/downpipe.svg', profile: 'other' },
+  { id: 'bracket', name: 'Bracket', diagramUrl: '/assets/marley/bracket.svg', thumbnailUrl: '/assets/marley/bracket.svg', profile: 'other' },
+  { id: 'stopend', name: 'Stop End', diagramUrl: '/assets/marley/stopend.svg', thumbnailUrl: '/assets/marley/stopend.svg', profile: 'other' },
+  { id: 'outlet', name: 'Outlet', diagramUrl: '/assets/marley/outlet.svg', thumbnailUrl: '/assets/marley/outlet.svg', profile: 'other' },
+  { id: 'dropper', name: 'Dropper', diagramUrl: '/assets/marley/dropper.svg', thumbnailUrl: '/assets/marley/dropper.svg', profile: 'other' },
+];
 
 /** Gutter pattern: GUT-{SC|CL}-MAR-{1.5|3|5}M (matches backend). */
 const GUTTER_PATTERN = /^GUT-(SC|CL)-MAR-(\d+(?:\.\d+)?)M$/i;
@@ -2011,6 +2039,8 @@ function initFloatingToolbar() {
     });
   }
 
+  const userProfileWrap = document.getElementById('userProfileWrap');
+  const profileDropdown = document.getElementById('profileDropdown');
   document.addEventListener('click', (e) => {
     if (submenu && !submenu.hidden && toolbar && !toolbar.contains(e.target)) {
       submenu.hidden = true;
@@ -2020,6 +2050,12 @@ function initFloatingToolbar() {
     if (flipDropdown && !flipDropdown.hidden && toolbar && !toolbar.contains(e.target)) {
       flipDropdown.hidden = true;
       if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
+      draw();
+    }
+    if (profileDropdown && !profileDropdown.hidden && userProfileWrap && !userProfileWrap.contains(e.target)) {
+      profileDropdown.hidden = true;
+      const userAvatar = document.getElementById('userAvatar');
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
       draw();
     }
   });
@@ -2293,7 +2329,7 @@ function clientToCanvas(clientX, clientY) {
 const DIAGRAM_ASSET_VERSION = '2';
 
 function loadImage(src) {
-  let url = src.startsWith('http') || src.startsWith('/') ? src : `/assets/marley/${src}.svg`;
+  let url = src.startsWith('http') || src.startsWith('/') || src.startsWith('blob:') ? src : `/assets/marley/${src}.svg`;
   if (url.startsWith('/assets/marley/') && !url.includes('?')) {
     url += '?v=' + DIAGRAM_ASSET_VERSION;
   }
@@ -2322,6 +2358,31 @@ function loadDiagramImage(url) {
     }
     throw err;
   });
+}
+
+/**
+ * Load diagram image from URL. For remote URLs (http/https), if loadDiagramImage fails (e.g. CORS),
+ * fetch SVG as text and create an object URL so canvas can draw without taint.
+ */
+async function loadDiagramImageForDrop(url) {
+  try {
+    return await loadDiagramImage(url);
+  } catch (err) {
+    if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to fetch diagram: ${res.status}`);
+      const svgText = await res.text();
+      const blob = new Blob([svgText], { type: 'image/svg+xml' });
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        const img = await loadImage(objectUrl);
+        return img;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -4419,7 +4480,7 @@ function initCanvas() {
     const canvasPos = clientToCanvas(e.clientX, e.clientY);
     try {
       pushUndoSnapshot();
-      const img = await loadDiagramImage(diagramUrl);
+      const img = await loadDiagramImageForDrop(diagramUrl);
       // Import normalization: if width or height > 150px, scale so max dimension = 150
       const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
       const el = {
@@ -4953,50 +5014,80 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
 }
 
 function initAuth() {
-  const authModal = document.getElementById('authModal');
-  const authBtn = document.getElementById('authBtn');
   const authForm = document.getElementById('authForm');
   const authEmail = document.getElementById('authEmail');
   const authPassword = document.getElementById('authPassword');
   const authSubmitBtn = document.getElementById('authSubmitBtn');
   const authSignUpBtn = document.getElementById('authSignUpBtn');
-  const authModalClose = document.getElementById('authModalClose');
   const authError = document.getElementById('authError');
   const authUserSection = document.getElementById('authUserSection');
   const authUserEmail = document.getElementById('authUserEmail');
   const authSignOutBtn = document.getElementById('authSignOutBtn');
-  if (!authModal || !authBtn) return;
+  const userProfileWrap = document.getElementById('userProfileWrap');
+  const userAvatar = document.getElementById('userAvatar');
+  const profileDropdown = document.getElementById('profileDropdown');
+  const menuItemProducts = document.getElementById('menuItemProducts');
+  const menuItemSignOut = document.getElementById('menuItemSignOut');
+  const productsProfileWrap = document.getElementById('productsProfileWrap');
+  const productsUserAvatar = document.getElementById('productsUserAvatar');
+  if (!authForm) return Promise.resolve();
 
   function setAuthUI() {
     if (authState.token) {
-      authBtn.textContent = 'Sign out';
-      authBtn.title = 'Sign out';
+      if (userProfileWrap) userProfileWrap.hidden = false;
+      if (productsProfileWrap) productsProfileWrap.hidden = false;
+      if (profileDropdown) profileDropdown.hidden = true;
+      updateUserProfile();
       if (authUserSection) authUserSection.hidden = false;
       if (authForm) authForm.hidden = true;
       if (authUserEmail) authUserEmail.textContent = authState.email || 'Signed in';
     } else {
-      authBtn.textContent = 'Sign in';
-      authBtn.title = 'Sign in to save and load diagrams';
+      if (userProfileWrap) userProfileWrap.hidden = true;
+      if (productsProfileWrap) productsProfileWrap.hidden = true;
       if (authUserSection) authUserSection.hidden = true;
       if (authForm) authForm.hidden = false;
     }
   }
 
-  authBtn.addEventListener('click', () => {
-    if (authState.token) {
+  if (userAvatar && profileDropdown) {
+    userAvatar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = !profileDropdown.hidden;
+      profileDropdown.hidden = wasOpen;
+      userAvatar.setAttribute('aria-expanded', profileDropdown.hidden ? 'false' : 'true');
+    });
+  }
+  if (menuItemProducts) {
+    menuItemProducts.addEventListener('click', () => {
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      switchView('view-products');
+    });
+  }
+  if (menuItemSignOut) {
+    menuItemSignOut.addEventListener('click', () => {
       authState.token = null;
       authState.email = null;
+      authState.user = null;
       if (authState.supabase) authState.supabase.auth.signOut();
       setAuthUI();
-      return;
-    }
-    authModal.hidden = false;
-    if (authError) { authError.hidden = true; authError.textContent = ''; }
-  });
-
-  const authModalBackdrop = document.getElementById('authModalBackdrop');
-  authModalClose?.addEventListener('click', () => { authModal.hidden = true; });
-  authModalBackdrop?.addEventListener('click', () => { authModal.hidden = true; });
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      switchView('view-login');
+      loadPanelProducts();
+    });
+  }
+  if (productsUserAvatar) {
+    productsUserAvatar.addEventListener('click', () => {
+      authState.token = null;
+      authState.email = null;
+      authState.user = null;
+      if (authState.supabase) authState.supabase.auth.signOut();
+      setAuthUI();
+      switchView('view-login');
+      loadPanelProducts();
+    });
+  }
 
   authForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -5008,8 +5099,9 @@ function initAuth() {
       if (error) throw error;
       authState.token = data.session?.access_token ?? null;
       authState.email = data.user?.email ?? null;
+      authState.user = data.user ?? null;
       setAuthUI();
-      authModal.hidden = true;
+      switchView('view-canvas');
     } catch (err) {
       if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign in failed'; }
     }
@@ -5025,8 +5117,9 @@ function initAuth() {
       if (error) throw error;
       authState.token = data.session?.access_token ?? null;
       authState.email = data.user?.email ?? null;
+      authState.user = data.user ?? null;
       setAuthUI();
-      authModal.hidden = true;
+      switchView('view-canvas');
       showMessage('Account created. You can sign in and save diagrams.', 'success');
     } catch (err) {
       if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign up failed'; }
@@ -5037,32 +5130,538 @@ function initAuth() {
   authSignOutBtn?.addEventListener('click', () => {
     authState.token = null;
     authState.email = null;
+    authState.user = null;
     if (authState.supabase) authState.supabase.auth.signOut();
     setAuthUI();
-    authModal.hidden = true;
+    switchView('view-login');
+    loadPanelProducts();
   });
 
   setAuthUI();
-  fetch('/api/config')
+  return fetch('/api/config')
     .then((r) => r.json())
     .then((config) => {
       if (config.supabaseUrl && config.anonKey && typeof window.supabase !== 'undefined') {
         authState.supabase = window.supabase.createClient(config.supabaseUrl, config.anonKey);
-        authState.supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            authState.token = session.access_token;
-            authState.email = session.user?.email ?? null;
-            setAuthUI();
-          }
-        });
         authState.supabase.auth.onAuthStateChange((_event, session) => {
           authState.token = session?.access_token ?? null;
           authState.email = session?.user?.email ?? null;
+          authState.user = session?.user ?? null;
           setAuthUI();
+          loadPanelProducts();
+        });
+        return authState.supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            authState.token = session.access_token;
+            authState.email = session.user?.email ?? null;
+            authState.user = session.user ?? null;
+            setAuthUI();
+          }
         });
       }
     })
+    .then(() => {})
     .catch(() => {});
+}
+
+/**
+ * Upload an SVG file to the product-diagrams bucket. Requires the user to be logged in.
+ * @param {File} file - The SVG file to upload
+ * @returns {Promise<string>} The public URL of the uploaded file
+ */
+async function uploadProductSVG(file) {
+  if (!authState.user) {
+    throw new Error('You must be logged in to upload products');
+  }
+  const supabase = authState.supabase;
+  if (!supabase) {
+    throw new Error('Supabase is not configured');
+  }
+  const path = `${authState.user.id}/${Date.now()}_${file.name}`;
+  const { error } = await supabase.storage.from('product-diagrams').upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from('product-diagrams').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function initProductsView() {
+  const btnBackToCanvas = document.getElementById('btnBackToCanvas');
+  if (btnBackToCanvas) {
+    btnBackToCanvas.addEventListener('click', () => switchView('view-canvas'));
+  }
+
+  const productLibrarySearch = document.getElementById('productLibrarySearch');
+  const productFilterProfile = document.getElementById('productFilterProfile');
+  if (productLibrarySearch) {
+    productLibrarySearch.addEventListener('input', () => filterLibraryGrid());
+  }
+  if (productFilterProfile) {
+    productFilterProfile.addEventListener('change', () => filterLibraryGrid());
+  }
+
+  // Legacy: localStorage no longer used; Supabase is source of truth
+  // try {
+  //   const stored = localStorage.getItem('custom_products');
+  //   localProducts = stored ? JSON.parse(stored) : [];
+  // } catch (_) {
+  //   localProducts = [];
+  // }
+
+  const productModal = document.getElementById('productModal');
+  const productCardNew = document.getElementById('productCardNew');
+  const dropZone = document.getElementById('dropZone');
+  const dropZoneContent = dropZone?.querySelector('.drop-zone-content');
+  const filePreview = document.getElementById('filePreview');
+  const previewSvgContainer = document.getElementById('previewSvgContainer');
+  const productModalFileInput = document.getElementById('productModalFileInput');
+  const btnRemoveFile = document.getElementById('btnRemoveFile');
+  const productForm = document.getElementById('productForm');
+  const inputProductId = document.getElementById('inputProductId');
+  const inputProductName = document.getElementById('inputProductName');
+  const inputProductCategory = document.getElementById('inputProductCategory');
+  const inputItemNumber = document.getElementById('inputItemNumber');
+  const inputCostPrice = document.getElementById('inputCostPrice');
+  const inputMarkupPercentage = document.getElementById('inputMarkupPercentage');
+  const inputPriceExcGst = document.getElementById('inputPriceExcGst');
+  const inputUnit = document.getElementById('inputUnit');
+  const inputProfile = document.getElementById('inputProfile');
+  const inputThumbnailUrl = document.getElementById('inputThumbnailUrl');
+  const inputDiagramUrl = document.getElementById('inputDiagramUrl');
+  const inputServicem8Uuid = document.getElementById('inputServicem8Uuid');
+  const btnCancelProduct = document.getElementById('btnCancelProduct');
+  const btnSaveProduct = document.getElementById('btnSaveProduct');
+  const btnArchiveProduct = document.getElementById('btnArchiveProduct');
+
+  let pendingSvgContent = null;
+  let pendingSvgFile = null;
+
+  function slugFromName(name) {
+    return name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  }
+
+  function resetProductForm() {
+    currentEditingProduct = null;
+    pendingSvgContent = null;
+    pendingSvgFile = null;
+    if (previewSvgContainer) previewSvgContainer.innerHTML = '';
+    if (filePreview) filePreview.hidden = true;
+    if (dropZoneContent) dropZoneContent.hidden = false;
+    if (inputProductId) inputProductId.value = '';
+    if (inputProductName) inputProductName.value = '';
+    if (inputProductCategory) inputProductCategory.value = '';
+    if (inputItemNumber) inputItemNumber.value = '';
+    if (inputCostPrice) inputCostPrice.value = '';
+    if (inputMarkupPercentage) inputMarkupPercentage.value = '30';
+    if (inputPriceExcGst) inputPriceExcGst.value = '';
+    if (inputUnit) inputUnit.value = 'each';
+    if (inputProfile) inputProfile.value = '';
+    if (inputThumbnailUrl) inputThumbnailUrl.value = '';
+    if (inputDiagramUrl) inputDiagramUrl.value = '';
+    if (inputServicem8Uuid) inputServicem8Uuid.value = '';
+    if (btnSaveProduct) btnSaveProduct.disabled = true;
+    if (productModalFileInput) productModalFileInput.value = '';
+    if (btnArchiveProduct) {
+      btnArchiveProduct.hidden = true;
+      btnArchiveProduct.removeAttribute('data-action');
+      btnArchiveProduct.classList.remove('btn-archive--destructive');
+    }
+  }
+
+  function validateProductSvgFile(file) {
+    if (!file) return { valid: false, message: 'No file selected.' };
+    const isSvgType = file.type === 'image/svg+xml';
+    const isSvgExt = (file.name || '').toLowerCase().endsWith('.svg');
+    if (!isSvgType && !isSvgExt) {
+      return { valid: false, message: 'Only SVG files are allowed.' };
+    }
+    if (file.size > PRODUCT_SVG_MAX_SIZE_BYTES) {
+      return { valid: false, message: 'File is too large. Please upload an SVG under 2MB.' };
+    }
+    return { valid: true };
+  }
+
+  function clearProductFileInput() {
+    pendingSvgContent = null;
+    pendingSvgFile = null;
+    if (previewSvgContainer) previewSvgContainer.innerHTML = '';
+    if (filePreview) filePreview.hidden = true;
+    if (dropZoneContent) dropZoneContent.hidden = false;
+    if (productModalFileInput) productModalFileInput.value = '';
+    if (!currentEditingProduct && btnSaveProduct) btnSaveProduct.disabled = true;
+  }
+
+  function getSvgDimensions(svgContent) {
+    if (!svgContent || typeof svgContent !== 'string') return null;
+    const wMatch = svgContent.match(/\bwidth\s*=\s*["']?([0-9.]+)/i);
+    const hMatch = svgContent.match(/\bheight\s*=\s*["']?([0-9.]+)/i);
+    let w = wMatch ? parseFloat(wMatch[1]) : null;
+    let h = hMatch ? parseFloat(hMatch[1]) : null;
+    if ((w == null || h == null) && svgContent.includes('viewBox')) {
+      const vbMatch = svgContent.match(/viewBox\s*=\s*["']?\s*([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)\s+([0-9.-]+)/i);
+      if (vbMatch) {
+        const vw = parseFloat(vbMatch[3]);
+        const vh = parseFloat(vbMatch[4]);
+        if (w == null) w = vw;
+        if (h == null) h = vh;
+      }
+    }
+    if (w != null && h != null && !Number.isNaN(w) && !Number.isNaN(h)) return { width: w, height: h };
+    return null;
+  }
+
+  function setProductFile(svgContent, file) {
+    if (!svgContent || !svgContent.trim().startsWith('<')) {
+      if (btnSaveProduct) btnSaveProduct.disabled = true;
+      return;
+    }
+    pendingSvgContent = svgContent;
+    pendingSvgFile = file || null;
+    if (previewSvgContainer) previewSvgContainer.innerHTML = svgContent;
+    if (filePreview) filePreview.hidden = false;
+    if (dropZoneContent) dropZoneContent.hidden = true;
+    if (btnSaveProduct) btnSaveProduct.disabled = false;
+  }
+
+  function showDiagramPreviewFromUrl(url) {
+    if (!previewSvgContainer) return;
+    previewSvgContainer.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.maxHeight = '120px';
+    img.style.objectFit = 'contain';
+    previewSvgContainer.appendChild(img);
+    if (filePreview) filePreview.hidden = false;
+    if (dropZoneContent) dropZoneContent.hidden = true;
+    if (btnSaveProduct) btnSaveProduct.disabled = false;
+  }
+
+  const productModalTitle = document.getElementById('productModalTitle');
+
+  openProductModal = (product = null) => {
+    if (!product) {
+      resetProductForm();
+      if (productModalTitle) productModalTitle.textContent = 'Add New Product';
+      if (btnSaveProduct) {
+        btnSaveProduct.textContent = 'Create Product';
+        btnSaveProduct.disabled = true;
+      }
+      if (btnArchiveProduct) btnArchiveProduct.hidden = true;
+      productModal.hidden = false;
+      return;
+    }
+    currentEditingProduct = product;
+    pendingSvgContent = null;
+    pendingSvgFile = null;
+    if (previewSvgContainer) previewSvgContainer.innerHTML = '';
+    if (productModalFileInput) productModalFileInput.value = '';
+    if (productModalTitle) productModalTitle.textContent = 'Edit Product';
+    if (btnSaveProduct) {
+      btnSaveProduct.textContent = 'Save Changes';
+      btnSaveProduct.disabled = false;
+    }
+    if (inputProductId) inputProductId.value = product.id || '';
+    if (inputProductName) inputProductName.value = product.name || '';
+    if (inputProductCategory) inputProductCategory.value = product.category || '';
+    if (inputItemNumber) inputItemNumber.value = product.item_number || '';
+    if (inputCostPrice) inputCostPrice.value = product.cost_price != null ? String(product.cost_price) : '';
+    if (inputMarkupPercentage) inputMarkupPercentage.value = product.markup_percentage != null ? String(product.markup_percentage) : '30';
+    if (inputPriceExcGst) inputPriceExcGst.value = product.price_exc_gst != null ? String(product.price_exc_gst) : '';
+    if (inputUnit) inputUnit.value = product.unit || 'each';
+    if (inputProfile) inputProfile.value = product.profile || '';
+    if (inputThumbnailUrl) inputThumbnailUrl.value = product.thumbnail_url || product.thumbnailUrl || '';
+    if (inputDiagramUrl) inputDiagramUrl.value = product.diagram_url || product.diagramUrl || '';
+    if (inputServicem8Uuid) inputServicem8Uuid.value = product.servicem8_material_uuid || '';
+    const diagramUrl = product.diagram_url || product.diagramUrl || '';
+    if (diagramUrl) showDiagramPreviewFromUrl(diagramUrl);
+    if (btnArchiveProduct) {
+      btnArchiveProduct.hidden = false;
+      const isArchived = product.active === false;
+      btnArchiveProduct.textContent = isArchived ? 'Unarchive' : 'Archive';
+      btnArchiveProduct.setAttribute('data-action', isArchived ? 'unarchive' : 'archive');
+      btnArchiveProduct.classList.toggle('btn-archive--destructive', !isArchived);
+    }
+    productModal.hidden = false;
+  };
+
+  if (btnArchiveProduct) {
+    btnArchiveProduct.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!currentEditingProduct || !authState.supabase) return;
+      const action = btnArchiveProduct.getAttribute('data-action');
+      const newActive = action === 'unarchive';
+      const msg = newActive
+        ? 'Unarchive this product? It will appear in the Canvas sidebar again.'
+        : 'Archive this product? It will no longer appear in the Canvas sidebar.';
+      if (!confirm(msg)) return;
+      btnArchiveProduct.disabled = true;
+      try {
+        const { error } = await authState.supabase
+          .from('products')
+          .update({ active: newActive })
+          .eq('id', currentEditingProduct.id);
+        if (error) throw error;
+        productModal.hidden = true;
+        resetProductForm();
+        await renderProductLibrary();
+        await loadPanelProducts();
+      } catch (err) {
+        alert(err.message || 'Failed to archive product');
+      } finally {
+        btnArchiveProduct.disabled = false;
+      }
+    });
+  }
+
+  if (productCardNew && productModal) {
+    productCardNew.addEventListener('click', () => openProductModal(null));
+  }
+
+  if (btnCancelProduct && productModal) {
+    btnCancelProduct.addEventListener('click', () => {
+      productModal.hidden = true;
+      resetProductForm();
+    });
+  }
+
+  if (dropZone) {
+    dropZone.addEventListener('click', (e) => {
+      if (e.target === productModalFileInput || e.target.closest('.file-preview')) return;
+      productModalFileInput?.click();
+    });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      const validation = validateProductSvgFile(file);
+      if (!validation.valid) {
+        alert(validation.message);
+        clearProductFileInput();
+        return;
+      }
+      pendingSvgFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const svgContent = reader.result;
+        const dims = getSvgDimensions(svgContent);
+        if (dims && (dims.width > PRODUCT_SVG_DIMENSION_WARN_PX || dims.height > PRODUCT_SVG_DIMENSION_WARN_PX)) {
+          alert('This SVG has very large dimensions and may affect performance. We recommend resizing it.');
+        }
+        setProductFile(svgContent, file);
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  if (productModalFileInput) {
+    productModalFileInput.addEventListener('change', () => {
+      const file = productModalFileInput.files?.[0];
+      if (!file) return;
+      const validation = validateProductSvgFile(file);
+      if (!validation.valid) {
+        alert(validation.message);
+        clearProductFileInput();
+        return;
+      }
+      pendingSvgFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const svgContent = reader.result;
+        const dims = getSvgDimensions(svgContent);
+        if (dims && (dims.width > PRODUCT_SVG_DIMENSION_WARN_PX || dims.height > PRODUCT_SVG_DIMENSION_WARN_PX)) {
+          alert('This SVG has very large dimensions and may affect performance. We recommend resizing it.');
+        }
+        setProductFile(svgContent, file);
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  if (btnRemoveFile) {
+    btnRemoveFile.addEventListener('click', (e) => {
+      e.preventDefault();
+      pendingSvgContent = null;
+      pendingSvgFile = null;
+      if (previewSvgContainer) previewSvgContainer.innerHTML = '';
+      if (filePreview) filePreview.hidden = true;
+      if (dropZoneContent) dropZoneContent.hidden = false;
+      if (productModalFileInput) productModalFileInput.value = '';
+      if (!currentEditingProduct && btnSaveProduct) btnSaveProduct.disabled = true;
+    });
+  }
+
+  if (productForm) {
+    productForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = (inputProductName?.value || '').trim();
+      const category = (inputProductCategory?.value || '').trim();
+      const hasDiagram = pendingSvgContent || (currentEditingProduct && (currentEditingProduct.diagram_url || currentEditingProduct.diagramUrl));
+      if (!name || !category) return;
+      if (!hasDiagram) {
+        alert('Please add a diagram (drop an SVG file or ensure the product has a diagram URL).');
+        return;
+      }
+      if (!pendingSvgFile && !currentEditingProduct) {
+        alert('Please select an SVG file to upload');
+        return;
+      }
+      if (!authState.supabase) {
+        alert('Supabase is not configured');
+        return;
+      }
+      if (btnSaveProduct) btnSaveProduct.disabled = true;
+      try {
+        let diagramUrl;
+        if (pendingSvgFile) {
+          diagramUrl = await uploadProductSVG(pendingSvgFile);
+        } else if (currentEditingProduct) {
+          diagramUrl = currentEditingProduct.diagram_url || currentEditingProduct.diagramUrl || '';
+        } else {
+          throw new Error('No diagram available');
+        }
+        const rawId = (inputProductId?.value || '').trim();
+        const id = rawId || (slugFromName(name) || 'product') + '-' + Date.now();
+        const costVal = (inputCostPrice?.value || '').trim();
+        const markupVal = (inputMarkupPercentage?.value || '').trim();
+        const priceExcVal = (inputPriceExcGst?.value || '').trim();
+        const productData = {
+          name,
+          category,
+          item_number: (inputItemNumber?.value || '').trim() || null,
+          cost_price: costVal === '' ? null : (parseFloat(costVal) || null),
+          markup_percentage: markupVal === '' ? null : (parseFloat(markupVal) ?? 30),
+          price_exc_gst: priceExcVal === '' ? null : (parseFloat(priceExcVal) || null),
+          unit: (inputUnit?.value || 'each').trim(),
+          profile: (inputProfile?.value || '').trim() || null,
+          active: currentEditingProduct ? (currentEditingProduct.active !== false) : true,
+          thumbnail_url: (inputThumbnailUrl?.value || '').trim() || diagramUrl,
+          diagram_url: diagramUrl,
+          servicem8_material_uuid: (inputServicem8Uuid?.value || '').trim() || null,
+        };
+        if (currentEditingProduct) {
+          const { error } = await authState.supabase
+            .from('products')
+            .update(productData)
+            .eq('id', currentEditingProduct.id);
+          if (error) throw error;
+        } else {
+          productData.id = id;
+          const { error } = await authState.supabase.from('products').insert([productData]);
+          if (error) throw error;
+        }
+        productModal.hidden = true;
+        resetProductForm();
+        await renderProductLibrary();
+        await loadPanelProducts();
+      } catch (err) {
+        alert(err.message || 'Failed to save product');
+      } finally {
+        if (btnSaveProduct) btnSaveProduct.disabled = false;
+      }
+    });
+  }
+
+  renderProductLibrary();
+}
+
+function renderLibraryGrid(list) {
+  const grid = document.getElementById('productsPageGrid');
+  const newCard = document.getElementById('productCardNew');
+  if (!grid) return;
+  while (grid.firstChild) {
+    grid.removeChild(grid.firstChild);
+  }
+  if (newCard) grid.appendChild(newCard);
+
+  (list || []).forEach((p) => {
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    if (p.active === false) card.classList.add('product-card-archived');
+    card.setAttribute('data-product-id', String(p.id));
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `Edit product: ${p.name || 'Unnamed'}`);
+    const previewWrap = document.createElement('div');
+    previewWrap.className = 'product-card-preview';
+    if (p.diagram_url) {
+      const img = document.createElement('img');
+      img.src = p.diagram_url;
+      img.alt = p.name || '';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.maxHeight = '120px';
+      img.style.objectFit = 'contain';
+      previewWrap.appendChild(img);
+    }
+    const nameEl = document.createElement('span');
+    nameEl.className = 'product-card-name';
+    nameEl.textContent = p.name || 'Unnamed';
+    card.appendChild(previewWrap);
+    card.appendChild(nameEl);
+    if (p.active === false) {
+      const badge = document.createElement('span');
+      badge.className = 'product-card-archived-badge';
+      badge.textContent = 'Archived';
+      card.appendChild(badge);
+    }
+    card.addEventListener('click', () => {
+      if (openProductModal) openProductModal(p);
+    });
+    grid.appendChild(card);
+  });
+}
+
+function filterLibraryGrid() {
+  if (!allLibraryProducts || !Array.isArray(allLibraryProducts)) return;
+  const searchEl = document.getElementById('productLibrarySearch');
+  const profileEl = document.getElementById('productFilterProfile');
+  const searchTerm = (searchEl?.value || '').trim().toLowerCase();
+  const profileVal = (profileEl?.value || '').trim();
+  const filtered = allLibraryProducts.filter((p) => {
+    const nameMatch = !searchTerm || (p.name || '').toLowerCase().includes(searchTerm);
+    const profileMatch = !profileVal || (p.profile || '') === profileVal;
+    return nameMatch && profileMatch;
+  });
+  renderLibraryGrid(filtered);
+}
+
+async function renderProductLibrary() {
+  const supabase = authState.supabase;
+  if (!supabase) return;
+
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('Failed to fetch products:', error);
+    return;
+  }
+
+  const list = products || [];
+  list.sort((a, b) => {
+    const aActive = a.active !== false;
+    const bActive = b.active !== false;
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return 0;
+  });
+  allLibraryProducts = list;
+  filterLibraryGrid();
 }
 
 function initDiagrams() {
@@ -5091,7 +5690,7 @@ function initDiagrams() {
   saveDiagramBtn.addEventListener('click', () => {
     if (!authState.token) {
       showMessage('Sign in to save diagrams.', 'error');
-      document.getElementById('authBtn')?.click();
+      switchView('view-login');
       return;
     }
     if (!state.blueprintImage && state.elements.length === 0) {
@@ -5264,6 +5863,43 @@ function initResizer() {
   }
 }
 
+/**
+ * Normalize product from Supabase (snake_case) to panel format (camelCase).
+ */
+function normalizeProduct(p) {
+  return {
+    id: p.id,
+    name: p.name || '',
+    category: p.category || '',
+    thumbnailUrl: p.thumbnail_url || p.thumbnailUrl || '',
+    diagramUrl: p.diagram_url || p.diagramUrl || '',
+    profile: p.profile || 'other',
+  };
+}
+
+/**
+ * Load products for the sidebar panel. When logged in: fetch from Supabase (active only) and use those.
+ * When logged out: use system products only.
+ */
+async function loadPanelProducts() {
+  if (authState.token && authState.supabase) {
+    try {
+      const { data: dbProducts, error } = await authState.supabase
+        .from('products')
+        .select('*')
+        .eq('active', true);
+      if (error) throw error;
+      state.products = (dbProducts || []).map(normalizeProduct);
+    } catch (err) {
+      console.warn('Failed to fetch products from Supabase, using system products', err);
+      state.products = [...SYSTEM_PRODUCTS];
+    }
+  } else {
+    state.products = [...SYSTEM_PRODUCTS];
+  }
+  applyProductFilters();
+}
+
 function getPanelProducts() {
   // Filter: exclude consumables, show only 3M gutters and 3M downpipes (manual length selectors), include all other products
   let list = state.products.filter((p) => !CONSUMABLE_PRODUCT_IDS.includes(p.id));
@@ -5302,9 +5938,13 @@ function renderProducts(products) {
     const displayName = displayNameOverrides[p.id] || p.name;
     thumb.setAttribute('aria-label', `Product ${displayName}, drag onto canvas or click to add at center`);
     thumb.dataset.productId = p.id;
-    thumb.dataset.diagramUrl = p.diagramUrl;
+    const rawDiagramUrl = p.diagramUrl || p.diagram_url || '';
+    const diagramUrl = rawDiagramUrl.startsWith('http') || rawDiagramUrl.startsWith('/') ? rawDiagramUrl : `/assets/marley/${p.id}.svg`;
+    const rawThumbUrl = p.thumbnailUrl || p.thumbnail_url || rawDiagramUrl;
+    const thumbImgSrc = rawThumbUrl && (rawThumbUrl.startsWith('http') || rawThumbUrl.startsWith('/')) ? rawThumbUrl : `/assets/marley/${p.id}.svg`;
+    thumb.dataset.diagramUrl = diagramUrl;
     const img = document.createElement('img');
-    img.src = p.thumbnailUrl.startsWith('http') || p.thumbnailUrl.startsWith('/') ? p.thumbnailUrl : `/assets/marley/${p.id}.svg`;
+    img.src = thumbImgSrc;
     img.alt = displayName;
     thumb.appendChild(img);
     thumb.appendChild(document.createElement('span')).textContent = displayName;
@@ -5314,12 +5954,11 @@ function renderProducts(products) {
     thumb.addEventListener('dragstart', (e) => {
       wasDragged = true;
       e.dataTransfer.setData('application/product-id', p.id);
-      const diagramUrl = p.diagramUrl.startsWith('http') || p.diagramUrl.startsWith('/') ? p.diagramUrl : `/assets/marley/${p.id}.svg`;
       e.dataTransfer.setData('application/diagram-url', diagramUrl);
       e.dataTransfer.effectAllowed = 'copy';
       state.dragPreviewCanvasPos = null;
       state.dragPreviewImage = null;
-      loadDiagramImage(diagramUrl).then((img) => {
+      loadDiagramImageForDrop(diagramUrl).then((img) => {
         state.dragPreviewImage = img;
         draw();
       }).catch(() => {});
@@ -5338,10 +5977,9 @@ function renderProducts(products) {
         return;
       }
       e.preventDefault();
-      const diagramUrl = p.diagramUrl.startsWith('http') || p.diagramUrl.startsWith('/') ? p.diagramUrl : `/assets/marley/${p.id}.svg`;
       try {
         pushUndoSnapshot();
-        const img = await loadDiagramImage(diagramUrl);
+        const img = await loadDiagramImageForDrop(diagramUrl);
         const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
         
         // Canvas Porter: Center-Drop - place at viewport center
@@ -5492,26 +6130,7 @@ function applyProductFilters() {
   renderProducts(filtered);
 }
 
-async function initProducts() {
-  try {
-    const res = await fetch('/api/products');
-    const data = await res.json();
-    state.products = data.products || [];
-    applyProductFilters();
-  } catch (err) {
-    console.error('Failed to load products', err);
-    showMessage('Products could not be loaded. Using built-in list.');
-    state.products = [
-      { id: 'gutter', name: 'Gutter', diagramUrl: '/assets/marley/gutter.svg', thumbnailUrl: '/assets/marley/gutter.svg', profile: 'other' },
-      { id: 'downpipe', name: 'Downpipe', diagramUrl: '/assets/marley/downpipe.svg', thumbnailUrl: '/assets/marley/downpipe.svg', profile: 'other' },
-      { id: 'bracket', name: 'Bracket', diagramUrl: '/assets/marley/bracket.svg', thumbnailUrl: '/assets/marley/bracket.svg', profile: 'other' },
-      { id: 'stopend', name: 'Stop End', diagramUrl: '/assets/marley/stopend.svg', thumbnailUrl: '/assets/marley/stopend.svg', profile: 'other' },
-      { id: 'outlet', name: 'Outlet', diagramUrl: '/assets/marley/outlet.svg', thumbnailUrl: '/assets/marley/outlet.svg', profile: 'other' },
-      { id: 'dropper', name: 'Dropper', diagramUrl: '/assets/marley/dropper.svg', thumbnailUrl: '/assets/marley/dropper.svg', profile: 'other' },
-    ];
-    applyProductFilters();
-  }
-
+function initProducts() {
   const profileFilter = document.getElementById('profileFilter');
   profileFilter?.addEventListener('change', (e) => {
     state.profileFilter = (e.target.value || '').trim();
@@ -5520,6 +6139,8 @@ async function initProducts() {
 
   const search = document.getElementById('productSearch');
   search?.addEventListener('input', () => applyProductFilters());
+
+  loadPanelProducts();
 }
 
 async function checkBackendAvailable() {
@@ -5529,6 +6150,41 @@ async function checkBackendAvailable() {
     return true;
   } catch (_) {
     return false;
+  }
+}
+
+/**
+ * Update the profile avatar(s) with the current user's initial (from email).
+ * Updates both canvas (#userAvatar) and products view (#productsUserAvatar).
+ * Call after login or when session is restored.
+ */
+function updateUserProfile() {
+  const email = authState.email || '';
+  const initial = email.trim().length ? email.trim().charAt(0).toUpperCase() : '?';
+  const canvasAvatar = document.getElementById('userAvatar');
+  if (canvasAvatar) canvasAvatar.textContent = initial;
+  const productsAvatar = document.getElementById('productsUserAvatar');
+  if (productsAvatar) productsAvatar.textContent = initial;
+}
+
+/**
+ * Switch the visible app view. Hides all .app-view, shows the one with id viewId.
+ * If viewId === 'view-canvas', calls resizeCanvas() after making it visible (so canvas is never measured while hidden), then draw().
+ * If viewId === 'view-products', calls renderProductLibrary() to ensure data is fresh.
+ */
+function switchView(viewId) {
+  document.querySelectorAll('.app-view').forEach((el) => {
+    el.classList.add('hidden');
+  });
+  const target = document.getElementById(viewId);
+  if (target) {
+    target.classList.remove('hidden');
+    if (viewId === 'view-canvas') {
+      resizeCanvas();
+      draw();
+    } else if (viewId === 'view-products') {
+      renderProductLibrary();
+    }
   }
 }
 
@@ -5581,17 +6237,23 @@ function init() {
     console.warn('initFloatingToolbar failed', e);
   }
   try {
-    initAuth();
-  } catch (e) {
-    console.warn('initAuth failed', e);
-  }
-  try {
     initDiagrams();
   } catch (e) {
     console.warn('initDiagrams failed', e);
   }
   initProducts();
-  draw();
+  initProductsView();
+
+  const authPromise = initAuth();
+  const authReady = authPromise && typeof authPromise.then === 'function' ? authPromise : Promise.resolve();
+  authReady.then(() => {
+    if (authState.token) {
+      switchView('view-canvas');
+    } else {
+      switchView('view-login');
+    }
+    loadPanelProducts();
+  });
 
   checkBackendAvailable().then((ok) => {
     if (!ok) {
