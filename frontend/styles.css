@@ -2467,6 +2467,24 @@ body {
   outline: none;
 }
 
+.quote-header-metres-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.quote-header-metres-suffix {
+  color: #666;
+  font-weight: 600;
+}
+
+/* Two-cell appearance when header Qty (metres) is filled: product+qty | merged rest */
+.quote-section-header--has-metres td:nth-child(2) {
+  border-right: 2px solid #f8f9fa;
+}
+.quote-section-header--has-metres td:nth-child(3) {
+  border-left: 1px solid #e0e0e0;
+}
+
 /* Quote table indentation: Brackets under Gutters, Screws under Brackets */
 .quote-product-indent-level-1 {
   display: block;
@@ -2948,38 +2966,138 @@ body {
   border: 1px solid #e2e2e2;
   border-radius: 8px;
 }
+/* 3×2 grid: 3 columns (Current | + Quote | = New Total), gap = invisible borders */
 .job-confirm-financial {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  column-gap: 20px;
+  row-gap: 12px;
+  align-items: start;
   margin-bottom: 28px;
-  padding: 16px;
+  padding: 20px 24px;
   background: #fafafa;
   border: 1px solid #e2e2e2;
-  border-radius: 8px;
+  border-radius: 10px;
+  box-sizing: border-box;
 }
 .job-confirm-financial-col {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.job-confirm-financial-col--new {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 .job-confirm-financial-label {
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: #6e6e73;
 }
 .job-confirm-financial-value {
   font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.job-confirm-financial-gst {
+  font-size: 10px;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.9;
 }
 .job-confirm-financial-current {
   color: #6e6e73;
 }
 .job-confirm-financial-quote {
   color: #1a1a1a;
-  font-weight: 700;
 }
 .job-confirm-financial-new {
-  color: #22c55e;
-  font-weight: 700;
+  color: #166534;
+}
+.job-confirm-financial-new .job-confirm-financial-value {
+  font-size: 16px;
+}
+
+/* Responsive: stack 3 columns vertically */
+@media (max-width: 520px) {
+  .job-confirm-financial {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    row-gap: 0;
+    column-gap: 0;
+    padding: 16px 20px;
+  }
+  .job-confirm-financial-col {
+    padding: 12px 0;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 0;
+  }
+  .job-confirm-financial-col:last-of-type {
+    border-bottom: none;
+  }
+  .job-confirm-financial-col--new {
+    width: 100%;
+    margin-top: 10px;
+    padding: 16px;
+    border-radius: 8px;
+  }
+}
+
+/* GST toggle: exc (green) / inc (rose) */
+.job-confirm-gst-toggle-wrap {
+  display: inline-flex;
+  margin-bottom: 16px;
+  padding: 3px;
+  border-radius: 10px;
+  gap: 0;
+  transition: background 0.2s;
+}
+.job-confirm-gst-toggle-wrap--exc {
+  background: #dcfce7;
+}
+.job-confirm-gst-toggle-wrap--inc {
+  background: #ffe4e6;
+}
+.job-confirm-gst-toggle-option {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.job-confirm-gst-toggle-wrap--exc .job-confirm-gst-toggle-option {
+  color: #6e6e73;
+}
+.job-confirm-gst-toggle-wrap--exc .job-confirm-gst-toggle-option:hover {
+  color: #166534;
+}
+.job-confirm-gst-toggle-wrap--exc .job-confirm-gst-toggle-option.is-selected {
+  background: #fff;
+  color: #166534;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.job-confirm-gst-toggle-wrap--inc .job-confirm-gst-toggle-option {
+  color: #6e6e73;
+}
+.job-confirm-gst-toggle-wrap--inc .job-confirm-gst-toggle-option:hover {
+  color: #9f1239;
+}
+.job-confirm-gst-toggle-wrap--inc .job-confirm-gst-toggle-option.is-selected {
+  background: #fff;
+  color: #9f1239;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
 .job-confirm-actions {
   display: flex;

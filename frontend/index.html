@@ -507,16 +507,21 @@
             <span class="job-confirm-badge">Verified</span>
           </div>
           <p class="job-confirm-address" id="jobConfirmAddress"></p>
-          <div class="job-confirm-financial">
-            <div class="job-confirm-financial-col">
+          <div class="job-confirm-gst-toggle-wrap job-confirm-gst-toggle-wrap--exc" id="jobConfirmGstToggleWrap" role="group" aria-label="Show amounts">
+            <button type="button" class="job-confirm-gst-toggle-option job-confirm-gst-toggle--exc is-selected" id="jobConfirmGstExc" aria-pressed="true">exc GST</button>
+            <button type="button" class="job-confirm-gst-toggle-option job-confirm-gst-toggle--inc" id="jobConfirmGstInc" aria-pressed="false">inc GST</button>
+          </div>
+          <!-- 3×2 grid: 3 columns (Current | + Quote | = New Total), each with label + value -->
+          <div class="job-confirm-financial" role="presentation" aria-label="Job total equation">
+            <div class="job-confirm-financial-col job-confirm-financial-col--current">
               <span class="job-confirm-financial-label">Current Job Total</span>
               <span class="job-confirm-financial-value job-confirm-financial-current" id="jobConfirmCurrent"></span>
             </div>
-            <div class="job-confirm-financial-col">
+            <div class="job-confirm-financial-col job-confirm-financial-col--quote">
               <span class="job-confirm-financial-label">+ This Quote</span>
               <span class="job-confirm-financial-value job-confirm-financial-quote" id="jobConfirmQuote"></span>
             </div>
-            <div class="job-confirm-financial-col">
+            <div class="job-confirm-financial-col job-confirm-financial-col--new">
               <span class="job-confirm-financial-label">= New Total</span>
               <span class="job-confirm-financial-value job-confirm-financial-new" id="jobConfirmNew"></span>
             </div>

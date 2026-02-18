@@ -1630,15 +1630,16 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
     const quoteTotalRaw = (quoteTotalEl?.textContent || '0').replace(/[^0-9.-]/g, '');
     const quoteTotal = parseFloat(quoteTotalRaw) || 0;
 
-    // ServiceM8 total_invoice_amount may be string "250.0000", number, 0, or null
+    // ServiceM8 total_invoice_amount is inc GST; quote total from display is exc GST
     const currentRaw = job.total_invoice_amount;
-    const currentAmount =
-      currentRaw === null || currentRaw === undefined || currentRaw === ''
-        ? 0
-        : parseFloat(String(currentRaw)) || 0;
-    const newAmount = Math.round((currentAmount + quoteTotal) * 100) / 100;
+    const currentInc = currentRaw === null || currentRaw === undefined || currentRaw === ''
+      ? 0
+      : parseFloat(String(currentRaw)) || 0;
+    const currentExc = Math.round((currentInc / 1.15) * 100) / 100;
+    const newExc = Math.round((currentExc + quoteTotal) * 100) / 100;
+    const newInc = Math.round(newExc * 1.15 * 100) / 100;
 
-    // JobConfirmationOverlay: populate and show
+    // JobConfirmationOverlay: store amounts and populate (default = exc GST)
     const overlay = document.getElementById('jobConfirmOverlay');
     const jobIdEl = document.getElementById('jobConfirmJobId');
     const addressEl = document.getElementById('jobConfirmAddress');
@@ -1647,12 +1648,33 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
     const newEl = document.getElementById('jobConfirmNew');
     const addIdEl = document.getElementById('jobConfirmAddId');
     const genId = job.generated_job_id || jobId;
+    // quoteInc = quoteExc * 1.15 for inc GST display when toggle is "inc"
+    const quoteInc = Math.round(quoteTotal * 1.15 * 100) / 100;
+    if (overlay) {
+      overlay.dataset.currentExc = String(currentExc);
+      overlay.dataset.currentInc = String(currentInc);
+      overlay.dataset.quoteExc = String(quoteTotal);
+      overlay.dataset.quoteInc = String(quoteInc);
+      overlay.dataset.newExc = String(newExc);
+      overlay.dataset.newInc = String(newInc);
+    }
     if (jobIdEl) jobIdEl.textContent = 'Job #' + genId;
     if (addressEl) addressEl.textContent = job.job_address || '—';
-    if (currentEl) currentEl.textContent = formatCurrency(currentAmount);
-    if (quoteEl) quoteEl.textContent = '+ ' + formatCurrency(quoteTotal);
-    if (newEl) newEl.textContent = formatCurrency(newAmount);
+    // Default: exc GST view (amount + smaller GST label)
+    if (currentEl) currentEl.innerHTML = escapeHtml(formatCurrency(currentExc)) + ' <span class="job-confirm-financial-gst">exc GST</span>';
+    if (quoteEl) quoteEl.innerHTML = '+ ' + escapeHtml(formatCurrency(quoteTotal)) + ' <span class="job-confirm-financial-gst">exc GST</span>';
+    if (newEl) newEl.innerHTML = escapeHtml(formatCurrency(newExc)) + ' <span class="job-confirm-financial-gst">exc GST</span>';
     if (addIdEl) addIdEl.textContent = genId;
+    // Reset toggle to exc and track color
+    const gstToggleWrap = document.getElementById('jobConfirmGstToggleWrap');
+    const gstExcBtn = document.getElementById('jobConfirmGstExc');
+    const gstIncBtn = document.getElementById('jobConfirmGstInc');
+    if (gstToggleWrap) {
+      gstToggleWrap.classList.remove('job-confirm-gst-toggle-wrap--inc');
+      gstToggleWrap.classList.add('job-confirm-gst-toggle-wrap--exc');
+    }
+    if (gstExcBtn) { gstExcBtn.classList.add('is-selected'); gstExcBtn.setAttribute('aria-pressed', 'true'); }
+    if (gstIncBtn) { gstIncBtn.classList.remove('is-selected'); gstIncBtn.setAttribute('aria-pressed', 'false'); }
 
     resetButton();
     if (overlay) {
@@ -1802,6 +1824,51 @@ function initJobConfirmationOverlay() {
     hideOverlay();
     // TODO: Create new job (emit onCreateNew)
   };
+
+  const gstToggleWrap = document.getElementById('jobConfirmGstToggleWrap');
+  const updateGstDisplay = (showExc) => {
+    if (!overlay) return;
+    const currentEl = document.getElementById('jobConfirmCurrent');
+    const quoteEl = document.getElementById('jobConfirmQuote');
+    const newEl = document.getElementById('jobConfirmNew');
+    const currentExc = parseFloat(overlay.dataset.currentExc) || 0;
+    const currentInc = parseFloat(overlay.dataset.currentInc) || 0;
+    const quoteExc = parseFloat(overlay.dataset.quoteExc) || 0;
+    const quoteInc = parseFloat(overlay.dataset.quoteInc) || 0;
+    const newExc = parseFloat(overlay.dataset.newExc) || 0;
+    const newInc = parseFloat(overlay.dataset.newInc) || 0;
+    if (gstToggleWrap) {
+      gstToggleWrap.classList.toggle('job-confirm-gst-toggle-wrap--exc', showExc);
+      gstToggleWrap.classList.toggle('job-confirm-gst-toggle-wrap--inc', !showExc);
+    }
+    const gstLabel = showExc ? 'exc GST' : 'inc GST';
+    if (showExc) {
+      if (currentEl) currentEl.innerHTML = escapeHtml(formatCurrency(currentExc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+      if (quoteEl) quoteEl.innerHTML = '+ ' + escapeHtml(formatCurrency(quoteExc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+      if (newEl) newEl.innerHTML = escapeHtml(formatCurrency(newExc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+    } else {
+      if (currentEl) currentEl.innerHTML = escapeHtml(formatCurrency(currentInc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+      if (quoteEl) quoteEl.innerHTML = '+ ' + escapeHtml(formatCurrency(quoteInc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+      if (newEl) newEl.innerHTML = escapeHtml(formatCurrency(newInc)) + ' <span class="job-confirm-financial-gst">' + gstLabel + '</span>';
+    }
+  };
+
+  const gstExcBtn = document.getElementById('jobConfirmGstExc');
+  const gstIncBtn = document.getElementById('jobConfirmGstInc');
+  gstExcBtn?.addEventListener('click', () => {
+    gstExcBtn.classList.add('is-selected');
+    gstExcBtn.setAttribute('aria-pressed', 'true');
+    gstIncBtn?.classList.remove('is-selected');
+    gstIncBtn?.setAttribute('aria-pressed', 'false');
+    updateGstDisplay(true);
+  });
+  gstIncBtn?.addEventListener('click', () => {
+    gstIncBtn.classList.add('is-selected');
+    gstIncBtn.setAttribute('aria-pressed', 'true');
+    gstExcBtn?.classList.remove('is-selected');
+    gstExcBtn?.setAttribute('aria-pressed', 'false');
+    updateGstDisplay(false);
+  });
 
   backdrop?.addEventListener('click', hideOverlay);
   closeBtn?.addEventListener('click', hideOverlay);
@@ -2531,8 +2598,11 @@ async function calculateAndDisplayQuote() {
       if (isIncomplete) {
         headerRow.classList.add('quote-row-incomplete-measurement');
       }
+      if (inputValue !== '' && !isIncomplete) {
+        headerRow.classList.add('quote-section-header--has-metres');
+      }
       headerRow.dataset.sectionHeader = profile;
-      headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"></td><td>—</td><td>—</td><td>—</td><td>${formatCurrency(headerTotal)}</td>`;
+      headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -2586,8 +2656,11 @@ async function calculateAndDisplayQuote() {
       if (isIncomplete) {
         headerRow.classList.add('quote-row-incomplete-measurement');
       }
+      if (inputValue !== '' && !isIncomplete) {
+        headerRow.classList.add('quote-section-header--has-metres');
+      }
       headerRow.dataset.sectionHeader = sectionHeaderId;
-      headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"></td><td>—</td><td>—</td><td>—</td><td>${formatCurrency(headerTotal)}</td>`;
+      headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -5561,8 +5634,13 @@ function initCanvas() {
       }
       input.removeEventListener('blur', onBlur);
       input.removeEventListener('keydown', onKeydown);
+      document.removeEventListener('mousedown', onDocumentMousedown);
     }
     function onBlur() { closeAndSave(); }
+    function onDocumentMousedown(ev) {
+      if (popover.contains(ev.target)) return;
+      closeAndSave();
+    }
     function onKeydown(ev) {
       if (ev.key === 'Enter') { ev.preventDefault(); closeAndSave(); }
       if (ev.key === 'Escape') {
@@ -5571,11 +5649,13 @@ function initCanvas() {
         popover.setAttribute('hidden', '');
         input.removeEventListener('blur', onBlur);
         input.removeEventListener('keydown', onKeydown);
+        document.removeEventListener('mousedown', onDocumentMousedown);
         draw();
       }
     }
     input.addEventListener('blur', onBlur, { once: true });
     input.addEventListener('keydown', onKeydown);
+    setTimeout(() => document.addEventListener('mousedown', onDocumentMousedown), 0);
   });
 
   window.addEventListener('resize', () => {

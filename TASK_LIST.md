@@ -34,7 +34,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **49** | **49.1–49.22** | **ServiceM8 OAuth 2.0 Auth setup** |
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
-| **51** | **51.1–51.6** | **Quote modal: measured materials header UX; Confirm Job popup exc gst** |
+| 51 | 51.7 | Confirm Job Details popup: further refine UI (spacing, alignment, typography) |
 
 ---
 
@@ -1120,18 +1120,19 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **Measured materials – header rows**
 
-- [ ] **51.1** Quote modal: Fix or clarify the total $ amount shown in **header rows** for measured materials (e.g. Gutter Length, Downpipe). Currently confusing; amount excludes screws — either make the label/calculation clear or adjust what is included so the total is understandable.
-- [ ] **51.2** Header row **Qty** field: In the inline editing field for metres, display **"m"** after the number (e.g. "3.5 m") so it is clear the value is quantity in metres.
-- [ ] **51.3** Header row (measured materials): When the Qty field is filled, apply **UI styling** so the row has internal vertical borders matching the row background, giving the appearance of **two cells** (product + qty | merged: markup%, Unit Price, Total). UI/visual only; no change to table structure or the inline qty field behaviour.
-- [ ] **51.4** Remove **"—"** placeholders from **header measured rows** only (leave placeholders in other row types if present).
+- [x] **51.1** Quote modal: Fix or clarify the total $ amount shown in **header rows** for measured materials (e.g. Gutter Length, Downpipe). Currently confusing; amount excludes screws — either make the label/calculation clear or adjust what is included so the total is understandable.
+- [x] **51.2** Header row **Qty** field: In the inline editing field for metres, display **"m"** after the number (e.g. "3.5 m") so it is clear the value is quantity in metres.
+- [x] **51.3** Header row (measured materials): When the Qty field is filled, apply **UI styling** so the row has internal vertical borders matching the row background, giving the appearance of **two cells** (product + qty | merged: markup%, Unit Price, Total). UI/visual only; no change to table structure or the inline qty field behaviour.
+- [x] **51.4** Remove **"—"** placeholders from **header measured rows** only (leave placeholders in other row types if present).
 
 **Measured materials – measurement behaviour**
 
-- [ ] **51.5** Measured materials measurement: When clicking into the length field from the canvas view, **clicking anywhere outside** (not only within the element borders) should commit the number and exit edit mode. Make it easier to click out after typing.
+- [x] **51.5** Measured materials measurement: When clicking into the length field from the canvas view, **clicking anywhere outside** (not only within the element borders) should commit the number and exit edit mode. Make it easier to click out after typing.
 
 **Confirm Job Details popup**
 
-- [ ] **51.6** Confirm Job Details popup: Display the job’s **total_invoice_amount** and also show that value **divided by 1.15** with an explicit **"exc gst"** label after both values (e.g. "X inc gst" and "Y exc gst").
+- [x] **51.6** Confirm Job Details popup: Display the job’s **total_invoice_amount** and also show that value **divided by 1.15** with an explicit **"exc gst"** label after both values (e.g. "X inc gst" and "Y exc gst").
+- [ ] **51.7** Confirm Job Details popup: Further refine UI (spacing, alignment, typography, responsive behaviour) as needed.
 
 ---
 
