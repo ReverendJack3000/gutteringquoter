@@ -11,7 +11,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - Branch: feature/downpipe-bin-sorting
 - Based on: main
 - Status: In Progress
-- Related Tasks: 26.6 (downpipe bin sorting)
+- Related Tasks: 26.6 (downpipe bin sorting), Section 40 (quote modal)
 
 ---
 
@@ -474,7 +474,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 **State and data structure**
 
 - [x] **27.1** Add `nextSequenceId` to state (auto-incrementing counter). When dropping a measurable item (gutter or downpipe), assign `el.sequenceId = state.nextSequenceId++` and `el.measuredLength = 0`. Persist sequenceId in element object.
-- [x] **27.2** Define measurable types: gutters (GUT-*-MAR-*M) and downpipes (DP-*-*, DPJ-*, dropper). Only these types receive sequence numbers and measurement badges.
+- [x] **27.2** Define measurable types: gutters (GUT-*-MAR-*M), main downpipes (DP-65-*, DP-80-*), droppers (dropper, DRP-*). Downpipe joiners (DPJ-*) are not measurable – priced each, no length (see 38.1).
 
 **Canvas visuals (badges)**
 
@@ -740,6 +740,40 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 38. Bug fixes: Measurement Deck, panel search, and panel profile filter
+
+- [x] **38.1** Downpipe joiners (DPJ-65, DPJ-80) must not be measurable: exclude DPJ-* from measurable types so they do not receive sequence numbers, measurement badges, or Measurement Deck cards. Joiners are priced each, not by length.
+
+*Section 38 status: 38.1 complete (DPJ excluded from isMeasurableElement).*
+
+---
+
+## 39. Gutter system header and screw grouping (downpipe-only / mixed repairs)
+
+*Context: The "Gutter System" header appears even when there are no gutter parts on the canvas. This happens because screws (SCR-SS) are treated as gutter system items and, when they have no profile, are assigned to profile 'SC' by fallback, creating a gutter group. See `docs/ANALYSIS_GUTTER_HEADER_DOWNPIPE_ONLY.md` for investigation.*
+
+- [x] **39.1** Confirm root cause: screws (SCR-SS) create a gutter group when gutterGroups is empty via fallback `Object.keys(gutterGroups)[0] || 'SC'` in `frontend/app.js` (approx lines 1644–1672). Key: `isGutterSystemItem` includes SCR-SS; `getProfileFromAssetId('SCR-SS')` returns null; fallback creates gutterGroups['SC'] with screws as sole child → header renders. See `docs/ANALYSIS_GUTTER_HEADER_DOWNPIPE_ONLY.md`.
+- [x] **39.2** Only show "Gutter System" header when there are gutter or bracket parts. Do not create/render gutter groups for screws alone (e.g. when gutterGroups is empty, send SCR-SS to ungrouped or dedicated bucket; only add SCR-SS to gutterGroups when a group already exists).
+- [x] **39.3** Downpipe-only: When there are downpipes but no gutters, show screws under a "Downpipe" sub-header (and optionally clips there; decide screws-only vs screws+clips under that header per `docs/PLAN_SECTION_39_GUTTER_HEADER_DOWNPIPE.md`).
+- [x] **39.4** Mixed repair (gutters + downpipes): When there are both gutter and downpipe parts, show screws as a separate standalone row with product column label "(brackets & clips)" – not nested under either gutter or downpipe header.
+
+*Section 39 status: Complete. Scenario detection from materials; SCR-SS to standaloneScrews when mixed or downpipe-only; gutter header only when group has GUT/BRK; Downpipe sub-header + screws for downpipe-only; "(brackets & clips)" row for mixed. Follow-up: Gutter/Downpipe headers renamed to "Gutter Length" / "Downpipe 65mm Length"; one filled header auto-populates that section (preserved headers).*
+
+---
+
+## 40. Quote modal: width, markup column, row remove (X)
+
+*Context: Improve the quote modal so it is 50% wider; show and allow in-line editing of the Markup % column for parts; and allow removing a quote line from the table via a light red X on hover (removes row from quote only, does not affect the canvas).*
+
+- [x] **40.1** Make the quote modal 50% wider: update `.quote-modal-content` width so the modal is half again as wide (e.g. min-width and max-width × 1.5). See `docs/PLAN_QUOTE_MODAL_40.md` for file/line references.
+- [x] **40.2** Add the Markup column with in-line editing for parts: show the Markup % column (not only in Edit Pricing mode) and render an editable input (or editable span) per part row so users can change markup inline; recalc unit price and line total when markup changes. See plan for current markup/cost visibility and row build locations.
+- [x] **40.3** Display a light red X on the far right of the Total cell when that row is hovered. The X is only visible on hover; it does not appear for section header rows (Gutter Length, Downpipe 65mm Length, etc.). See plan for Total cell and row structure.
+- [x] **40.4** Wire the red X to be clickable: on click, remove that row from the quote table and recalc totals (and optionally trigger `calculateAndDisplayQuote()` or update materials subtotal from remaining rows). This removes the line from the quote only; it does not remove or change any element on the canvas.
+
+*Section 40 status: Complete. Follow-up (bugfix): ensure modal width and Markup column are visible; X must be a standalone character (no button border/fill), visible only on row hover, black → red on X hover.*
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Added: 7.11 (flip H/V), 14.3 (undo blueprint upload + element move), 28.3 (Delete all elements), 26.6 (downpipe bin sort), 10.8 (local server), 22.28 (ServiceM8 job number field), Section 33 (save/load project files), Section 34 (auth, multi-tenancy, per-user saved files), Section 35 (app views: login/canvas/products navigation – to implement in feature branch), Section 37 (Product Library: archive UX, sort, filters, search, upload validation).*
+*Last updated: Feb 2026. Added: Section 40 (quote modal: 50% wider, markup column inline edit, row remove X); plan in docs/PLAN_QUOTE_MODAL_40.md. Section 39 follow-up: Gutter Length / Downpipe Length headers, one-header auto-populate.*

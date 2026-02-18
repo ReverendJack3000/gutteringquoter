@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Quote: Downpipe section hierarchy and mixed screw label – 2026-02
+
+- **Symptom:** Downpipe section showed screws first, then downpipes/clips in a flat order; no metres input or incomplete state like Gutter System; mixed quote showed "(brackets & clips)" without "Screws" and screws nested under gutter.
+- **Cause:** Section 39 implemented a simple "Downpipe" header + screws only; downpipes and clips stayed in ungrouped; no per-size header with metres or bin-sort; mixed screw label was abbreviated.
+- **Fix:** (1) Group DP-*, SCL-*, ACL-* by size into `downpipeGroups`; sort children downpipes first then clips. (2) Render per-size "Downpipe 65mm (Metres?)" header with `.quote-header-metres-input` and `quote-row-incomplete-measurement` when empty (same as Gutter). (3) `getElementsFromQuoteTable` reads `data-section-header="downpipe-65"` / `downpipe-80`, emits bin-packed downpipes, skips child DP rows when header has length. (4) Mixed screw row label: "Screws (brackets & clips)". (5) Downpipe-only: screws nested after downpipes and clips under Downpipe section.
+
+---
+
 ## Bracket/screw lines not showing in quote – 2026-02
 
 - **Symptom:** Quote modal shows gutters and totals, but 1 bracket per 400 mm gutter and 3 screws per bracket are not listed as line items (even though backend applies the rule).

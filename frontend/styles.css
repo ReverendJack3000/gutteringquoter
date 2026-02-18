@@ -1680,18 +1680,21 @@ body {
   background: rgba(0, 0, 0, 0.6);
 }
 
-.quote-modal-content {
+/* Quote modal content: 50% wider than original 600/800 (Section 40.1); padding so table is contained */
+.quote-modal-content,
+#quoteModal .quote-modal-content {
   position: relative;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  min-width: 600px;
-  max-width: 800px;
+  min-width: 900px;
+  max-width: 1200px;
+  width: 90vw;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 0 20px;
+  padding: 0 24px 20px;
 }
 
 .quote-modal-header {
@@ -1769,16 +1772,62 @@ body {
 .quote-parts-table th:nth-child(6),
 .quote-parts-table td:nth-child(6) { width: 14%; }
 
-/* View mode: hide cost and markup columns until edit mode */
-.quote-parts-table .quote-col-cost,
-.quote-parts-table .quote-col-markup { display: none; }
-.quote-parts-table td:nth-child(3),
-.quote-parts-table td:nth-child(4) { display: none; }
+/* View mode: hide cost column until edit mode; markup column always visible (Section 40.2) */
+.quote-parts-table .quote-col-cost { display: none !important; }
+.quote-parts-table td:nth-child(3) { display: none !important; }
+/* Force Markup column visible in view mode (overrides any cached or conflicting rule) */
+#quotePartsTable .quote-col-markup,
+#quotePartsTable th:nth-child(4),
+#quotePartsTable td:nth-child(4) { display: table-cell !important; }
 
 .quote-parts-table.quote-parts-table--editing .quote-col-cost,
-.quote-parts-table.quote-parts-table--editing .quote-col-markup { display: table-cell; }
+.quote-parts-table.quote-parts-table--editing .quote-col-markup { display: table-cell !important; }
 .quote-parts-table.quote-parts-table--editing td:nth-child(3),
-.quote-parts-table.quote-parts-table--editing td:nth-child(4) { display: table-cell; }
+.quote-parts-table.quote-parts-table--editing td:nth-child(4) { display: table-cell !important; }
+
+/* Markup inline input (view mode) – compact so column doesn’t widen */
+.quote-parts-table td .quote-input-markup-inline {
+  width: 4em;
+  min-width: 3em;
+  padding: 2px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.quote-parts-table td .quote-input-markup-inline:focus {
+  border-color: #007aff;
+  outline: none;
+}
+.quote-parts-table td .quote-markup-percent-suffix {
+  margin-left: 2px;
+  color: #555;
+}
+
+/* Row remove X: standalone character; visibility controlled by JS row-hover class (Section 40.3) */
+.quote-row-remove-x {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #1a1a1a;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0;
+  vertical-align: middle;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+/* Show X only when row has hover class (set by JS for reliable hover detection) */
+.quote-parts-table tbody tr.quote-row-hovered .quote-row-remove-x {
+  opacity: 1;
+}
+.quote-parts-table tbody tr:hover .quote-row-remove-x {
+  opacity: 1;
+}
+.quote-row-remove-x:hover {
+  color: #c62828;
+}
 
 .quote-parts-table.quote-parts-table--editing td input.quote-input {
   width: 100%;
