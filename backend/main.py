@@ -472,6 +472,26 @@ def api_servicem8_disconnect(user_id: Any = Depends(get_current_user_id)):
     return {"success": True}
 
 
+@app.get("/api/servicem8/jobs")
+def api_servicem8_job_by_generated_id(
+    generated_job_id: str = Query(..., min_length=1, max_length=20),
+    user_id: Any = Depends(get_current_user_id),
+):
+    """
+    Fetch a ServiceM8 job by generated_job_id (job number).
+    Returns job_address, total_invoice_amount, and uuid for confirmation UI.
+    """
+    job = sm8.fetch_job_by_generated_id(str(user_id), generated_job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    return {
+        "uuid": job.get("uuid"),
+        "generated_job_id": job.get("generated_job_id"),
+        "job_address": job.get("job_address") or "",
+        "total_invoice_amount": job.get("total_invoice_amount"),
+    }
+
+
 # Serve static frontend and assets (must be after API routes)
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 INDEX_HTML = FRONTEND_DIR / "index.html"

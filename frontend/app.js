@@ -1324,9 +1324,10 @@ function initQuoteModal() {
         return;
       }
       if (servicem8AddToJobBtn.classList.contains('quote-servicem8-btn--loading')) return;
-      runAddToJobSequence(servicem8AddToJobBtn);
+      runAddToJobLookupAndConfirm(servicem8AddToJobBtn, jobId);
     });
   }
+  initJobConfirmationOverlay();
 
   const btnCopy = document.getElementById('quoteCopyBtn');
   btnCopy?.addEventListener('click', () => copyQuoteToClipboard());
@@ -1467,36 +1468,114 @@ function updateServicem8InputState() {
 }
 
 /**
- * Add to Job click sequence: text → spinner (~800ms) → checkmark (~1000ms) → text. Button width kept stable.
- * TODO: Wire this to the ServiceM8 API response (Success/Error) after deployment.
+ * Add to Job: lookup job by generated_job_id, then show confirmation modal with job details.
+ * Confirmation shows job_address, total_invoice_amount, and before→after amounts.
+ * "Add to current Job" and "Make new job" buttons close the modal (no action yet).
  */
-function runAddToJobSequence(btn) {
-  if (!btn) return;
+async function runAddToJobLookupAndConfirm(btn, jobId) {
+  if (!btn || !authState.token) return;
   btn.disabled = true;
   btn.classList.add('quote-servicem8-btn--loading');
 
-  // Phase 1: text gone (handled by --loading class)
-  // Phase 2: spinner visible for ~800ms
-  const spinnerMs = 800;
-  const checkmarkMs = 1000;
+  const feedback = document.getElementById('servicem8Feedback');
+  const resetButton = () => {
+    btn.classList.remove('quote-servicem8-btn--loading', 'quote-servicem8-btn--done');
+    btn.disabled = false;
+  };
 
-  setTimeout(() => {
-    btn.classList.remove('quote-servicem8-btn--loading');
-    btn.classList.add('quote-servicem8-btn--done');
-    // Phase 3: checkmark for ~1000ms
-    setTimeout(() => {
-      btn.classList.remove('quote-servicem8-btn--done');
-      btn.disabled = false;
-      // Phase 4: text visible again (default state)
-      // Feedback: reveal only after sequence complete (fade + slide). TODO: Wire to ServiceM8 API response (Success/Error) after deployment.
-      const feedback = document.getElementById('servicem8Feedback');
+  try {
+    const resp = await fetch(
+      '/api/servicem8/jobs?generated_job_id=' + encodeURIComponent(jobId),
+      { headers: { 'Authorization': 'Bearer ' + authState.token } }
+    );
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      const msg = resp.status === 404
+        ? 'Job not found. Check the job number and try again.'
+        : (typeof data.detail === 'string' ? data.detail : 'Job lookup failed.');
       if (feedback) {
-        feedback.textContent = 'Success';
-        feedback.classList.remove('quote-servicem8-feedback--error', 'quote-servicem8-feedback--hidden');
-        feedback.classList.add('quote-servicem8-feedback--success', 'quote-servicem8-feedback--visible');
+        feedback.textContent = msg;
+        feedback.classList.remove('quote-servicem8-feedback--success', 'quote-servicem8-feedback--hidden');
+        feedback.classList.add('quote-servicem8-feedback--error', 'quote-servicem8-feedback--visible');
       }
-    }, checkmarkMs);
-  }, spinnerMs);
+      resetButton();
+      return;
+    }
+    const job = await resp.json();
+
+    // Get quote total from display (strip $ and parse)
+    const quoteTotalEl = document.getElementById('quoteTotalDisplay');
+    const quoteTotalRaw = (quoteTotalEl?.textContent || '0').replace(/[^0-9.-]/g, '');
+    const quoteTotal = parseFloat(quoteTotalRaw) || 0;
+
+    // ServiceM8 total_invoice_amount may be string "250.0000", number, 0, or null
+    const currentRaw = job.total_invoice_amount;
+    const currentAmount =
+      currentRaw === null || currentRaw === undefined || currentRaw === ''
+        ? 0
+        : parseFloat(String(currentRaw)) || 0;
+    const newAmount = Math.round((currentAmount + quoteTotal) * 100) / 100;
+
+    // JobConfirmationOverlay: populate and show
+    const overlay = document.getElementById('jobConfirmOverlay');
+    const jobIdEl = document.getElementById('jobConfirmJobId');
+    const addressEl = document.getElementById('jobConfirmAddress');
+    const currentEl = document.getElementById('jobConfirmCurrent');
+    const quoteEl = document.getElementById('jobConfirmQuote');
+    const newEl = document.getElementById('jobConfirmNew');
+    const addIdEl = document.getElementById('jobConfirmAddId');
+    const genId = job.generated_job_id || jobId;
+    if (jobIdEl) jobIdEl.textContent = 'Job #' + genId;
+    if (addressEl) addressEl.textContent = job.job_address || '—';
+    if (currentEl) currentEl.textContent = formatCurrency(currentAmount);
+    if (quoteEl) quoteEl.textContent = '+ ' + formatCurrency(quoteTotal);
+    if (newEl) newEl.textContent = formatCurrency(newAmount);
+    if (addIdEl) addIdEl.textContent = genId;
+
+    resetButton();
+    if (overlay) {
+      overlay.removeAttribute('hidden');
+      overlay.dataset.jobUuid = job.uuid || '';
+    }
+  } catch (err) {
+    console.error('Add to Job lookup failed', err);
+    if (feedback) {
+      feedback.textContent = 'Network error. Try again.';
+      feedback.classList.remove('quote-servicem8-feedback--success', 'quote-servicem8-feedback--hidden');
+      feedback.classList.add('quote-servicem8-feedback--error', 'quote-servicem8-feedback--visible');
+    }
+    resetButton();
+  }
+}
+
+/**
+ * JobConfirmationOverlay: onConfirm, onCreateNew, onClose.
+ * Wire backdrop, X, Add to Job, Create New Job. (No actual add/create yet.)
+ */
+function initJobConfirmationOverlay() {
+  const overlay = document.getElementById('jobConfirmOverlay');
+  const backdrop = document.getElementById('jobConfirmBackdrop');
+  const closeBtn = document.getElementById('jobConfirmClose');
+  const addBtn = document.getElementById('jobConfirmAddBtn');
+  const createNewBtn = document.getElementById('jobConfirmCreateNew');
+
+  const hideOverlay = () => {
+    if (overlay) overlay.hidden = true;
+  };
+
+  const handleConfirm = () => {
+    hideOverlay();
+    // TODO: Add materials to job (emit onConfirm)
+  };
+  const handleCreateNew = () => {
+    hideOverlay();
+    // TODO: Create new job (emit onCreateNew)
+  };
+
+  backdrop?.addEventListener('click', hideOverlay);
+  closeBtn?.addEventListener('click', hideOverlay);
+  addBtn?.addEventListener('click', handleConfirm);
+  createNewBtn?.addEventListener('click', handleCreateNew);
 }
 
 /**

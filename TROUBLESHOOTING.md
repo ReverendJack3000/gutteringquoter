@@ -223,6 +223,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ServiceM8 OAuth: Scope change requires reconnect – 2026-02
+
+- **Symptom:** New scopes (manage_job_materials, create_jobs, etc.) are not available; job lookup or Add to Job fails with permission errors.
+- **Cause:** OAuth tokens are granted with the scopes requested at connect time. When scopes are updated in `backend/app/servicem8.py` (DEFAULT_SCOPES), existing tokens still have the old scopes.
+- **Fix:** User must **Disconnect ServiceM8** (profile menu), then **Connect ServiceM8** again to re-authorize with the new scopes. Store Connect Activation URL remains unchanged.
+
+---
+
 ## ServiceM8 OAuth: Menu button disappears after successful connection – 2026-02
 
 - **Symptom:** After successfully connecting ServiceM8 (redirected back with `?servicem8=connected`), the "Connect ServiceM8" menu item disappears from the profile dropdown instead of changing to "Disconnect ServiceM8".

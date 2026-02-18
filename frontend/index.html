@@ -499,8 +499,38 @@
             <span class="quote-servicem8-btn-spinner" aria-hidden="true"></span>
             <span class="quote-servicem8-btn-done" aria-hidden="true">✅</span>
           </button>
-          <!-- TODO: Wire this to the ServiceM8 API response (Success/Error) after deployment. -->
           <span id="servicem8Feedback" class="quote-servicem8-feedback quote-servicem8-feedback--success quote-servicem8-feedback--hidden" aria-live="polite">Success</span>
+        </div>
+      </div>
+      <!-- JobConfirmationOverlay: centered over Quote modal; onConfirm, onCreateNew, onClose -->
+      <div class="job-confirm-overlay" id="jobConfirmOverlay" role="dialog" aria-labelledby="jobConfirmTitle" aria-modal="true" hidden>
+        <div class="job-confirm-backdrop" id="jobConfirmBackdrop"></div>
+        <div class="job-confirm-card">
+          <button type="button" class="job-confirm-close" id="jobConfirmClose" aria-label="Cancel">×</button>
+          <h3 id="jobConfirmTitle" class="job-confirm-header">Confirm Job Details</h3>
+          <div class="job-confirm-validation">
+            <span class="job-confirm-job-id" id="jobConfirmJobId">Job #54</span>
+            <span class="job-confirm-badge">Verified</span>
+          </div>
+          <p class="job-confirm-address" id="jobConfirmAddress"></p>
+          <div class="job-confirm-financial">
+            <div class="job-confirm-financial-col">
+              <span class="job-confirm-financial-label">Current Job Total</span>
+              <span class="job-confirm-financial-value job-confirm-financial-current" id="jobConfirmCurrent"></span>
+            </div>
+            <div class="job-confirm-financial-col">
+              <span class="job-confirm-financial-label">+ This Quote</span>
+              <span class="job-confirm-financial-value job-confirm-financial-quote" id="jobConfirmQuote"></span>
+            </div>
+            <div class="job-confirm-financial-col">
+              <span class="job-confirm-financial-label">= New Total</span>
+              <span class="job-confirm-financial-value job-confirm-financial-new" id="jobConfirmNew"></span>
+            </div>
+          </div>
+          <div class="job-confirm-actions">
+            <button type="button" class="job-confirm-create-new" id="jobConfirmCreateNew">Create New Job Instead</button>
+            <button type="button" class="job-confirm-add-btn" id="jobConfirmAddBtn">Add to Job #<span id="jobConfirmAddId"></span></button>
+          </div>
         </div>
       </div>
       <div id="quoteError" class="quote-error" role="alert" hidden></div>
