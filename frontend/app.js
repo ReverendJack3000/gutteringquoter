@@ -3363,14 +3363,18 @@ async function loadDiagramImageForDrop(url) {
  * 3. This ensures black lines get the color, transparent/white areas stay transparent
  * 
  * Returns a canvas element that can be drawn directly, or null if color is null (use originalImage instead).
+ * Uses a higher resolution (TINT_RESOLUTION_SCALE) so tinted SVG/elements stay sharp when scaled on the main canvas (Task 19.12).
  */
+const TINT_RESOLUTION_SCALE = 4;
 function createTintedCanvas(originalImage, color, width, height, elementId = null) {
   if (!color || !originalImage) return null;
+  const tw = Math.max(1, Math.round(width * TINT_RESOLUTION_SCALE));
+  const th = Math.max(1, Math.round(height * TINT_RESOLUTION_SCALE));
   
   try {
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = tw;
+    canvas.height = th;
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) {
       console.error('[createTintedCanvas] Failed to get 2d context', { elementId, width, height });
@@ -3423,17 +3427,15 @@ function createTintedCanvas(originalImage, color, width, height, elementId = nul
     }
     
     // Step 1: Clear to fully transparent (ensures clean alpha channel)
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, tw, th);
     
     // Step 2: Fill entire canvas with the target color
     ctx.fillStyle = color;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, tw, th);
     
-    // Step 3: Use destination-in to mask the color with the image's alpha channel
-    // 'destination-in' keeps the destination (our color fill) only where the source (image) is opaque
-    // Result: color appears only on black lines (opaque pixels), transparent areas stay transparent
+    // Step 3: Use destination-in to mask the color with the image's alpha channel (draw at higher res for sharpness)
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(originalImage, 0, 0, width, height);
+    ctx.drawImage(originalImage, 0, 0, tw, th);
     
     // Step 4: Reset composite operation for next draw
     ctx.globalCompositeOperation = 'source-over';
@@ -4358,7 +4360,19 @@ function draw() {
       if (ghostRenderImage) {
         const gw = ghost.width * scale;
         const gh = ghost.height * scale;
+        const ghostTinted = ghost.color && ghost.tintedCanvas && ghostRenderImage === ghost.tintedCanvas;
+        let prevQE, prevQQ;
+        if (ghostTinted) {
+          prevQE = ctx.imageSmoothingEnabled;
+          prevQQ = ctx.imageSmoothingQuality;
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+        }
         ctx.drawImage(ghostRenderImage, -gw / 2, -gh / 2, gw, gh);
+        if (ghostTinted) {
+          ctx.imageSmoothingEnabled = prevQE;
+          ctx.imageSmoothingQuality = prevQQ;
+        }
       }
       ctx.restore();
     }
@@ -4376,7 +4390,19 @@ function draw() {
     if (renderImage) {
       const dw = el.width * scale;
       const dh = el.height * scale;
+      const isTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+      let prevSmoothingEnabled, prevSmoothingQuality;
+      if (isTinted) {
+        prevSmoothingEnabled = ctx.imageSmoothingEnabled;
+        prevSmoothingQuality = ctx.imageSmoothingQuality;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+      }
       ctx.drawImage(renderImage, -dw / 2, -dh / 2, dw, dh);
+      if (isTinted) {
+        ctx.imageSmoothingEnabled = prevSmoothingEnabled;
+        ctx.imageSmoothingQuality = prevSmoothingQuality;
+      }
     }
     ctx.restore();
   });
@@ -5619,6 +5645,10 @@ function initCanvas() {
     state.badgeLengthEditElementId = el.id;
     input.focus();
 
+    function removeOutsideListeners() {
+      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('pointerdown', onOutside, true);
+    }
     function closeAndSave() {
       const id = state.badgeLengthEditElementId;
       state.badgeLengthEditElementId = null;
@@ -5634,11 +5664,13 @@ function initCanvas() {
       }
       input.removeEventListener('blur', onBlur);
       input.removeEventListener('keydown', onKeydown);
-      document.removeEventListener('mousedown', onDocumentMousedown);
+      removeOutsideListeners();
     }
     function onBlur() { closeAndSave(); }
-    function onDocumentMousedown(ev) {
+    function onOutside(ev) {
       if (popover.contains(ev.target)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
       closeAndSave();
     }
     function onKeydown(ev) {
@@ -5649,13 +5681,14 @@ function initCanvas() {
         popover.setAttribute('hidden', '');
         input.removeEventListener('blur', onBlur);
         input.removeEventListener('keydown', onKeydown);
-        document.removeEventListener('mousedown', onDocumentMousedown);
+        removeOutsideListeners();
         draw();
       }
     }
     input.addEventListener('blur', onBlur, { once: true });
     input.addEventListener('keydown', onKeydown);
-    setTimeout(() => document.addEventListener('mousedown', onDocumentMousedown), 0);
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('pointerdown', onOutside, true);
   });
 
   window.addEventListener('resize', () => {
@@ -5962,7 +5995,19 @@ function initExport() {
           ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
           const ew = el.width * scale;
           const eh = el.height * scale;
+          const exportTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+          let prevExQe, prevExQq;
+          if (exportTinted) {
+            prevExQe = ex.imageSmoothingEnabled;
+            prevExQq = ex.imageSmoothingQuality;
+            ex.imageSmoothingEnabled = true;
+            ex.imageSmoothingQuality = 'high';
+          }
           ex.drawImage(renderImage, -ew / 2, -eh / 2, ew, eh);
+          if (exportTinted) {
+            ex.imageSmoothingEnabled = prevExQe;
+            ex.imageSmoothingQuality = prevExQq;
+          }
           ex.restore();
         }
       }

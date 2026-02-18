@@ -8,8 +8,12 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/51-8-19-12
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 51.8 Measured materials: any click away should commit length
+  - [x] 19.12 SVG elements blurry when colour changed
 
 **Uncompleted tasks (by section):**
 
@@ -34,7 +38,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **49** | **49.1–49.22** | **ServiceM8 OAuth 2.0 Auth setup** |
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
-| 51 | 51.7 | Confirm Job Details popup: further refine UI (spacing, alignment, typography) |
+| 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
+| 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 
 ---
 
@@ -298,6 +303,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **19.9** Fix layer ordering: ensure blueprint layer always added to layers array; prevent `state.blueprintTransform` mutation during color changes.
 - [x] **19.10** Handle opaque assets: detect fully opaque assets in `createTintedCanvas`, warn user or switch to luminance-based tinting.
 - [x] **19.11** Improve error recovery: fallback to `originalImage` if `createTintedCanvas` fails; show user-friendly error message.
+- [x] **19.12** Changing colour of SVG elements makes them extremely blurry until restored to original; fix tinting/rendering so coloured elements stay sharp.
 
 ---
 
@@ -1128,6 +1134,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Measured materials – measurement behaviour**
 
 - [x] **51.5** Measured materials measurement: When clicking into the length field from the canvas view, **clicking anywhere outside** (not only within the element borders) should commit the number and exit edit mode. Make it easier to click out after typing.
+- [x] **51.8** Measured materials measurement: When editing the length from the canvas view, **any click away** (outside the popover) should commit the number and close; currently the user has to click within the element borders. Fix so any click away enters the number and exits edit mode.
 
 **Confirm Job Details popup**
 
