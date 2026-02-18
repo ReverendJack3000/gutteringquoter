@@ -396,17 +396,15 @@ def api_delete_diagram(diagram_id: str, user_id: Any = Depends(get_current_user_
 @app.get("/api/servicem8/oauth/authorize")
 def api_servicem8_authorize(user_id: Any = Depends(get_current_user_id)):
     """
-    Start ServiceM8 OAuth flow. Requires Bearer token.
-    Redirects user to ServiceM8 authorize URL with state containing user_id.
-    
-    For internal use: redirect_uri is omitted from authorize request (ServiceM8 Store Connect
-    UI doesn't allow entering it). redirect_uri is still sent in token exchange.
+    Return the ServiceM8 OAuth authorize URL. Requires Bearer token.
+    Frontend must fetch this with Authorization header, then redirect the user to the returned URL.
+    (Browser navigation to this endpoint does not send Bearer token, so we return JSON, not a redirect.)
     """
     try:
         state = sm8.generate_state(str(user_id))
         # Omit redirect_uri for internal use (optional per ServiceM8 docs)
         url = sm8.build_authorize_url(state, include_redirect_uri=False)
-        return RedirectResponse(url=url, status_code=302)
+        return {"url": url}
     except ValueError as e:
         raise HTTPException(503, str(e))
 

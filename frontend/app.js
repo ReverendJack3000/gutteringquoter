@@ -5936,8 +5936,29 @@ function initServiceM8Menu() {
         showToolbarMessage('Failed to disconnect ServiceM8', 'error');
       }
     } else {
-      // Connect - redirect to authorize endpoint
-      window.location.href = '/api/servicem8/oauth/authorize';
+      // Connect: fetch authorize URL with Bearer token (browser nav would not send it)
+      try {
+        const resp = await fetch('/api/servicem8/oauth/authorize', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authState.token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || 'Failed to start ServiceM8 connection');
+        }
+        const data = await resp.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error('No URL returned');
+        }
+      } catch (e) {
+        console.error('Connect ServiceM8 failed:', e);
+        showToolbarMessage(e.message || 'Could not connect to ServiceM8. Please try again.', 'error');
+      }
     }
   });
 }
