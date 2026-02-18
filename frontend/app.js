@@ -1812,7 +1812,30 @@ function initJobConfirmationOverlay() {
         return;
       }
       hideOverlay();
-      showFeedback('Added to job successfully.', false);
+      const jobUuidForAttachment = payload.job_uuid;
+      const dataUrl = getExportCanvasDataURL();
+      if (dataUrl && jobUuidForAttachment) {
+        const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+        try {
+          const attachResp = await fetch('/api/servicem8/upload-job-attachment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + (authState.token || ''),
+            },
+            body: JSON.stringify({ job_uuid: jobUuidForAttachment, image_base64: base64 }),
+          });
+          if (!attachResp.ok) {
+            showFeedback('Added to job successfully. Blueprint could not be attached.', false);
+          } else {
+            showFeedback('Added to job successfully. Blueprint attached.', false);
+          }
+        } catch (_) {
+          showFeedback('Added to job successfully. Blueprint could not be attached.', false);
+        }
+      } else {
+        showFeedback('Added to job successfully.', false);
+      }
     } catch (err) {
       console.error('Add to Job failed', err);
       showFeedback('Network error. Try again.', true);
@@ -6017,6 +6040,83 @@ function initExport() {
     link.href = exportCanvas.toDataURL('image/png');
     link.click();
   });
+}
+
+/**
+ * Render current blueprint + elements to a PNG and return as data URL, or null if nothing to export.
+ * Used for ServiceM8 job attachment upload (same output as Export PNG).
+ * @returns {string|null} data URL (data:image/png;base64,...) or null
+ */
+function getExportCanvasDataURL() {
+  const { canvas, ctx, blueprintImage, elements, scale, offsetX, offsetY } = state;
+  if (!canvas || !ctx) return null;
+  if (!blueprintImage && elements.length === 0) return null;
+  const w = state.canvasWidth;
+  const h = state.canvasHeight;
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = w;
+  exportCanvas.height = h;
+  const ex = exportCanvas.getContext('2d');
+  if (!ex) return null;
+  const exportLayers = [];
+  if (blueprintImage && state.blueprintTransform) {
+    const bt = state.blueprintTransform;
+    exportLayers.push({ zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX, type: 'blueprint', bt, img: blueprintImage });
+  } else if (blueprintImage) {
+    const scaleFit = Math.min(w / blueprintImage.width, h / blueprintImage.height);
+    const ox = (w - blueprintImage.width * scaleFit) / 2;
+    const oy = (h - blueprintImage.height * scaleFit) / 2;
+    exportLayers.push({ zIndex: BLUEPRINT_Z_INDEX, type: 'blueprint-fit', img: blueprintImage, ox, oy, scaleFit });
+  }
+  elements.forEach((el) => {
+    exportLayers.push({ zIndex: el.zIndex != null ? el.zIndex : 0, type: 'element', element: el });
+  });
+  exportLayers.sort((a, b) => a.zIndex - b.zIndex);
+  exportLayers.forEach((layer) => {
+    if (layer.type === 'blueprint') {
+      const { bt, img } = layer;
+      const cx = offsetX + bt.x * scale + (bt.w * scale) / 2;
+      const cy = offsetY + bt.y * scale + (bt.h * scale) / 2;
+      ex.save();
+      ex.globalAlpha = bt.opacity ?? 1;
+      ex.translate(cx, cy);
+      ex.rotate(((bt.rotation || 0) * Math.PI) / 180);
+      ex.translate(-(bt.w * scale) / 2, -(bt.h * scale) / 2);
+      ex.drawImage(img, 0, 0, bt.w * scale, bt.h * scale);
+      ex.restore();
+    } else if (layer.type === 'blueprint-fit') {
+      const { img, ox, oy, scaleFit } = layer;
+      ex.drawImage(img, ox, oy, img.width * scaleFit, img.height * scaleFit);
+    } else if (layer.type === 'element') {
+      const el = layer.element;
+      const renderImage = getElementRenderImage(el);
+      if (renderImage) {
+        ex.save();
+        const cx = offsetX + el.x * scale + (el.width * scale) / 2;
+        const cy = offsetY + el.y * scale + (el.height * scale) / 2;
+        ex.translate(cx, cy);
+        ex.rotate((el.rotation * Math.PI) / 180);
+        ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+        const ew = el.width * scale;
+        const eh = el.height * scale;
+        const exportTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+        let prevExQe, prevExQq;
+        if (exportTinted) {
+          prevExQe = ex.imageSmoothingEnabled;
+          prevExQq = ex.imageSmoothingQuality;
+          ex.imageSmoothingEnabled = true;
+          ex.imageSmoothingQuality = 'high';
+        }
+        ex.drawImage(renderImage, -ew / 2, -eh / 2, ew, eh);
+        if (exportTinted) {
+          ex.imageSmoothingEnabled = prevExQe;
+          ex.imageSmoothingQuality = prevExQq;
+        }
+        ex.restore();
+      }
+    }
+  });
+  return exportCanvas.toDataURL('image/png');
 }
 
 /** Serializable diagram payload for API (no blueprintImageRef). */

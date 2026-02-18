@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 AUTHORIZE_URL = "https://go.servicem8.com/oauth/authorize"
 TOKEN_URL = "https://go.servicem8.com/oauth/access_token"
 
-# Scopes for quote sync (Add to Job) and future job/materials/schedule operations
+# Scopes for quote sync (Add to Job), attachments, and future job/materials/schedule operations
 DEFAULT_SCOPES = [
     "manage_job_contacts",
     "manage_schedule",
@@ -45,6 +45,7 @@ DEFAULT_SCOPES = [
     "read_inbox",
     "read_messages",
     "vendor_email",
+    "manage_attachments",
 ]
 
 
@@ -429,4 +430,41 @@ def add_job_note(access_token: str, job_uuid: str, note_text: str) -> tuple[bool
         return False, body or str(e)
     except Exception as e:
         logger.warning("ServiceM8 add job note failed: %s", e)
+        return False, str(e)
+
+
+def upload_job_attachment(
+    access_token: str,
+    job_uuid: str,
+    image_bytes: bytes,
+    *,
+    attachment_name: str = "Blueprint_Design.png",
+    file_type: str = ".png",
+) -> tuple[bool, Optional[str]]:
+    """
+    Upload a file as a ServiceM8 job attachment via multipart/form-data.
+    Requires OAuth scope: manage_attachments.
+    Returns (success, error_message).
+    """
+    base_url = "https://api.servicem8.com"
+    url = f"{base_url}/api_1.0/attachment.json"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    data = {
+        "related_object": "job",
+        "related_object_uuid": job_uuid,
+        "attachment_name": attachment_name,
+        "file_type": file_type,
+    }
+    files = {"file": (attachment_name, image_bytes, "image/png")}
+    try:
+        with httpx.Client() as client:
+            resp = client.post(url, data=data, files=files, headers=headers)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 upload job attachment failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 upload job attachment failed: %s", e)
         return False, str(e)

@@ -81,6 +81,12 @@ class AddToJobRequest(BaseModel):
     people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
 
 
+class UploadJobAttachmentRequest(BaseModel):
+    job_uuid: str = Field(..., min_length=1, description="ServiceM8 job UUID to attach the file to")
+    image_base64: str = Field(..., min_length=1, description="PNG image as base64 string (no data URL prefix)")
+    attachment_name: Optional[str] = Field(None, max_length=127, description="Optional filename for the attachment (default: Blueprint_Design.png)")
+
+
 app = FastAPI(
     title="Quote App API",
     description="Property photo → blueprint; Marley guttering repair plans. API-ready for integrations.",
@@ -556,6 +562,40 @@ def api_servicem8_add_to_job(
     if not ok:
         raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
 
+    return {"success": True}
+
+
+@app.post("/api/servicem8/upload-job-attachment")
+def api_servicem8_upload_job_attachment(
+    body: UploadJobAttachmentRequest,
+    user_id: Any = Depends(get_current_user_id),
+):
+    """
+    Upload the blueprint + elements PNG as an attachment to a ServiceM8 job.
+    Requires OAuth scope manage_attachments. Accepts base64-encoded PNG from the frontend.
+    """
+    tokens = sm8.get_tokens(str(user_id))
+    if not tokens:
+        raise HTTPException(401, "ServiceM8 not connected")
+    try:
+        image_bytes = base64.b64decode(body.image_base64, validate=True)
+    except Exception as e:
+        logger.warning("Upload job attachment: invalid base64: %s", e)
+        raise HTTPException(400, "Invalid image_base64")
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (max 10MB)")
+    attachment_name = (body.attachment_name or "Blueprint_Design.png").strip() or "Blueprint_Design.png"
+    if not attachment_name.lower().endswith(".png"):
+        attachment_name = attachment_name + ".png"
+    ok, err = sm8.upload_job_attachment(
+        tokens["access_token"],
+        body.job_uuid,
+        image_bytes,
+        attachment_name=attachment_name,
+        file_type=".png",
+    )
+    if not ok:
+        raise HTTPException(502, f"Failed to upload attachment: {err or 'unknown'}")
     return {"success": True}
 
 
