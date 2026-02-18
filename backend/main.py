@@ -544,13 +544,21 @@ def api_servicem8_add_to_job(
     if not ok:
         raise HTTPException(502, f"Failed to add job material: {err or 'unknown'}")
 
-    lines = [f"- [{e.name}] x {e.qty}" for e in body.elements]
+    def _fmt_qty(q: float) -> str:
+        return f"{q:g}"
+
+    def _fmt_hours(h: float) -> str:
+        h_fmt = f"{h:g}" if h == int(h) else f"{h}"
+        return f"{h_fmt} hour" if h == 1 else f"{h_fmt} hours"
+
+    lines = [f"- {e.name} x {_fmt_qty(e.qty)}" for e in body.elements]
     note_body = [
         body.user_name or "Quote App User",
         *lines,
-        f"Total Price = {body.quote_total:.2f}",
-        f"- Time used = {body.labour_hours}",
-        f"- Material Cost = {body.material_cost:.2f}",
+        "",
+        f"Total Price = ${body.quote_total:.2f} exc gst",
+        f"- Time used = {_fmt_hours(body.labour_hours)}",
+        f"- Material Cost = ${body.material_cost:.2f} exc gst",
     ]
     note_text = "\n".join(note_body)
     ok, err = sm8.add_job_note(tokens["access_token"], body.job_uuid, note_text)
