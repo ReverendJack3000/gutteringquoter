@@ -76,6 +76,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Railway Docker build: Pillow/pillow-heif dependency conflict – 2026-02
+
+- **Symptom:** Docker build fails with `ERROR: ResolutionImpossible` - `pillow-heif>=1.1.0 depends on pillow>=11.1.0` but `Pillow==11.0.0` is pinned in requirements.txt.
+- **Cause:** Version conflict: `pillow-heif` versions 1.1.0+ require Pillow >= 11.1.0, but requirements.txt pinned Pillow to exactly 11.0.0.
+- **Fix:** Update `backend/requirements.txt` to use `Pillow>=11.1.0` instead of `Pillow==11.0.0`. This allows pip to install a compatible Pillow version (11.1.0 or newer) that satisfies pillow-heif's dependency. Commit and redeploy.
+
+---
+
 ## Railway build: "npm: command not found" in Nixpacks build – 2026-02
 
 - **Symptom:** Railway (Nixpacks) build fails with `npm: command not found` in a step like `RUN npm ci`.
