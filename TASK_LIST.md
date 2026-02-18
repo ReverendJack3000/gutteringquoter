@@ -1056,10 +1056,11 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [x] **49.20** Link ServiceM8 OAuth connection to the authenticated user (e.g. Supabase user id → stored ServiceM8 tokens); provide UI for "Connect ServiceM8" and "Disconnect".
 - [x] **49.20.1** Add to Job confirmation flow: Enter Job # → GET job by generated_job_id → show confirmation modal with job_address, total_invoice_amount, before→after amounts → "Add to current Job" / "Make new job" (no action yet). Extended ServiceM8 scopes for future manage_job_materials, create_jobs, etc.
-- [ ] **49.21** Use access token for API calls when user adds materials to a ServiceM8 job: include `Authorization: Bearer {access_token}` (or `access_token` POST param per ServiceM8 docs).
-- [ ] **49.22** Wire 22.29: Use real ServiceM8 API responses to toggle Success/Error states in the Quote footer after Add to Job.
+- [x] **49.21** Use access token for API calls when user adds materials to a ServiceM8 job: POST jobmaterial and note via ServiceM8 API; wire Success/Error in Quote footer.
+- [x] **49.22** Wire 22.29: Use real ServiceM8 API responses to toggle Success/Error states in the Quote footer after Add to Job.
+- [ ] **49.23** Replace default material UUID (6129948b-4f79-4fc1-b611-23bbc4f9726b) with a more detailed bundle of per-product or per-profile ServiceM8 material UUIDs.
 
-*Section 49 status: OAuth 2.0 authentication complete and working (49.1–49.20). Backend routes: /api/servicem8/oauth/authorize (returns JSON URL), callback, status, disconnect. Frontend: Connect/Disconnect menu item with status check. Supabase table servicem8_oauth stores tokens per user. Token auto-refresh before expiry. Activation URL configured in Store Connect. Railway env vars set. Remaining: 49.21–49.22 (Add to Job API wiring - use tokens to call ServiceM8 API, wire Success/Error states). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+*Section 49 status: OAuth 2.0 authentication complete (49.1–49.20). Add to Job flow implemented: job lookup, confirmation overlay, POST jobmaterial + note to ServiceM8. Success/Error wired to Quote footer. Default material UUID for bundled line; 49.23 tracks per-product UUID bundle. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
 
 ---
 

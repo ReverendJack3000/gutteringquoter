@@ -359,3 +359,66 @@ def fetch_job_by_generated_id(user_id: str, generated_job_id: str) -> Optional[d
     except Exception as e:
         logger.warning("ServiceM8 job lookup failed for generated_job_id=%s: %s", filter_value, e)
         return None
+
+
+# Default material UUID for Add to Job bundled line. TODO: Replace with per-product/bundle mapping.
+ADD_TO_JOB_DEFAULT_MATERIAL_UUID = "6129948b-4f79-4fc1-b611-23bbc4f9726b"
+
+
+def add_job_material(
+    access_token: str,
+    job_uuid: str,
+    name: str,
+    quantity: str,
+    price: str,
+    cost: Optional[str] = None,
+    material_uuid: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """
+    POST to ServiceM8 jobmaterial.json.
+    Returns (success, error_message).
+    """
+    mat_uuid = material_uuid or ADD_TO_JOB_DEFAULT_MATERIAL_UUID
+    payload = {
+        "job_uuid": job_uuid,
+        "material_uuid": mat_uuid,
+        "name": name,
+        "quantity": quantity,
+        "price": price,
+    }
+    if cost is not None:
+        payload["cost"] = cost
+    try:
+        resp = make_api_request("POST", "/api_1.0/jobmaterial.json", access_token, json_data=payload)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 add job material failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 add job material failed: %s", e)
+        return False, str(e)
+
+
+def add_job_note(access_token: str, job_uuid: str, note_text: str) -> tuple[bool, Optional[str]]:
+    """
+    POST to ServiceM8 note.json. Links note to job via related_object.
+    Returns (success, error_message).
+    """
+    payload = {
+        "related_object": "job",
+        "related_object_uuid": job_uuid,
+        "note": note_text,
+    }
+    try:
+        resp = make_api_request("POST", "/api_1.0/note.json", access_token, json_data=payload)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 add job note failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 add job note failed: %s", e)
+        return False, str(e)

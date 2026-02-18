@@ -66,6 +66,21 @@ class UpdateDiagramRequest(BaseModel):
     thumbnailBase64: Optional[str] = None
 
 
+class AddToJobElement(BaseModel):
+    name: str = Field(..., min_length=1)
+    qty: float = Field(..., ge=0)
+
+
+class AddToJobRequest(BaseModel):
+    job_uuid: str = Field(..., min_length=1)
+    elements: list[AddToJobElement] = Field(..., min_length=1)
+    quote_total: float = Field(..., ge=0)
+    labour_hours: float = Field(..., ge=0)
+    material_cost: float = Field(..., ge=0)
+    user_name: str = Field("", description="Name of app user for note")
+    profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
+
+
 app = FastAPI(
     title="Quote App API",
     description="Property photo → blueprint; Marley guttering repair plans. API-ready for integrations.",
@@ -490,6 +505,55 @@ def api_servicem8_job_by_generated_id(
         "job_address": job.get("job_address") or "",
         "total_invoice_amount": job.get("total_invoice_amount"),
     }
+
+
+@app.post("/api/servicem8/add-to-job")
+def api_servicem8_add_to_job(
+    body: AddToJobRequest,
+    user_id: Any = Depends(get_current_user_id),
+):
+    """
+    Add materials and note to a ServiceM8 job.
+    POSTs job material (bundled line) and job note via ServiceM8 API.
+    """
+    tokens = sm8.get_tokens(str(user_id))
+    if not tokens:
+        raise HTTPException(401, "ServiceM8 not connected")
+    profile_label = "spouting"
+    if body.profile and body.profile.lower() == "stormcloud":
+        profile_label = "Storm Cloud"
+    elif body.profile and body.profile.lower() == "classic":
+        profile_label = "Classic"
+    material_name = f"{profile_label} repairs, labour & materials"
+    qty_str = "1"
+    price_str = f"{body.quote_total:.2f}"
+    cost_str = f"{body.material_cost:.2f}"
+    ok, err = sm8.add_job_material(
+        tokens["access_token"],
+        body.job_uuid,
+        material_name,
+        qty_str,
+        price_str,
+        cost=cost_str,
+    )
+    if not ok:
+        raise HTTPException(502, f"Failed to add job material: {err or 'unknown'}")
+
+    lines = [f"- [{e.name}] x {e.qty}" for e in body.elements]
+    note_body = [
+        body.user_name or "Quote App User",
+        *lines,
+        "",
+        f"Total Price = {body.quote_total:.2f}",
+        f"- Time used = {body.labour_hours}",
+        f"- Material Cost = {body.material_cost:.2f}",
+    ]
+    note_text = "\n".join(note_body)
+    ok, err = sm8.add_job_note(tokens["access_token"], body.job_uuid, note_text)
+    if not ok:
+        raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
+
+    return {"success": True}
 
 
 # Serve static frontend and assets (must be after API routes)

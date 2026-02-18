@@ -1536,6 +1536,8 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
     if (overlay) {
       overlay.removeAttribute('hidden');
       overlay.dataset.jobUuid = job.uuid || '';
+      const addBtnOverlay = document.getElementById('jobConfirmAddBtn');
+      if (addBtnOverlay) addBtnOverlay.disabled = false;
     }
   } catch (err) {
     console.error('Add to Job lookup failed', err);
@@ -1549,8 +1551,70 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
 }
 
 /**
- * JobConfirmationOverlay: onConfirm, onCreateNew, onClose.
- * Wire backdrop, X, Add to Job, Create New Job. (No actual add/create yet.)
+ * Build payload for Add to Job API from quote data.
+ * Returns { job_uuid, elements, quote_total, labour_hours, material_cost, user_name, profile } or null.
+ */
+function getAddToJobPayload(jobUuid) {
+  if (!jobUuid) return null;
+  const quoteTotalEl = document.getElementById('quoteTotalDisplay');
+  const labourHoursInput = document.getElementById('labourHoursInput');
+  const quoteTotalRaw = (quoteTotalEl?.textContent || '0').replace(/[^0-9.-]/g, '');
+  const quoteTotal = parseFloat(quoteTotalRaw) || 0;
+  const labourHours = parseFloat(labourHoursInput?.value) || 0;
+
+  let elements = [];
+  let materialCost = 0;
+  let profile = 'spouting';
+
+  if (lastQuoteData?.materials?.length) {
+    elements = lastQuoteData.materials.map((m) => ({ name: m.name || m.id, qty: m.qty || 0 }));
+    materialCost = lastQuoteData.materials.reduce((sum, m) => sum + (m.cost_price || 0) * (m.qty || 0), 0);
+    const hasStormCloud = lastQuoteData.materials.some((m) => /^(GUT-SC-|BRK-SC-)/i.test(m.id || ''));
+    const hasClassic = lastQuoteData.materials.some((m) => /^(GUT-CL-|BRK-CL-)/i.test(m.id || ''));
+    if (hasStormCloud) profile = 'stormcloud';
+    else if (hasClassic) profile = 'classic';
+  } else {
+    const tableBody = document.getElementById('quoteTableBody');
+    if (!tableBody) return null;
+    let hasSC = false;
+    let hasCL = false;
+    for (const row of tableBody.rows) {
+      if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true') continue;
+      const assetId = row.dataset.assetId;
+      if (!assetId) continue;
+      const product = state.products?.find((p) => p.id === assetId);
+      const name = getQuoteProductDisplayName(assetId, product?.name);
+      const qtyCell = row.cells[1];
+      const qtyInput = qtyCell?.querySelector('.quote-line-qty-input');
+      const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : (parseFloat(qtyCell?.textContent) || 0);
+      if (qty <= 0) continue;
+      elements.push({ name, qty });
+      const cost = parseFloat(row.dataset.costPrice) || 0;
+      materialCost += cost * qty;
+      if (/^(GUT-SC-|BRK-SC-)/i.test(assetId)) hasSC = true;
+      if (/^(GUT-CL-|BRK-CL-)/i.test(assetId)) hasCL = true;
+    }
+    if (hasSC) profile = 'stormcloud';
+    else if (hasCL) profile = 'classic';
+  }
+
+  if (elements.length === 0) return null;
+  materialCost = Math.round(materialCost * 100) / 100;
+  const userName = authState.user?.user_metadata?.full_name || authState.user?.email || authState.email || 'Quote App User';
+
+  return {
+    job_uuid: jobUuid,
+    elements,
+    quote_total: quoteTotal,
+    labour_hours: labourHours,
+    material_cost: materialCost,
+    user_name: userName,
+    profile,
+  };
+}
+
+/**
+ * JobConfirmationOverlay: onConfirm calls add-to-job API, onCreateNew, onClose.
  */
 function initJobConfirmationOverlay() {
   const overlay = document.getElementById('jobConfirmOverlay');
@@ -1558,15 +1622,52 @@ function initJobConfirmationOverlay() {
   const closeBtn = document.getElementById('jobConfirmClose');
   const addBtn = document.getElementById('jobConfirmAddBtn');
   const createNewBtn = document.getElementById('jobConfirmCreateNew');
+  const feedback = document.getElementById('servicem8Feedback');
 
   const hideOverlay = () => {
     if (overlay) overlay.hidden = true;
   };
 
-  const handleConfirm = () => {
-    hideOverlay();
-    // TODO: Add materials to job (emit onConfirm)
+  const showFeedback = (msg, isError) => {
+    if (!feedback) return;
+    feedback.textContent = msg;
+    feedback.classList.remove('quote-servicem8-feedback--success', 'quote-servicem8-feedback--error', 'quote-servicem8-feedback--hidden');
+    feedback.classList.add(isError ? 'quote-servicem8-feedback--error' : 'quote-servicem8-feedback--success', 'quote-servicem8-feedback--visible');
   };
+
+  const handleConfirm = async () => {
+    const jobUuid = overlay?.dataset?.jobUuid;
+    const payload = getAddToJobPayload(jobUuid);
+    if (!payload) {
+      showFeedback('No quote data to add.', true);
+      return;
+    }
+    addBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/servicem8/add-to-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (authState.token || ''),
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to add to job.';
+        showFeedback(msg, true);
+        addBtn.disabled = false;
+        return;
+      }
+      hideOverlay();
+      showFeedback('Added to job successfully.', false);
+    } catch (err) {
+      console.error('Add to Job failed', err);
+      showFeedback('Network error. Try again.', true);
+      addBtn.disabled = false;
+    }
+  };
+
   const handleCreateNew = () => {
     hideOverlay();
     // TODO: Create new job (emit onCreateNew)
