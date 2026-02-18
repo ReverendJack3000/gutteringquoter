@@ -8,11 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/panel-profile-filter-fix
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [ ] Panel profile/thumbnail filter bugs (getPanelProducts not using state.profileFilter; dropdown options vs backend)
+- Branch: main
+- Status: Stable
 
 ---
 
