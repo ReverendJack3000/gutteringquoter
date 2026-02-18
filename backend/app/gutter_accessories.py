@@ -9,6 +9,7 @@ Domain rules (billing):
 - Every saddle clip (SCL-65, SCL-80) requires 2 screws (SCR-SS)
 - Every adjustable clip (ACL-65, ACL-80) requires 2 screws (SCR-SS)
 - 1 clip per 1.2m of downpipe; use adjustable clips if any on canvas, else saddle clips
+- Downpipe stock lengths: 1.5m and 3m only (DP-65-1.5M, DP-65-3M, DP-80-1.5M, DP-80-3M)
 
 Inferred quantities are merged with manually placed items (summed by assetId).
 """
@@ -76,6 +77,12 @@ def _downpipe_clip_size(asset_id: str) -> Optional[str]:
     return None
 
 
+def _is_downpipe_main(asset_id: str) -> bool:
+    """True if asset is a main downpipe (DP-65-*, DP-80-*), not a joiner (DPJ-*)."""
+    a = (asset_id or "").strip().upper()
+    return (a.startswith("DP-65-") or a.startswith("DP-80-")) and not a.startswith("DPJ-")
+
+
 def expand_elements_with_gutter_accessories(
     elements: List[dict],
 ) -> List[dict]:
@@ -83,11 +90,24 @@ def expand_elements_with_gutter_accessories(
     Expand elements to include inferred brackets, screws, and downpipe clips.
     - Gutters: 1 bracket for any length + 1 per 400 mm (formula 1 + floor(length_mm/400)); use length_mm when provided (manual lengths), else product length × qty.
     - Downpipes: 1 clip per 1.2m; use adjustable clips if any ACL-* in request, else saddle clips.
+      When bin-packed, only elements with length_mm drive clips; sub-pieces without length_mm add no clips.
     elements: list of {assetId, quantity, length_mm?: number}
     Returns: merged list with same shape, quantities summed by assetId.
     """
     by_id: dict[str, float] = {}
     has_adjustable_clip = any(_is_adjustable_clip(e.get("assetId", "")) for e in elements)
+
+    sizes_with_length: set[str] = set()
+    for e in elements:
+        if _is_downpipe_main(e.get("assetId", "")):
+            lm = e.get("length_mm")
+            if lm is not None:
+                try:
+                    if float(lm) > 0:
+                        size = _downpipe_clip_size(e.get("assetId", "")) or "65"
+                        sizes_with_length.add(size)
+                except (TypeError, ValueError):
+                    pass
 
     for e in elements:
         asset_id = e.get("assetId", "")
@@ -118,7 +138,6 @@ def expand_elements_with_gutter_accessories(
             by_id[SCREW_PRODUCT_ID] = by_id.get(SCREW_PRODUCT_ID, 0) + screws_total
         elif _is_downpipe(asset_id):
             by_id[asset_id] = by_id.get(asset_id, 0) + qty
-            # 1 clip per 1.2m of downpipe; use ACL if any on canvas else SCL
             size = _downpipe_clip_size(asset_id) or "65"
             clip_id = f"ACL-{size}" if has_adjustable_clip else f"SCL-{size}"
             screws_per_clip = SCREWS_PER_ADJUSTABLE_CLIP if has_adjustable_clip else SCREWS_PER_SADDLE_CLIP
@@ -126,8 +145,7 @@ def expand_elements_with_gutter_accessories(
                 clips = max(1, math.ceil(length_mm_arg / CLIP_PER_DOWNPIPE_MM))
                 by_id[clip_id] = by_id.get(clip_id, 0) + clips
                 by_id[SCREW_PRODUCT_ID] = by_id.get(SCREW_PRODUCT_ID, 0) + clips * screws_per_clip
-            # If no length_mm, still ensure at least 1 clip per downpipe run
-            elif qty > 0:
+            elif qty > 0 and size not in sizes_with_length:
                 by_id[clip_id] = by_id.get(clip_id, 0) + qty
                 by_id[SCREW_PRODUCT_ID] = by_id.get(SCREW_PRODUCT_ID, 0) + qty * screws_per_clip
         elif _is_dropper(asset_id):

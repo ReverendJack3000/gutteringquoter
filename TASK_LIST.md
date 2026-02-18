@@ -8,8 +8,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/downpipe-bin-sorting
+- Based on: main
+- Status: In Progress
+- Related Tasks: 26.6 (downpipe bin sorting)
 
 ---
 
@@ -459,9 +461,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - [x] **26.3** Every dropper used requires 4 screws (SCR-SS): extend accessory logic to infer 4 × dropper quantity and add to screw total.
 - [x] **26.4** Every saddle clip (SCL-65, SCL-80) requires 2 screws: extend accessory logic to infer 2 × saddle clip quantity and add to screw total.
 - [x] **26.5** Every adjustable clip (ACL-65, ACL-80) requires 2 screws: extend accessory logic to infer 2 × adjustable clip quantity and add to screw total.
-- [ ] **26.6** Bin sorting logic for downpipes: implement length-based bin-pack or sort order for downpipes in quote/billing (e.g. standard lengths, grouping, or display order).
+- [x] **26.6** Bin sorting logic for downpipes: implement length-based bin-pack or sort order for downpipes in quote/billing (e.g. standard lengths, grouping, or display order). Stock lengths 1.5m and 3m only; 6m archived.
 
-*Section 26 status: 26.1, 26.3, 26.4, 26.5 complete. 26.2 (manual guttering distance entry UI) and 26.6 (downpipe bin sorting) pending.*
+*Section 26 status: 26.1, 26.3, 26.4, 26.5, 26.6 complete. 26.2 (manual guttering distance entry UI) pending.*
 
 ---
 

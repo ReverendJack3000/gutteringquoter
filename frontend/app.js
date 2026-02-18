@@ -136,8 +136,10 @@ function getChildSortOrder(assetId) {
 const QUOTE_PRODUCT_DISPLAY_OVERRIDES = {
   'GUT-SC-MAR-3M': 'Gutter: Storm Cloud Marley',
   'GUT-CL-MAR-3M': 'Gutter: Classic Marley',
-  'DP-65-3M': '65 MM downpipe',
-  'DP-80-3M': '80 MM downpipe',
+  'DP-65-1.5M': '65 MM downpipe 1.5m',
+  'DP-65-3M': '65 MM downpipe 3m',
+  'DP-80-1.5M': '80 MM downpipe 1.5m',
+  'DP-80-3M': '80 MM downpipe 3m',
 };
 function getQuoteProductDisplayName(assetId, fallbackName) {
   if (QUOTE_PRODUCT_DISPLAY_OVERRIDES[assetId]) return QUOTE_PRODUCT_DISPLAY_OVERRIDES[assetId];
@@ -146,6 +148,37 @@ function getQuoteProductDisplayName(assetId, fallbackName) {
 
 /** Available gutter stock lengths (mm). Used for bin-packing to minimize waste. */
 const GUTTER_STOCK_LENGTHS_MM = [5000, 3000, 1500];
+
+/** Downpipe pattern: DP-65-* or DP-80-* (1.5m, 3m only; 6m archived). */
+const DOWNPIPE_PATTERN = /^DP-(65|80)-(\d+(?:\.\d+)?)M$/i;
+
+/** Downpipe stock lengths (mm). 1.5m and 3m only. */
+const DOWNPIPE_STOCK_LENGTHS_MM = [3000, 1500];
+
+/** Product ID for a downpipe of given size (65|80) and length (mm). e.g. 65, 3000 -> DP-65-3M */
+function downpipeProductIdForLength(size, lengthMm) {
+  const m = lengthMm / 1000;
+  return `DP-${size}-${m}M`;
+}
+
+/** True if asset is a main downpipe (DP-65-*, DP-80-*), not a joiner (DPJ-*). */
+function isDownpipeElement(assetId) {
+  if (!assetId || typeof assetId !== 'string') return false;
+  const a = assetId.trim().toUpperCase();
+  return (a.startsWith('DP-65-') || a.startsWith('DP-80-')) && !a.startsWith('DPJ-');
+}
+
+/** Extract size (65|80) from downpipe asset ID, or null. */
+function getDownpipeSizeFromAssetId(assetId) {
+  const m = DOWNPIPE_PATTERN.exec(String(assetId || '').trim());
+  return m ? m[1] : null;
+}
+
+/** Get downpipe length in metres from asset ID (e.g. DP-65-3M -> 3). */
+function getDownpipeLengthMetres(assetId) {
+  const m = DOWNPIPE_PATTERN.exec(String(assetId || '').trim());
+  return m ? parseFloat(m[2]) : 0;
+}
 
 /** Product ID for a gutter of given profile and length (mm). e.g. 3000, "SC" -> GUT-SC-MAR-3M */
 function gutterProductIdForLength(profile, lengthMm) {
@@ -1423,6 +1456,27 @@ function getElementsFromQuoteTable() {
       }
     }
 
+    // Downpipe with length: bin-pack into 1.5m and 3m stock lengths.
+    if (isDownpipeElement(assetId) && lengthMm != null && lengthMm > 0) {
+      const size = getDownpipeSizeFromAssetId(assetId);
+      if (size) {
+        const opt = getOptimalDownpipeCombination(lengthMm);
+        if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
+          let first = true;
+          Object.entries(opt.counts).forEach(([lengthMmStr, n]) => {
+            if (n <= 0) return;
+            const item = { assetId: downpipeProductIdForLength(size, Number(lengthMmStr)), quantity: n };
+            if (first) {
+              item.length_mm = lengthMm;
+              first = false;
+            }
+            elements.push(item);
+          });
+          continue;
+        }
+      }
+    }
+
     if (qty <= 0) qty = 1;
     const item = { assetId, quantity: qty };
     if (lengthMm != null && Number.isFinite(lengthMm) && lengthMm > 0) item.length_mm = lengthMm;
@@ -2569,11 +2623,13 @@ function countCanvasElements() {
   return counts;
 }
 
-/** Standard length per unit (mm) for length-based quantity. Gutter from asset_id (e.g. 1.5M → 1500); downpipes/droppers default 3000. */
+/** Standard length per unit (mm) for length-based quantity. Gutter and downpipe from asset_id; droppers default 3000. */
 function getStandardLengthMm(assetId) {
   if (!assetId) return 3000;
-  const m = GUTTER_PATTERN.exec(assetId.trim());
-  if (m) return parseFloat(m[2]) * 1000 || 3000;
+  const gm = GUTTER_PATTERN.exec(assetId.trim());
+  if (gm) return parseFloat(gm[2]) * 1000 || 3000;
+  const dm = DOWNPIPE_PATTERN.exec(assetId.trim());
+  if (dm) return parseFloat(dm[2]) * 1000 || 3000;
   return 3000;
 }
 
@@ -2628,6 +2684,29 @@ function getOptimalGutterCombination(requiredMm) {
 }
 
 /**
+ * Bin-packing for downpipe: find combination of stock lengths (1500, 3000 mm) that:
+ * - sums to >= requiredMm (always round up),
+ * - minimizes waste (total - requiredMm),
+ * - then minimizes number of pieces.
+ * @returns {{ waste: number, counts: Record<number, number> } | null}
+ */
+function getOptimalDownpipeCombination(requiredMm) {
+  if (requiredMm <= 0) return { waste: 0, counts: { 3000: 0, 1500: 0 } };
+  const lengths = DOWNPIPE_STOCK_LENGTHS_MM;
+  const maxStock = Math.max(...lengths);
+  let best = null;
+  for (let total = requiredMm; total <= requiredMm + maxStock; total++) {
+    const r = minPiecesAndCombination(total, lengths);
+    if (!r) continue;
+    const waste = total - requiredMm;
+    if (!best || waste < best.waste || (waste === best.waste && r.count < best.count)) {
+      best = { waste, count: r.count, counts: r.counts };
+    }
+  }
+  return best ? { waste: best.waste, counts: best.counts } : null;
+}
+
+/**
  * Elements for quote: gutters use bin-packing per run (each run optimized separately, then counts aggregated); other measurable use length→quantity; rest use count.
  * Per-run optimization ensures we don't treat "Run A 2.9m + Run B 2.9m" as one 5.8m span; each run gets its own stock (max single length 5m, cut from one end).
  * @returns {{ assetId: string, quantity: number, incomplete?: boolean }[]}
@@ -2637,7 +2716,10 @@ function getElementsForQuote() {
   const gutterCountsByProfileAndLength = {}; // profile -> { lengthMm -> qty }
   const gutterMeasuredMmByProfileAndLength = {}; // profile -> { lengthMm -> total measured mm } for bracket/screw
   const gutterIncompleteByProfileAndLength = {}; // profile -> { lengthMm -> true } when any run had no length entered
-  const otherMeasurableByAssetId = {}; // assetId -> { length, count }
+  const downpipeCountsBySizeAndLength = {}; // size -> { lengthMm -> qty }
+  const downpipeMeasuredMmBySizeAndLength = {}; // size -> { lengthMm -> total measured mm } for clips
+  const downpipeIncompleteBySizeAndLength = {}; // size -> { lengthMm -> true }
+  const otherMeasurableByAssetId = {}; // assetId -> { length, count } (droppers, etc.)
   const nonMeasurableByAssetId = {};  // assetId -> count
 
   state.elements.forEach((el) => {
@@ -2660,6 +2742,25 @@ function getElementsForQuote() {
           gutterCountsByProfileAndLength[profile][L] = (gutterCountsByProfileAndLength[profile][L] || 0) + qty;
           gutterMeasuredMmByProfileAndLength[profile][L] = (gutterMeasuredMmByProfileAndLength[profile][L] || 0) + requiredMm;
           if (!hasLength) gutterIncompleteByProfileAndLength[profile][L] = true;
+        });
+      }
+      return;
+    }
+    if (isDownpipeElement(el.assetId)) {
+      const size = getDownpipeSizeFromAssetId(el.assetId);
+      if (!size) return;
+      const requiredMm = hasLength ? el.measuredLength : getStandardLengthMm(el.assetId);
+      const opt = getOptimalDownpipeCombination(requiredMm);
+      if (opt) {
+        if (!downpipeCountsBySizeAndLength[size]) downpipeCountsBySizeAndLength[size] = {};
+        if (!downpipeMeasuredMmBySizeAndLength[size]) downpipeMeasuredMmBySizeAndLength[size] = {};
+        if (!downpipeIncompleteBySizeAndLength[size]) downpipeIncompleteBySizeAndLength[size] = {};
+        Object.entries(opt.counts).forEach(([lengthMm, qty]) => {
+          if (qty <= 0) return;
+          const L = Number(lengthMm);
+          downpipeCountsBySizeAndLength[size][L] = (downpipeCountsBySizeAndLength[size][L] || 0) + qty;
+          downpipeMeasuredMmBySizeAndLength[size][L] = (downpipeMeasuredMmBySizeAndLength[size][L] || 0) + requiredMm;
+          if (!hasLength) downpipeIncompleteBySizeAndLength[size][L] = true;
         });
       }
       return;
@@ -2691,8 +2792,28 @@ function getElementsForQuote() {
     });
   });
 
-  // Other measurable (downpipes, droppers): same length-based logic as gutters — use measured length when present,
-  // derive quantity from total length ÷ standard length per unit (downpipes/droppers use 3 m standard), send length_mm for backend (clips/screws).
+  // Downpipe: emit bin-packed counts; send length_mm on first element per size for clip calc
+  Object.entries(downpipeCountsBySizeAndLength).forEach(([size, byLength]) => {
+    const incompleteByLength = downpipeIncompleteBySizeAndLength[size] || {};
+    const measuredByLength = downpipeMeasuredMmBySizeAndLength[size] || {};
+    const sortedLengths = Object.keys(byLength).map(Number).sort((a, b) => b - a);
+    let first = true;
+    sortedLengths.forEach((lengthMm) => {
+      const qty = byLength[lengthMm];
+      if (qty <= 0) return;
+      const totalMeasuredMm = measuredByLength[lengthMm];
+      const item = {
+        assetId: downpipeProductIdForLength(size, lengthMm),
+        quantity: qty,
+        incomplete: !!incompleteByLength[lengthMm],
+        length_mm: first && totalMeasuredMm != null && totalMeasuredMm > 0 ? totalMeasuredMm : undefined,
+      };
+      if (first) first = false;
+      result.push(item);
+    });
+  });
+
+  // Other measurable (droppers, DPJ-* etc): length-based or count; send length_mm for backend (clips/screws).
   Object.entries(otherMeasurableByAssetId).forEach(([assetId, v]) => {
     const standardMm = getStandardLengthMm(assetId);
     const qty = v.length > 0
