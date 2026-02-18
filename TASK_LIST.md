@@ -8,10 +8,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/pre-deployment
-- Based on: main
-- Status: In Progress
-- Related Tasks: All uncompleted tasks below (Section 48 pre-deploy and Railway deployment)
+- Branch: main
+- Status: Stable
+- Related Tasks: Railway deployment complete; production URL https://quote-app-production-7897.up.railway.app
 
 **Uncompleted tasks (by section):**
 
@@ -958,44 +957,44 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **Railway account and project setup**
 
-- [ ] **48.1** Create Railway account (https://railway.app) and install Railway CLI (optional, for local deploys).
-- [ ] **48.2** Create a new Railway project. Name it (e.g. `quote-app` or `jacks-quote-app`).
-- [ ] **48.3** Ensure the codebase is in a Git repo (GitHub, GitLab, or Bitbucket). Railway deploys via connected repo.
+- [x] **48.1** Create Railway account (https://railway.app) and install Railway CLI (optional, for local deploys).
+- [x] **48.2** Create a new Railway project. Name it (e.g. `quote-app` or `jacks-quote-app`).
+- [x] **48.3** Ensure the codebase is in a Git repo (GitHub, GitLab, or Bitbucket). Railway deploys via connected repo.
 
 **Build and run configuration (monorepo: backend + frontend)**
 
-- [ ] **48.4** Add `nixpacks.toml` at project root: configure Nixpacks to install from `backend/requirements.txt` (Nixpacks expects `requirements.txt` at root by default; use `[phases.install]` with custom `cmd` to point at `backend/requirements.txt`).
-- [ ] **48.5** Add `Procfile` at project root: `web: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT` so Railway uses `$PORT` and binds to `0.0.0.0`.
-- [ ] **48.6** Add `runtime.txt` at project root (optional): specify Python version (e.g. `python-3.11` or `python-3.12`) to match local development.
-- [ ] **48.7** Verify backend reads `FRONTEND_DIR` relative to `main.py`; with repo root deployed, `../frontend` from `backend/` will resolve correctly.
+- [x] **48.4** Add `nixpacks.toml` at project root: configure Nixpacks to install from `backend/requirements.txt` (Nixpacks expects `requirements.txt` at root by default; use `[phases.install]` with custom `cmd` to point at `backend/requirements.txt`).
+- [x] **48.5** Add `Procfile` at project root: `web: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT` so Railway uses `$PORT` and binds to `0.0.0.0`.
+- [x] **48.6** Add `runtime.txt` at project root (optional): specify Python version (e.g. `python-3.11` or `python-3.12`) to match local development.
+- [x] **48.7** Verify backend reads `FRONTEND_DIR` relative to `main.py`; with repo root deployed, `../frontend` from `backend/` will resolve correctly.
 
 **Environment variables**
 
-- [ ] **48.8** Document required env vars for Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`; optional `SUPABASE_JWT_SECRET` (if using legacy HS256).
-- [ ] **48.9** Add all required Supabase env vars in Railway dashboard (Project → Variables) or via CLI. Never commit `.env` or secrets to the repo.
-- [ ] **48.10** Confirm `backend/.env` is in `.gitignore` and that no secrets are hardcoded in the codebase.
+- [x] **48.8** Document required env vars for Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`; optional `SUPABASE_JWT_SECRET` (if using legacy HS256).
+- [x] **48.9** Add all required Supabase env vars in Railway dashboard (Project → Variables) or via CLI. Never commit `.env` or secrets to the repo.
+- [x] **48.10** Confirm `backend/.env` is in `.gitignore` and that no secrets are hardcoded in the codebase.
 
 **Production behaviour**
 
-- [ ] **48.11** Ensure FastAPI/uvicorn binds to `0.0.0.0` (not `127.0.0.1`) so Railway can route traffic; `--host 0.0.0.0` in Procfile covers this.
-- [ ] **48.12** CORS: review `allow_origins=["*"]` in `main.py`; optionally restrict to the Railway app URL and known frontend origins for production.
-- [ ] **48.13** Verify `/api/health` returns `{"status":"ok"}` for Railway health checks; Railway can use this as a health check path if configured.
+- [x] **48.11** Ensure FastAPI/uvicorn binds to `0.0.0.0` (not `127.0.0.1`) so Railway can route traffic; `--host 0.0.0.0` in Procfile covers this.
+- [x] **48.12** CORS: review `allow_origins=["*"]` in `main.py`; optionally restrict to the Railway app URL and known frontend origins for production.
+- [x] **48.13** Verify `/api/health` returns `{"status":"ok"}` for Railway health checks; Railway can use this as a health check path if configured.
 
 **Security and logging**
 
-- [ ] **48.14** Ensure no debug mode or verbose error traces are enabled in production (e.g. no `debug=True` or stack traces in responses).
-- [ ] **48.15** Add or verify logging configuration (e.g. log level INFO or WARNING for production); Railway captures stdout/stderr.
+- [x] **48.14** Ensure no debug mode or verbose error traces are enabled in production (e.g. no `debug=True` or stack traces in responses).
+- [x] **48.15** Add or verify logging configuration (e.g. log level INFO or WARNING for production); Railway captures stdout/stderr.
 
 **Documentation and runbook**
 
-- [ ] **48.16** Add `docs/RAILWAY_DEPLOYMENT.md`: deployment steps, env vars, how to trigger a redeploy, and how to view logs.
-- [ ] **48.17** Update `README.md` with a "Deployment (Railway)" section: link to `docs/RAILWAY_DEPLOYMENT.md` and note the live URL once deployed.
+- [x] **48.16** Add `docs/RAILWAY_DEPLOYMENT.md`: deployment steps, env vars, how to trigger a redeploy, and how to view logs.
+- [x] **48.17** Update `README.md` with a "Deployment (Railway)" section: link to `docs/RAILWAY_DEPLOYMENT.md` and note the live URL once deployed.
 
 **Connect repo and first deploy**
 
-- [ ] **48.18** Connect the Git repo to Railway (New Project → Deploy from GitHub/GitLab/Bitbucket); select the correct branch (e.g. `main`).
+- [x] **48.18** Connect the Git repo to Railway (New Project → Deploy from GitHub/GitLab/Bitbucket); select the correct branch (e.g. `main`).
 - [x] **48.19** Trigger first deploy; monitor build logs for Python install, Nixpacks phases, and start command.
-- [ ] **48.20** After deploy: open the Railway-generated URL, verify the app loads (frontend at `/`), health check (`/api/health`), and API (`/api/products`, `/api/config`).
+- [x] **48.20** After deploy: open the Railway-generated URL, verify the app loads (frontend at `/`), health check (`/api/health`), and API (`/api/products`, `/api/config`).
 - [ ] **48.21** Test auth: sign in via Supabase; verify saved diagrams (save and load) work against production API and Supabase.
 - [ ] **48.22** Test blueprint upload: upload an image, verify processing and canvas display; confirm OpenCV and HEIC/PDF flows work in production.
 - [ ] **48.23** (Optional) Add custom domain in Railway if required; update Supabase Auth redirect URLs if using custom domain.
@@ -1004,7 +1003,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [x] **48.24** Document the production base URL (e.g. `https://quote-app-production.up.railway.app`). This URL will be used for ServiceM8 OAuth redirect_uri and webhook callbacks in future integration.
 
-*Section 48 status: Pre-deployment checklist. Complete 48.0.1–48.0.23 (local tests, features, troubleshooting) first; then 48.1–48.23 (Railway setup and deploy); 48.24 for ServiceM8 planning.*
+*Section 48 status: Railway deployment complete (48.1–48.20, 48.24). Production URL: https://quote-app-production-7897.up.railway.app. Remaining: 48.21–48.23 (manual auth/blueprint tests, optional custom domain).*
 
 ---
 
