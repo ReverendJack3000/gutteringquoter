@@ -399,11 +399,13 @@ def api_servicem8_authorize(user_id: Any = Depends(get_current_user_id)):
     Return the ServiceM8 OAuth authorize URL. Requires Bearer token.
     Frontend must fetch this with Authorization header, then redirect the user to the returned URL.
     (Browser navigation to this endpoint does not send Bearer token, so we return JSON, not a redirect.)
+    
+    redirect_uri in the authorize URL MUST match the Activation URL set in ServiceM8 Store Connect
+    exactly: https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
     """
     try:
         state = sm8.generate_state(str(user_id))
-        # Omit redirect_uri for internal use (optional per ServiceM8 docs)
-        url = sm8.build_authorize_url(state, include_redirect_uri=False)
+        url = sm8.build_authorize_url(state)
         return {"url": url}
     except ValueError as e:
         raise HTTPException(503, str(e))

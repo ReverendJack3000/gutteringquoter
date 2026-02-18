@@ -39,45 +39,41 @@ def _get_app_credentials() -> tuple[str, str]:
 
 def get_redirect_uri() -> str:
     """
-    Get OAuth callback URL for token exchange.
+    Get OAuth callback URL. MUST match ServiceM8 Activation URL exactly.
     
-    Note: For internal use, redirect_uri is optional in authorize request per ServiceM8 docs,
-    but REQUIRED in token exchange and must match what was sent (or omitted) in authorize.
-    Since ServiceM8 Store Connect UI doesn't allow entering redirect URL, we use our Railway URL.
+    ServiceM8 Activation URL (Return URL) is set to:
+    https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
+    
+    This URL must match character-for-character in both authorize request and token exchange,
+    or ServiceM8 will reject with invalid_uri error.
     """
     base = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
     if not base:
-        # Default to Railway production URL
+        # Default to Railway production URL (must match ServiceM8 Activation URL)
         base = "https://quote-app-production-7897.up.railway.app"
-    return f"{base}/api/servicem8/oauth/callback"
+    redirect_uri = f"{base}/api/servicem8/oauth/callback"
+    # Ensure exact match: https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
+    return redirect_uri
 
 
-def build_authorize_url(state: str, include_redirect_uri: bool = False) -> str:
+def build_authorize_url(state: str) -> str:
     """
     Build the ServiceM8 OAuth authorize URL.
     User must be redirected here to start the OAuth flow.
     
-    Per ServiceM8 docs: redirect_uri is optional in authorize request, but if provided
-    must match the Return URL host from Store Connect settings. For internal use where
-    Store Connect UI doesn't allow entering redirect URL, omit redirect_uri here.
-    
-    Args:
-        state: CSRF protection state token
-        include_redirect_uri: If True, include redirect_uri param. Default False for internal use.
+    redirect_uri MUST match the Activation URL (Return URL) set in ServiceM8 Store Connect
+    exactly, character-for-character, or ServiceM8 will reject with invalid_uri error.
     """
     app_id, _ = _get_app_credentials()
     scope = " ".join(DEFAULT_SCOPES)
+    redirect_uri = get_redirect_uri()
     params = {
         "response_type": "code",
         "client_id": app_id,
         "scope": scope,
+        "redirect_uri": redirect_uri,  # REQUIRED: must match ServiceM8 Activation URL exactly
         "state": state,
     }
-    # For internal use: omit redirect_uri in authorize (optional per docs)
-    # We'll still send it in token exchange (required there)
-    if include_redirect_uri:
-        redirect_uri = get_redirect_uri()
-        params["redirect_uri"] = redirect_uri
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
