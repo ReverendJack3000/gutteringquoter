@@ -8,12 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/51-8-19-12
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 51.8 Measured materials: any click away should commit length
-  - [x] 19.12 SVG elements blurry when colour changed
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
