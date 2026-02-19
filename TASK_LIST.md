@@ -8,15 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/mobile-canvas-toolbars
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 54.16 Mobile: pan instead of drag-select
-  - [x] 54.17 Pinch zoom
-  - [x] 54.18 Parts formatting (no overlap)
-  - [x] 54.19 Global toolbar collapsible and movable
-  - [x] 54.20 Element toolbars movable
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
