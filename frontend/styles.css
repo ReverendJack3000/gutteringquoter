@@ -1229,6 +1229,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: nowrap;
   gap: 10px;
   padding: 10px 16px;
   min-height: 44px;
@@ -1244,12 +1245,23 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   flex-direction: column;
   border-radius: 999px;
 }
+/* Collapsed: shrink to single circular FAB around + button; hide drag handle */
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
+  padding: 8px;
+  gap: 0;
+  min-width: 0;
+  border-radius: 50%;
+}
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
+  display: none;
+}
 
 /* 54.43–54.44: Collapsible state – animate with max-width/opacity to avoid jank (not width/height) */
 .diagram-toolbar-tools-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: nowrap;
   gap: inherit;
   min-width: 0;
   max-width: 90vw;
@@ -1259,6 +1271,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 }
 .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
   flex-direction: column;
+  flex-wrap: nowrap;
   max-width: none;
   max-height: 60vh;
 }
@@ -1292,6 +1305,13 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-toolbar-collapse-btn:focus-visible {
   outline: 2px solid #18a0fb;
   outline-offset: 2px;
+}
+/* When collapsed, the + button is the drag target. */
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
+  cursor: grab;
+}
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
+  cursor: grabbing;
 }
 @media (prefers-reduced-motion: reduce) {
   .diagram-floating-toolbar,
@@ -2007,28 +2027,27 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
-/* 54.45: When horizontal on mobile, allow wrap or smooth scroll so tools don't overflow viewport */
+/* 54.45: When horizontal on mobile, single row with scroll if needed (no wrap) */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   max-width: calc(100vw - 32px);
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   max-width: calc(100vw - 100px);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
 
-/* 54.35: 44×44 px touch target (Apple HIG); visible pill via ::before so hit area meets minimum. */
+/* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
 .diagram-toolbar-drag-handle {
-  display: block;
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 44px;
   min-height: 44px;
   width: 44px;
@@ -2038,32 +2057,18 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
   border-radius: 50%;
   cursor: grab;
   touch-action: none;
-  z-index: 1;
   background: transparent;
 }
 .diagram-toolbar-drag-handle::before {
   content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
   width: 40px;
   height: 4px;
-  margin-left: -20px;
-  margin-top: -2px;
   background: rgba(0, 0, 0, 0.25);
   border-radius: 2px;
-}
-.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle {
-  bottom: auto;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle::before {
   width: 4px;
   height: 40px;
-  margin-left: -2px;
-  margin-top: -20px;
 }
 
 .diagram-toolbar-drag-handle:active {
