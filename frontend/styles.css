@@ -1219,13 +1219,13 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   -webkit-user-select: none;
 }
 
-/* Floating diagram toolbar (Canva/Freeform style) – draggable, edge-snaps to vertical at L/R edges */
+/* Floating diagram toolbar (Canva/Freeform style) – draggable, edge-snaps vertical L/R, horizontal top/bottom (54.41–54.45) */
 .diagram-floating-toolbar {
   position: absolute;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 20;
+  z-index: 56; /* 54.45: above selection toolbar (55) and inspector so it never slips behind when dragged */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1243,6 +1243,65 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-floating-toolbar[data-orientation="vertical"] {
   flex-direction: column;
   border-radius: 999px;
+}
+
+/* 54.43–54.44: Collapsible state – animate with max-width/opacity to avoid jank (not width/height) */
+.diagram-toolbar-tools-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  min-width: 0;
+  max-width: 90vw;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-width 0.25s ease, max-height 0.25s ease, opacity 0.2s ease;
+}
+.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
+  flex-direction: column;
+  max-width: none;
+  max-height: 60vh;
+}
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-tools-wrap {
+  max-width: 0;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.diagram-toolbar-collapse-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.diagram-toolbar-collapse-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #333;
+}
+.diagram-toolbar-collapse-btn:focus-visible {
+  outline: 2px solid #18a0fb;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .diagram-floating-toolbar,
+  .diagram-toolbar-tools-wrap {
+    transition-duration: 0.05s;
+  }
+}
+body.a11y-force-motion .diagram-floating-toolbar,
+body.a11y-force-motion .diagram-toolbar-tools-wrap {
+  transition: none;
 }
 .diagram-floating-toolbar .toolbar-pill-btn,
 .diagram-floating-toolbar .upload-zone {
@@ -1946,6 +2005,21 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   transform: translateX(-50%) translateY(calc(-100% - 1rem));
   opacity: 0;
   pointer-events: none;
+}
+
+/* 54.45: When horizontal on mobile, allow wrap or smooth scroll so tools don't overflow viewport */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: calc(100vw - 32px);
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: calc(100vw - 100px);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 /* 54.35: 44×44 px touch target (Apple HIG); visible pill via ::before so hit area meets minimum. */

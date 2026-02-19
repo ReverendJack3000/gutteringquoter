@@ -5556,7 +5556,10 @@ function resizeCanvas() {
 const DIAGRAM_TOOLBAR_STORAGE_KEY_X = 'quoteApp_diagramToolbarX';
 const DIAGRAM_TOOLBAR_STORAGE_KEY_Y = 'quoteApp_diagramToolbarY';
 const DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION = 'quoteApp_diagramToolbarOrientation';
+const DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_diagramToolbarCollapsed';
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD = 0.2; // left 20% / right 80% of wrap width → vertical
+const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_TOP = 0.2;   // top 20% of wrap height → horizontal
+const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_BOTTOM = 0.8; // bottom 20% (Y >= 80%) → horizontal
 
 /** 54.33: Cleanup from previous initDiagramToolbarDrag run (listeners + ResizeObserver). Run before re-init to avoid duplicates. */
 let diagramToolbarDragCleanup = null;
@@ -5605,18 +5608,14 @@ function initDiagramToolbarDrag() {
 
   const wrapRect = wrap.getBoundingClientRect();
   const toolRect = toolbar.getBoundingClientRect();
-  let orient;
-  let x;
-  let y;
-  if (layoutState.viewportMode === 'mobile') {
-    orient = 'vertical';
-    x = 12;
-    y = 12;
-  } else {
-    orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || 'horizontal';
-    x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
-    y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+  let orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || (layoutState.viewportMode === 'mobile' ? 'vertical' : 'horizontal');
+  let x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
+  let y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    if (layoutState.viewportMode === 'mobile') {
+      x = 12;
+      y = 12;
+    } else {
       x = (wrapRect.width - toolRect.width) / 2;
       y = 12;
     }
@@ -5627,6 +5626,17 @@ function initDiagramToolbarDrag() {
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
 
+  const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
+  const collapsed = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
+  if (collapseBtn) {
+    toolbar.classList.toggle('diagram-floating-toolbar--collapsed', collapsed);
+    collapseBtn.setAttribute('aria-expanded', !collapsed);
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
+    collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+    const collapseSpan = collapseBtn.querySelector('span');
+    if (collapseSpan) collapseSpan.textContent = collapsed ? '+' : '−';
+  }
+
   let dragStartX = 0;
   let dragStartY = 0;
   let toolbarStartLeft = 0;
@@ -5634,23 +5644,40 @@ function initDiagramToolbarDrag() {
   let dragPointerId = null;
 
   function updateOrientationFromPosition() {
-    if (layoutState.viewportMode === 'mobile') return;
     const wr = wrap.getBoundingClientRect();
     const tr = toolbar.getBoundingClientRect();
     const centerX = tr.left - wr.left + tr.width / 2;
+    const centerY = tr.top - wr.top + tr.height / 2;
     const thresholdLeft = wr.width * DIAGRAM_TOOLBAR_EDGE_THRESHOLD;
     const thresholdRight = wr.width * (1 - DIAGRAM_TOOLBAR_EDGE_THRESHOLD);
-    if (centerX <= thresholdLeft) {
+    const thresholdTop = wr.height * DIAGRAM_TOOLBAR_EDGE_THRESHOLD_TOP;
+    const thresholdBottom = wr.height * DIAGRAM_TOOLBAR_EDGE_THRESHOLD_BOTTOM;
+    const pad = 12;
+
+    if (centerY <= thresholdTop) {
+      toolbar.setAttribute('data-orientation', 'horizontal');
+      const th = toolbar.getBoundingClientRect().height;
+      toolbar.style.top = pad + 'px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(pad));
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
+    } else if (centerY >= thresholdBottom) {
+      toolbar.setAttribute('data-orientation', 'horizontal');
+      const th = toolbar.getBoundingClientRect().height;
+      const newTop = wr.height - th - pad;
+      toolbar.style.top = newTop + 'px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(newTop)));
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
+    } else if (centerX <= thresholdLeft) {
       toolbar.setAttribute('data-orientation', 'vertical');
-      toolbar.style.left = '12px';
-      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, '12');
+      toolbar.style.left = pad + 'px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(pad));
       localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'vertical');
     } else if (centerX >= thresholdRight) {
       toolbar.setAttribute('data-orientation', 'vertical');
       const tw = toolbar.getBoundingClientRect().width;
-      const newLeft = wr.width - tw - 12;
+      const newLeft = wr.width - tw - pad;
       toolbar.style.left = newLeft + 'px';
-      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(newLeft));
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(newLeft)));
       localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'vertical');
     } else {
       toolbar.setAttribute('data-orientation', 'horizontal');
@@ -5722,14 +5749,28 @@ function initDiagramToolbarDrag() {
     }
   }
 
+  function onCollapseClick() {
+    const collapsed = toolbar.classList.toggle('diagram-floating-toolbar--collapsed');
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED, String(collapsed));
+    if (collapseBtn) {
+      collapseBtn.setAttribute('aria-expanded', !collapsed);
+      collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
+      collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+      const span = collapseBtn.querySelector('span');
+      if (span) span.textContent = collapsed ? '+' : '−';
+    }
+  }
+
   const toolbarPointerDownHandler = (e) => {
     if (e.target === dragHandle || dragHandle.contains(e.target)) return;
+    if (collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target))) return;
     if ((e.target instanceof Element) && (e.target.closest('button, label, input') || e.target.closest('.toolbar-pill-btn'))) return;
     onPointerDown(e);
   };
 
   dragHandle.addEventListener('pointerdown', onPointerDown, { capture: true });
   toolbar.addEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+  if (collapseBtn) collapseBtn.addEventListener('click', onCollapseClick);
   document.addEventListener('pointermove', onPointerMove, { capture: true });
   document.addEventListener('pointerup', onPointerUp, { capture: true });
   document.addEventListener('pointercancel', onPointerCancel, { capture: true });
@@ -5748,6 +5789,7 @@ function initDiagramToolbarDrag() {
     ro.disconnect();
     dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+    if (collapseBtn) collapseBtn.removeEventListener('click', onCollapseClick);
   };
 }
 

@@ -142,6 +142,10 @@
           <button type="button" class="diagram-toolbar-drag-handle" id="diagramToolbarDragHandle" aria-label="Drag to move toolbar" title="Drag to move toolbar">
             <span aria-hidden="true"></span>
           </button>
+          <button type="button" class="diagram-toolbar-collapse-btn" id="diagramToolbarCollapseBtn" aria-label="Collapse toolbar" aria-expanded="true" title="Collapse toolbar">
+            <span aria-hidden="true">−</span>
+          </button>
+          <div class="diagram-toolbar-tools-wrap">
           <label class="toolbar-pill-btn toggle-label toggle-label-compact" title="Technical drawing (blueprint view)">
             <input type="checkbox" id="technicalDrawingToggle" checked />
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -176,6 +180,7 @@
             </button>
           </div>
           <button type="button" class="blueprint-transparency-btn diagram-toolbar-transparency" id="blueprintTransparencyBtn" title="Transparency" aria-label="Toggle transparency slider" aria-expanded="false" hidden></button>
+          </div>
         </div>
         <canvas id="canvas" aria-label="Blueprint canvas"></canvas>
         <div class="canvas-placeholder" id="canvasPlaceholder">
