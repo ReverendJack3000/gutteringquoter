@@ -319,6 +319,8 @@ function getDefaultRotationForLinear(assetId) {
 
 const MIN_VIEW_ZOOM = 0.15;
 const MAX_VIEW_ZOOM = 4;
+/** 54.37: On mobile, zoom-out is clamped to 1 (full page) so the view never goes smaller than fit. */
+const MIN_VIEW_ZOOM_MOBILE = 1;
 const ZOOM_WHEEL_FACTOR = 0.92;
 const ZOOM_BUTTON_FACTOR = 1.25;
 const VIEW_PAD = 48; // max padding from content edge to viewport when panning (canvas not limitless)
@@ -391,6 +393,9 @@ const MAX_PANEL_WIDTH = 600;
 const DEFAULT_PANEL_WIDTH = 320;
 const MOBILE_LAYOUT_BREAKPOINT_PX = 980;
 const VIEWPORT_MODE_QUERY_KEY = 'viewport';
+// 54.36: Mobile-only logical page size so content fits by default; fit scale computed from this, then centered in viewport
+const MOBILE_PAGE_WIDTH_PX = 800;
+const MOBILE_PAGE_HEIGHT_PX = 600;
 
 // Uniform element sizing: placed elements use 1/5 of reference size (works for portrait/landscape 9:16)
 const REFERENCE_SIZE_PX = 400;
@@ -4701,7 +4706,13 @@ function draw() {
     const pad = 20;
     hasContent = true;
     if (!interactionActive) {
-      baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
+      if (layoutState.viewportMode === 'mobile') {
+        const scaleToPage = Math.min((MOBILE_PAGE_WIDTH_PX - pad * 2) / bboxW, (MOBILE_PAGE_HEIGHT_PX - pad * 2) / bboxH);
+        const scaleToCanvas = Math.min(w / MOBILE_PAGE_WIDTH_PX, h / MOBILE_PAGE_HEIGHT_PX);
+        baseScale = scaleToPage * scaleToCanvas;
+      } else {
+        baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
+      }
       baseOffsetX = (w - bboxW * baseScale) / 2 - minX * baseScale;
       baseOffsetY = (h - bboxH * baseScale) / 2 - minY * baseScale;
       state.baseScale = baseScale;
@@ -4735,7 +4746,13 @@ function draw() {
     const pad = 20;
     hasContent = true;
     if (!interactionActive) {
-      baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
+      if (layoutState.viewportMode === 'mobile') {
+        const scaleToPage = Math.min((MOBILE_PAGE_WIDTH_PX - pad * 2) / bboxW, (MOBILE_PAGE_HEIGHT_PX - pad * 2) / bboxH);
+        const scaleToCanvas = Math.min(w / MOBILE_PAGE_WIDTH_PX, h / MOBILE_PAGE_HEIGHT_PX);
+        baseScale = scaleToPage * scaleToCanvas;
+      } else {
+        baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
+      }
       baseOffsetX = (w - bboxW * baseScale) / 2 - minX * baseScale;
       baseOffsetY = (h - bboxH * baseScale) / 2 - minY * baseScale;
       state.baseScale = baseScale;
@@ -5586,14 +5603,23 @@ function initDiagramToolbarDrag() {
     diagramToolbarDragCleanup = null;
   }
 
-  const orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || 'horizontal';
-  let x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
-  let y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
   const wrapRect = wrap.getBoundingClientRect();
   const toolRect = toolbar.getBoundingClientRect();
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    x = (wrapRect.width - toolRect.width) / 2;
+  let orient;
+  let x;
+  let y;
+  if (layoutState.viewportMode === 'mobile') {
+    orient = 'vertical';
+    x = 12;
     y = 12;
+  } else {
+    orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || 'horizontal';
+    x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
+    y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      x = (wrapRect.width - toolRect.width) / 2;
+      y = 12;
+    }
   }
   applyDiagramToolbarPosition(toolbar, x, y, orient);
   toolbar.classList.remove('diagram-toolbar-hidden');
@@ -5608,6 +5634,7 @@ function initDiagramToolbarDrag() {
   let dragPointerId = null;
 
   function updateOrientationFromPosition() {
+    if (layoutState.viewportMode === 'mobile') return;
     const wr = wrap.getBoundingClientRect();
     const tr = toolbar.getBoundingClientRect();
     const centerX = tr.left - wr.left + tr.width / 2;
@@ -5960,7 +5987,8 @@ function initCanvas() {
         const cx = (p1.clientX + p2.clientX) / 2;
         const cy = (p1.clientY + p2.clientY) / 2;
         const scaleFactor = curDist / state.pinchStartDistance;
-        const newViewZoom = Math.max(MIN_VIEW_ZOOM, Math.min(MAX_VIEW_ZOOM, state.pinchStartViewZoom * scaleFactor));
+        const minZoom = layoutState.viewportMode === 'mobile' ? MIN_VIEW_ZOOM_MOBILE : MIN_VIEW_ZOOM;
+        const newViewZoom = Math.max(minZoom, Math.min(MAX_VIEW_ZOOM, state.pinchStartViewZoom * scaleFactor));
         const newScale = state.baseScale * newViewZoom;
         const display = clientToCanvasDisplay(cx, cy);
         if (display) {
@@ -6231,7 +6259,8 @@ function initCanvas() {
       const contentX = (sx - state.offsetX) / state.scale;
       const contentY = (sy - state.offsetY) / state.scale;
       const factor = e.deltaY > 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
-      const newViewZoom = Math.max(MIN_VIEW_ZOOM, Math.min(MAX_VIEW_ZOOM, state.viewZoom * factor));
+      const minZoom = layoutState.viewportMode === 'mobile' ? MIN_VIEW_ZOOM_MOBILE : MIN_VIEW_ZOOM;
+      const newViewZoom = Math.max(minZoom, Math.min(MAX_VIEW_ZOOM, state.viewZoom * factor));
       const newScale = state.baseScale * newViewZoom;
       state.viewZoom = newViewZoom;
       state.viewPanX = sx - contentX * newScale - state.baseOffsetX;
@@ -6747,7 +6776,8 @@ function initZoomControls() {
 
   zoomOutBtn?.addEventListener('click', (e) => {
     stopAndPrevent(e);
-    state.viewZoom = Math.max(MIN_VIEW_ZOOM, state.viewZoom / ZOOM_BUTTON_FACTOR);
+    const minZoom = layoutState.viewportMode === 'mobile' ? MIN_VIEW_ZOOM_MOBILE : MIN_VIEW_ZOOM;
+    state.viewZoom = Math.max(minZoom, state.viewZoom / ZOOM_BUTTON_FACTOR);
     draw();
   });
   zoomInBtn?.addEventListener('click', (e) => {

@@ -8,8 +8,11 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/mobile-canvas-page-toolbars
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [ ] 54.36–54.40 (Mobile canvas page size, zoom limits, diagram/global toolbars no-scroll)
 
 **Uncompleted tasks (by section):**
 
@@ -38,6 +41,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.16–54.20 | (Complete) Mobile pan, pinch zoom, parts formatting, movable toolbars |
 | 54 | 54.21–54.25 | (Complete) Mobile: Projects header + iOS bottom sheet for diagram menu (Apple HIG) |
+| **54** | **54.36–54.40** | **Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll** |
 ---
 
 ## Locked decisions
@@ -1276,6 +1280,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **54.34** **Diagram toolbar: orientation on resize.** In the diagram toolbar ResizeObserver callback, after clampDiagramToolbarToWrap, call updateOrientationFromPosition() (when not dragging) so device rotation or window resize recalculates horizontal/vertical orientation.
 - [x] **54.35** **Diagram toolbar drag handle: 44×44 touch target and HTML label.** Increase drag handle hit area to at least 44×44 px (Apple HIG / WCAG 2.5.5) via padding or min-size while keeping the visible pill; fix stale copy in index.html (aria-label and title to "Drag to move toolbar").
 
+**Mobile canvas page size and toolbars (no-scroll) – plan: docs/plans/2026-02-20-mobile-canvas-page-size-and-toolbars.md**
+
+- [x] **54.36** **Mobile: defined page size for canvas.** Add mobile-only logical page size (e.g. 800×600 px); in `draw()` when viewportMode is mobile, fit content into this page so everything fits by default; optional subtle page boundary; zoom in/out still available; desktop unchanged.
+- [x] **54.37** **Mobile: optional zoom-out limit.** Clamp viewZoom on mobile so zoom-out does not go below the “full page” scale (no infinite tiny view).
+- [x] **54.38** **Mobile: diagram toolbar – all tools visible, no horizontal scroll.** Force vertical layout on mobile for `#diagramFloatingToolbar`; remove `overflow-x: auto`; use `flex-direction: column`, allow vertical scroll of toolbar only if taller than wrap; 44px targets preserved; desktop drag and edge-snap unchanged.
+- [x] **54.39** **Mobile: diagram toolbar – JS default vertical.** In `initDiagramToolbarDrag` / orientation logic, when viewportMode is mobile, force `data-orientation="vertical"` and default position; do not switch to horizontal on mobile.
+- [x] **54.40** **Mobile: global toolbar – no scroll.** Ensure global toolbar never shows horizontal scroll on mobile (wrap only); audit and fix overflow/min-width so all actions remain visible.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
@@ -1299,4 +1311,4 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope). Section 55 complete (55.1–55.10).
 
-*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.35 complete; 54.33–54.35 audit remediation: teardown, orientation on resize, drag handle 44×44 + HTML label). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
+*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.35 complete; 54.33–54.35 audit remediation). 54.36–54.40 added: mobile canvas page size, zoom limits, diagram/global toolbars no-scroll (plan: docs/plans/2026-02-20-mobile-canvas-page-size-and-toolbars.md). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
