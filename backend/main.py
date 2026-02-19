@@ -4,6 +4,7 @@ Blueprint processing, product list, static frontend. API-ready for future integr
 """
 import base64
 import logging
+import os
 import uuid as uuid_lib
 from pathlib import Path
 from typing import Any, Optional
@@ -33,6 +34,14 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Parse environment flag from common truthy values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class QuoteElement(BaseModel):
@@ -128,11 +137,11 @@ def health():
 
 @app.get("/api/config")
 def api_config():
-    """Public config for frontend (Supabase URL and anon key for auth). Safe to expose."""
-    import os
+    """Public frontend config (Supabase auth values + PWA rollout flag). Safe to expose."""
     url = os.environ.get("SUPABASE_URL", "").strip()
     anon = os.environ.get("SUPABASE_ANON_KEY", "").strip()
-    return {"supabaseUrl": url or None, "anonKey": anon or None}
+    pwa_enabled = _env_flag("PWA_ENABLED", False)
+    return {"supabaseUrl": url or None, "anonKey": anon or None, "pwaEnabled": pwa_enabled}
 
 
 @app.get("/api/products")
@@ -790,6 +799,13 @@ def api_servicem8_create_new_job(
 # Serve static frontend and assets (must be after API routes)
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 INDEX_HTML = FRONTEND_DIR / "index.html"
+MANIFEST_FILE = FRONTEND_DIR / "manifest.webmanifest"
+SERVICE_WORKER_FILE = FRONTEND_DIR / "service-worker.js"
+NO_CACHE_STATIC_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 
 @app.on_event("startup")
@@ -809,6 +825,29 @@ def startup():
 
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+    app.mount("/icons", StaticFiles(directory=FRONTEND_DIR / "icons"), name="icons")
+
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        """Serve manifest with no-cache so clients can pick up updates quickly."""
+        if MANIFEST_FILE.exists():
+            return FileResponse(
+                MANIFEST_FILE,
+                media_type="application/manifest+json",
+                headers=NO_CACHE_STATIC_HEADERS,
+            )
+        raise HTTPException(404, "Manifest not found")
+
+    @app.get("/service-worker.js")
+    def service_worker():
+        """Serve service worker with no-cache so browser can update it."""
+        if SERVICE_WORKER_FILE.exists():
+            return FileResponse(
+                SERVICE_WORKER_FILE,
+                media_type="text/javascript",
+                headers=NO_CACHE_STATIC_HEADERS,
+            )
+        raise HTTPException(404, "Service worker not found")
 
     @app.get("/")
     def index():

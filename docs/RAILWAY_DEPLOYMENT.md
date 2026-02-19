@@ -41,6 +41,8 @@ The repo already includes:
 
 No extra build step is needed; the frontend is static and served by FastAPI from `frontend/`.
 
+PWA support is rollout-gated by `PWA_ENABLED` and defaults to off for desktop safety.
+
 ## 4. Environment variables
 
 In the Railway dashboard: open your project → **Variables** (or **Settings → Variables**). Add:
@@ -51,6 +53,7 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key from Supabase (backend API, products, diagrams). |
 | `SUPABASE_ANON_KEY` | Yes | Anon/public key (frontend auth; exposed via `GET /api/config`). |
 | `SUPABASE_JWT_SECRET` | No | Only if your Supabase project uses legacy HS256 JWT secret; leave unset if using ECC (P-256). |
+| `PWA_ENABLED` | No | Progressive Web App rollout flag. Default `false` (or unset) keeps current desktop behavior and disables service worker registration. Set `true` to enable PWA. |
 | `SERVICEM8_APP_ID` | No (ServiceM8) | ServiceM8 App ID from Store Connect (for OAuth 2.0). |
 | `SERVICEM8_APP_SECRET` | No (ServiceM8) | ServiceM8 App Secret from Store Connect (for OAuth 2.0). |
 | `APP_BASE_URL` | No (ServiceM8) | Base URL for OAuth callback, e.g. `https://quote-app-production-7897.up.railway.app`. Defaults to `http://127.0.0.1:8000` for local dev. Must match Return URL in ServiceM8 Store Connect. |
@@ -94,6 +97,19 @@ After a successful deploy:
 4. **Health check:** `https://YOUR-RAILWAY-URL/api/health` → `{"status":"ok"}`.
 5. **Config (public):** `https://YOUR-RAILWAY-URL/api/config` → `supabaseUrl`, `anonKey` for frontend auth.
 
+The same Railway URL serves both desktop and mobile layouts concurrently (adaptive by viewport/pointer).  
+For QA overrides, append `?viewport=desktop` or `?viewport=mobile`.
+
+## 6A. Phone homescreen test (PWA)
+
+1. In Railway variables, set `PWA_ENABLED=true` on a staging service.
+2. Redeploy and open the **HTTPS** Railway URL on your phone.
+3. Add to homescreen:
+   - iOS Safari: Share → **Add to Home Screen**
+   - Android Chrome: menu → **Install app** / **Add to Home screen**
+4. Launch from homescreen and verify the app opens in standalone mode.
+5. Toggle `PWA_ENABLED=false` and redeploy to validate kill-switch behavior (existing SW unregisters on next load).
+
 ## 7. Supabase Auth redirect URLs (if using sign-in)
 
 If users sign in with Supabase Auth:
@@ -122,6 +138,8 @@ In Railway: **Settings** → **Networking** → **Custom Domain**. Add your doma
 - [ ] App loads at `/` (frontend).
 - [ ] `GET /api/health` returns `{"status":"ok"}`.
 - [ ] `GET /api/products` returns product list.
+- [ ] `GET /manifest.webmanifest` returns manifest JSON.
+- [ ] `GET /service-worker.js` returns JS when PWA rollout is enabled.
 - [ ] Sign in works (Supabase); save/load diagrams work.
 - [ ] Blueprint upload and processing work (OpenCV in production).
 

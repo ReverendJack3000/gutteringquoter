@@ -353,6 +353,8 @@ function scheduleBboxRecalcDebounce() {
 const MIN_PANEL_WIDTH = 280;
 const MAX_PANEL_WIDTH = 600;
 const DEFAULT_PANEL_WIDTH = 320;
+const MOBILE_LAYOUT_BREAKPOINT_PX = 980;
+const VIEWPORT_MODE_QUERY_KEY = 'viewport';
 
 // Uniform element sizing: placed elements use 1/5 of reference size (works for portrait/landscape 9:16)
 const REFERENCE_SIZE_PX = 400;
@@ -376,6 +378,13 @@ let elementIdCounter = 0;
 let groupIdCounter = 0;
 let imagesCache = {};
 let messageTimeoutId = null;
+const layoutState = {
+  forcedMode: null,
+  viewportMode: 'desktop',
+  panelExpanded: true,
+  resizeListenerBound: false,
+  resizeDebounceId: null,
+};
 
 /** Last successful quote response for edit mode: { materials, materials_subtotal, labour_hours, labour_rate, labour_subtotal, total } */
 let lastQuoteData = null;
@@ -455,6 +464,20 @@ function clearMessage() {
   if (el) el.setAttribute('hidden', '');
   if (messageTimeoutId) clearTimeout(messageTimeoutId);
   messageTimeoutId = null;
+}
+
+/**
+ * Configure PWA behavior from backend config.
+ * pwa.js may load after app.js; in that case store pending config for it.
+ */
+function configurePwaFromConfig(config) {
+  if (!config || typeof config.pwaEnabled !== 'boolean') return;
+  const payload = { enabled: config.pwaEnabled };
+  if (typeof window.__quoteAppConfigurePwa === 'function') {
+    window.__quoteAppConfigurePwa(payload);
+  } else {
+    window.__quoteAppPendingPwaConfig = payload;
+  }
 }
 
 function updateToolbarBreadcrumbs(projectName) {
@@ -3450,10 +3473,21 @@ function loadImage(src) {
  * Load diagram image for drop/preview. Backend may return .png URLs for normalized assets;
  * if the PNG is missing (normalize script not run), fall back to .svg so drag-drop still works.
  */
+function resolveDiagramAssetUrl(url) {
+  if (typeof url !== 'string') return url;
+  // Mobile/production safety: local Marley assets are authored as SVGs in this repo.
+  // Prefer SVG directly to avoid noisy PNG 404 probes in browser console.
+  if (/^\/assets\/marley\/.*\.png(\?.*)?$/i.test(url)) {
+    return url.replace(/\.png(?=($|\?))/i, '.svg');
+  }
+  return url;
+}
+
 function loadDiagramImage(url) {
-  return loadImage(url).catch((err) => {
-    if (typeof url === 'string' && /\.png$/i.test(url)) {
-      const svgUrl = url.replace(/\.png$/i, '.svg');
+  const resolvedUrl = resolveDiagramAssetUrl(url);
+  return loadImage(resolvedUrl).catch((err) => {
+    if (typeof resolvedUrl === 'string' && /\.png($|\?)/i.test(resolvedUrl)) {
+      const svgUrl = resolvedUrl.replace(/\.png(?=($|\?))/i, '.svg');
       return loadImage(svgUrl);
     }
     throw err;
@@ -6618,8 +6652,10 @@ function initAuth() {
   return fetch('/api/config')
     .then((r) => r.json())
     .then((config) => {
-      if (config.supabaseUrl && config.anonKey && typeof window.supabase !== 'undefined') {
-        authState.supabase = window.supabase.createClient(config.supabaseUrl, config.anonKey);
+      const resolvedConfig = config || {};
+      configurePwaFromConfig(resolvedConfig);
+      if (resolvedConfig.supabaseUrl && resolvedConfig.anonKey && typeof window.supabase !== 'undefined') {
+        authState.supabase = window.supabase.createClient(resolvedConfig.supabaseUrl, resolvedConfig.anonKey);
         authState.supabase.auth.onAuthStateChange((event, session) => {
           authState.token = session?.access_token ?? null;
           authState.email = session?.user?.email ?? null;
@@ -6942,6 +6978,18 @@ function initProductsView() {
   const btnCancelProduct = document.getElementById('btnCancelProduct');
   const btnSaveProduct = document.getElementById('btnSaveProduct');
   const btnArchiveProduct = document.getElementById('btnArchiveProduct');
+  const isMobileSvgUploadDisabled =
+    typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && (window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(pointer: coarse)').matches);
+
+  function notifyMobileSvgUploadDisabled() {
+    showMessage('SVG product upload is desktop-only in this MVP.', 'info');
+  }
+
+  if (isMobileSvgUploadDisabled && productCardNew) {
+    productCardNew.hidden = true;
+  }
 
   let pendingSvgContent = null;
   let pendingSvgFile = null;
@@ -7058,6 +7106,10 @@ function initProductsView() {
 
   openProductModal = (product = null) => {
     if (!product) {
+      if (isMobileSvgUploadDisabled) {
+        notifyMobileSvgUploadDisabled();
+        return;
+      }
       resetProductForm();
       if (productModalTitle) productModalTitle.textContent = 'Add New Product';
       if (btnSaveProduct) {
@@ -7144,6 +7196,10 @@ function initProductsView() {
 
   if (productCardNew && productModal) {
     productCardNew.addEventListener('click', () => {
+      if (isMobileSvgUploadDisabled) {
+        notifyMobileSvgUploadDisabled();
+        return;
+      }
       if (!authState.token) {
         switchView('view-login');
         showMessage('Sign in to add products.');
@@ -7162,15 +7218,21 @@ function initProductsView() {
 
   if (dropZone) {
     dropZone.addEventListener('click', (e) => {
+      if (isMobileSvgUploadDisabled) {
+        notifyMobileSvgUploadDisabled();
+        return;
+      }
       if (e.target === productModalFileInput || e.target.closest('.file-preview')) return;
       productModalFileInput?.click();
     });
     dropZone.addEventListener('dragover', (e) => {
+      if (isMobileSvgUploadDisabled) return;
       e.preventDefault();
       e.stopPropagation();
       dropZone.classList.add('drag-over');
     });
     dropZone.addEventListener('dragleave', (e) => {
+      if (isMobileSvgUploadDisabled) return;
       e.preventDefault();
       e.stopPropagation();
       if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
@@ -7179,6 +7241,10 @@ function initProductsView() {
       e.preventDefault();
       e.stopPropagation();
       dropZone.classList.remove('drag-over');
+      if (isMobileSvgUploadDisabled) {
+        notifyMobileSvgUploadDisabled();
+        return;
+      }
       const file = e.dataTransfer?.files?.[0];
       if (!file) return;
       const validation = validateProductSvgFile(file);
@@ -7203,6 +7269,11 @@ function initProductsView() {
 
   if (productModalFileInput) {
     productModalFileInput.addEventListener('change', () => {
+      if (isMobileSvgUploadDisabled) {
+        notifyMobileSvgUploadDisabled();
+        clearProductFileInput();
+        return;
+      }
       const file = productModalFileInput.files?.[0];
       if (!file) return;
       const validation = validateProductSvgFile(file);
@@ -7248,6 +7319,10 @@ function initProductsView() {
   if (productForm) {
     productForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isMobileSvgUploadDisabled && pendingSvgFile) {
+        notifyMobileSvgUploadDisabled();
+        return;
+      }
       if (!authState.token) {
         showMessage('Sign in to add products.');
         switchView('view-login');
@@ -7693,36 +7768,171 @@ function initDiagrams() {
 
 function initPanel() {
   const panel = document.getElementById('panel');
-  const panelContent = document.getElementById('panelContent');
   const panelCollapsed = document.getElementById('panelCollapsed');
   const panelClose = document.getElementById('panelClose');
-  if (!panel) return;
-
-  panel.classList.add('expanded');
-  panel.style.width = DEFAULT_PANEL_WIDTH + 'px';
+  if (!panel || !panelCollapsed || !panelClose) return;
 
   panelCollapsed.addEventListener('click', () => {
-    panel.classList.remove('collapsed');
-    panel.classList.add('expanded');
-    panel.style.width = DEFAULT_PANEL_WIDTH + 'px';
+    setPanelExpanded(true);
   });
 
   panelClose.addEventListener('click', () => {
-    panel.classList.remove('expanded');
-    panel.classList.add('collapsed');
-    panel.style.width = '48px';
+    setPanelExpanded(false);
   });
+
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (layoutState.viewportMode !== 'mobile' || !layoutState.panelExpanded) return;
+      if (!(e.target instanceof Element)) return;
+      const panelEl = document.getElementById('panel');
+      if (!panelEl) return;
+      if (panelEl.contains(e.target)) return;
+      setPanelExpanded(false);
+    },
+    true
+  );
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && layoutState.viewportMode === 'mobile' && layoutState.panelExpanded) {
+      setPanelExpanded(false);
+    }
+  });
+
+  layoutState.forcedMode = getForcedViewportModeFromUrl();
+  applyViewportMode(detectViewportMode(), { announce: false });
+
+  if (!layoutState.resizeListenerBound && typeof window !== 'undefined') {
+    window.addEventListener('resize', handleViewportResize, { passive: true });
+    layoutState.resizeListenerBound = true;
+  }
+}
+
+function getForcedViewportModeFromUrl() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const mode = new URLSearchParams(window.location.search).get(VIEWPORT_MODE_QUERY_KEY);
+    const normalized = String(mode || '').trim().toLowerCase();
+    if (normalized === 'mobile' || normalized === 'desktop') return normalized;
+  } catch (_) {}
+  return null;
+}
+
+function detectViewportMode() {
+  if (layoutState.forcedMode) return layoutState.forcedMode;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'desktop';
+  const isNarrowViewport = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`).matches;
+  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  return isNarrowViewport || isCoarsePointer ? 'mobile' : 'desktop';
+}
+
+function announceViewportMode(mode) {
+  const announcer = document.getElementById('appAnnouncer');
+  if (!announcer) return;
+  const message = mode === 'mobile' ? 'Mobile layout active.' : 'Desktop layout active.';
+  announcer.textContent = '';
+  window.setTimeout(() => {
+    announcer.textContent = message;
+  }, 30);
+}
+
+function updatePanelToggleAccessibility(isExpanded) {
+  const panelCollapsed = document.getElementById('panelCollapsed');
+  const panelClose = document.getElementById('panelClose');
+  if (panelCollapsed) {
+    panelCollapsed.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    panelCollapsed.setAttribute(
+      'aria-label',
+      isExpanded ? 'Products panel is open' : 'Open Marley products panel'
+    );
+  }
+  if (panelClose) {
+    panelClose.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+  }
+}
+
+function setPanelExpanded(expanded, options = {}) {
+  const panel = document.getElementById('panel');
+  const resizer = document.getElementById('resizer');
+  if (!panel) return;
+
+  const isExpanded = !!expanded;
+  const isMobileMode = layoutState.viewportMode === 'mobile';
+  layoutState.panelExpanded = isExpanded;
+
+  panel.classList.toggle('expanded', isExpanded);
+  panel.classList.toggle('collapsed', !isExpanded);
+
+  if (isMobileMode) {
+    panel.style.width = '';
+  } else if (isExpanded) {
+    if (typeof options.width === 'number' && Number.isFinite(options.width)) {
+      panel.style.width = `${options.width}px`;
+    } else {
+      panel.style.width = DEFAULT_PANEL_WIDTH + 'px';
+    }
+  } else {
+    panel.style.width = '48px';
+  }
+
+  if (resizer) {
+    resizer.hidden = isMobileMode || !isExpanded;
+  }
+
+  updatePanelToggleAccessibility(isExpanded);
+
+  if (options.resizeCanvas !== false) {
+    resizeCanvas();
+    draw();
+  }
+}
+
+function applyViewportMode(mode, options = {}) {
+  const normalizedMode = mode === 'mobile' ? 'mobile' : 'desktop';
+  const previousMode = layoutState.viewportMode;
+  const modeChanged = previousMode !== normalizedMode;
+
+  layoutState.viewportMode = normalizedMode;
+
+  if (typeof document !== 'undefined') {
+    if (document.body) document.body.setAttribute('data-viewport-mode', normalizedMode);
+    if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
+  }
+
+  if (modeChanged) {
+    const shouldExpandPanelByDefault = normalizedMode === 'desktop';
+    setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
+    if (options.announce !== false) announceViewportMode(normalizedMode);
+    return;
+  }
+
+  setPanelExpanded(layoutState.panelExpanded, { resizeCanvas: options.resizeCanvas !== false });
+}
+
+function handleViewportResize() {
+  if (layoutState.forcedMode) return;
+  if (layoutState.resizeDebounceId != null) {
+    window.clearTimeout(layoutState.resizeDebounceId);
+  }
+  layoutState.resizeDebounceId = window.setTimeout(() => {
+    layoutState.resizeDebounceId = null;
+    const nextMode = detectViewportMode();
+    if (nextMode !== layoutState.viewportMode) {
+      applyViewportMode(nextMode, { announce: true });
+    }
+  }, 120);
 }
 
 function initResizer() {
   const resizer = document.getElementById('resizer');
-  const workspace = document.querySelector('.workspace');
   const panel = document.getElementById('panel');
+  if (!resizer || !panel) return;
 
   let startX = 0;
   let startWidth = 0;
 
   resizer.addEventListener('mousedown', (e) => {
+    if (layoutState.viewportMode === 'mobile') return;
     e.preventDefault();
     resizer.classList.add('dragging');
     startX = e.clientX;
@@ -7732,18 +7942,22 @@ function initResizer() {
   });
 
   function onMouseMove(e) {
+    if (layoutState.viewportMode === 'mobile') return;
     const delta = e.clientX - startX;
     let w = startWidth + delta;
     w = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, w));
-    panel.style.width = w + 'px';
     if (w <= 80) {
-      panel.classList.remove('expanded');
-      panel.classList.add('collapsed');
-      panel.style.width = '48px';
+      setPanelExpanded(false, { resizeCanvas: false });
     } else {
       panel.classList.remove('collapsed');
       panel.classList.add('expanded');
+      panel.style.width = w + 'px';
+      layoutState.panelExpanded = true;
+      updatePanelToggleAccessibility(true);
+      if (resizer) resizer.hidden = false;
     }
+    resizeCanvas();
+    draw();
   }
 
   function onMouseUp() {
@@ -8079,12 +8293,18 @@ function initProducts() {
 }
 
 async function checkBackendAvailable() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { ok: false, reason: 'offline' };
+  }
   try {
-    const res = await fetch('/api/health');
-    if (!res.ok) return false;
-    return true;
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    if (!res.ok) return { ok: false, reason: 'unreachable' };
+    return { ok: true, reason: 'ok' };
   } catch (_) {
-    return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { ok: false, reason: 'offline' };
+    }
+    return { ok: false, reason: 'unreachable' };
   }
 }
 
@@ -8208,8 +8428,12 @@ function init() {
     checkOAuthCallback();
   });
 
-  checkBackendAvailable().then((ok) => {
-    if (!ok) {
+  checkBackendAvailable().then((status) => {
+    if (!status.ok) {
+      if (status.reason === 'offline') {
+        showMessage('You are offline. Some features will be unavailable until your connection returns.', 'info');
+        return;
+      }
       showMessage(
         'App not running from the backend server. Start with: cd backend && uvicorn main:app --reload --host 127.0.0.1 --port 8000 then open http://127.0.0.1:8000/',
         'error'
@@ -8235,6 +8459,9 @@ if (typeof window !== 'undefined') {
       viewPanY: state.viewPanY,
     };
   };
+  window.__quoteAppGetViewportMode = function () {
+    return layoutState.viewportMode;
+  };
   window.__quoteAppSetElementRotation = function (id, degrees) {
     const el = state.elements.find((e) => e.id === id);
     if (el) {
@@ -8245,6 +8472,32 @@ if (typeof window !== 'undefined') {
   };
   window.__quoteAppGetElements = function () {
     return state.elements.map((el) => ({ id: el.id, assetId: el.assetId || null, x: el.x, y: el.y, width: el.width, height: el.height, rotation: el.rotation || 0, color: el.color || null }));
+  };
+  // E2E helper: deterministic selection in touch/headless environments where click hit-testing can be flaky.
+  window.__quoteAppSelectElementById = function (id) {
+    const el = state.elements.find((e) => e.id === id);
+    if (!el) return false;
+    if (typeof setSelection === 'function') setSelection([id]);
+    else {
+      state.selectedIds = [id];
+      state.selectedId = id;
+    }
+    state.selectedBlueprint = false;
+    if (typeof draw === 'function') draw();
+    return true;
+  };
+  // E2E fallback for environments where pointer drag is flaky (e.g. headless/mobile emulation).
+  window.__quoteAppMoveElementBy = function (id, dx, dy) {
+    const el = state.elements.find((e) => e.id === id);
+    if (!el || el.locked) return false;
+    const ndx = Number(dx);
+    const ndy = Number(dy);
+    if (!Number.isFinite(ndx) || !Number.isFinite(ndy)) return false;
+    el.x += ndx;
+    el.y += ndy;
+    if (typeof setSelection === 'function') setSelection([id]);
+    if (typeof draw === 'function') draw();
+    return true;
   };
   // Returns element center in client/screen coordinates for E2E (canvas getBoundingClientRect + view transform).
   window.__quoteAppGetElementScreenCenter = function (id) {

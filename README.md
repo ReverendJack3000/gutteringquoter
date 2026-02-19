@@ -1,6 +1,6 @@
 # Quote App – Repair Blueprint MVP
 
-Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG.
+Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG. Optional PWA support is available behind a server flag (`PWA_ENABLED`) and is disabled by default. The same deployment now serves both desktop and mobile layouts automatically.
 
 ## Stack
 
@@ -28,6 +28,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    cd backend
    cp .env.example .env
    # Edit .env: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from Supabase dashboard → Settings → API
+   # Optional PWA rollout flag (default-off safety): PWA_ENABLED=false
    ```
 
 3. **Run the local server (single command)**
@@ -38,7 +39,14 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    ./scripts/run-server.sh
    ```
 
-   The script activates the backend `.venv` if present and runs `uvicorn` on **http://127.0.0.1:8000/**. Health check: **GET http://127.0.0.1:8000/api/health** (returns `{"status":"ok"}`).
+   The script activates the backend `.venv` if present and runs `uvicorn` on **http://127.0.0.1:8000/** by default.  
+   Health check: **GET http://127.0.0.1:8000/api/health** (returns `{"status":"ok"}`).
+
+   Optional overrides:
+
+   ```bash
+   HOST=0.0.0.0 PORT=8000 PWA_ENABLED=true ./scripts/run-server.sh
+   ```
 
    **Alternative (manual):** from the `backend` directory run:
 
@@ -63,6 +71,12 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    - Select an element to move, resize (corners), or rotate (top handle).
    - Drag the divider between blueprint and panel to resize.
    - **Export PNG** to download the composed blueprint.
+   - On phones/tablets, the products panel becomes a slide-out drawer and desktop behavior remains unchanged on large screens.
+
+   Optional viewport override for QA:
+
+   - `http://127.0.0.1:8000/?viewport=desktop`
+   - `http://127.0.0.1:8000/?viewport=mobile`
 
 **Troubleshooting:** If you see a blank page or 404, ensure you started the server from the `backend` directory and that the project has a `frontend` folder (with `index.html`, `app.js`, `styles.css`) next to `backend`. Use the URL with a trailing slash or without: `http://127.0.0.1:8000/`.
 
@@ -89,6 +103,8 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `GET /api/diagrams` – list saved diagrams (requires `Authorization: Bearer <token>`)
 - `POST /api/diagrams` – save diagram (requires Bearer token)
 - `GET /api/diagrams/{id}` – load diagram (requires Bearer token)
+- `GET /manifest.webmanifest` – PWA manifest (static)
+- `GET /service-worker.js` – service worker script (static)
 
 OpenAPI docs: http://127.0.0.1:8000/docs
 
@@ -98,10 +114,28 @@ To deploy to production:
 
 1. Push the repo to GitHub (or GitLab/Bitbucket).
 2. Create a project at [railway.app](https://railway.app) and deploy from the repo.
-3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`).
+3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`, `PWA_ENABLED`).
 4. The repo includes a **Procfile** and **nixpacks.toml** so Railway runs `uvicorn` from `backend/` and serves the frontend.
 
 Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)**. After deploy, the live app URL is shown in the Railway dashboard (e.g. `https://quote-app-production.up.railway.app`).
+
+## PWA rollout (default-off)
+
+- **Default behavior:** `PWA_ENABLED=false` (or unset). No service worker is registered; desktop production behavior stays unchanged.
+- **Enable PWA:** set `PWA_ENABLED=true` in the server environment and redeploy/restart.
+- **Kill switch:** set `PWA_ENABLED=false` and redeploy/restart. On next app load, client logic unregisters service workers and clears Quote App PWA caches.
+- **Scope:** app shell/assets are cached for offline load; `/api/*` remains network-only.
+
+## Phone homescreen testing
+
+1. For local network phone testing (same Wi-Fi), run:
+
+```bash
+./scripts/run-phone-preview.sh
+```
+
+2. Open the printed URL on your phone and add it to your homescreen.
+3. For full PWA behavior (service worker + offline), use an **HTTPS** URL (for example Railway staging) with `PWA_ENABLED=true`.
 
 **Quick curl test (blueprint pipeline):** with the server running and a small image at `scripts/fixtures/tiny.png`:
 

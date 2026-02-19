@@ -16,6 +16,39 @@ body {
   height: 100vh;
 }
 
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  z-index: 2000;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #0b68ff;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  transform: translateY(-140%);
+  transition: transform 0.18s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+:focus-visible {
+  outline: 3px solid #0b68ff;
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -372,6 +405,12 @@ body {
   background: #f0fdf4;
   color: #166534;
   border: 1px solid #bbf7d0;
+}
+
+.toolbar-message.info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 
 .toolbar-message[hidden] {
@@ -1195,9 +1234,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: none;
   cursor: pointer;
   background: #f8f8f8;
   border-left: 1px solid #e0e0e0;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .panel-collapsed:hover {
@@ -1224,6 +1268,144 @@ body {
 
 .panel.expanded .panel-content {
   display: flex;
+}
+
+/* Phase 1: adaptive mobile mode (desktop behavior unchanged by default). */
+body[data-viewport-mode="mobile"] .toolbar {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+body[data-viewport-mode="mobile"] .toolbar-right {
+  gap: 6px;
+}
+
+body[data-viewport-mode="mobile"] .toolbar-breadcrumbs {
+  gap: 6px;
+}
+
+body[data-viewport-mode="mobile"] .breadcrumb-prefix {
+  display: none;
+}
+
+body[data-viewport-mode="mobile"] .breadcrumb-project-input {
+  max-width: 140px;
+}
+
+body[data-viewport-mode="mobile"] #generateQuoteBtn {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+body[data-viewport-mode="mobile"] .workspace {
+  position: relative;
+}
+
+body[data-viewport-mode="mobile"] .blueprint-wrap {
+  min-width: 0;
+}
+
+body[data-viewport-mode="mobile"] .resizer {
+  display: none !important;
+}
+
+body[data-viewport-mode="mobile"] .panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(86vw, 360px) !important;
+  min-width: 0;
+  max-width: 360px;
+  z-index: 80;
+  border-left: 1px solid #d6d6d6;
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.2);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+
+body[data-viewport-mode="mobile"] .panel.expanded {
+  transform: translateX(0);
+}
+
+body[data-viewport-mode="mobile"] .panel.collapsed {
+  width: min(86vw, 360px) !important;
+}
+
+body[data-viewport-mode="mobile"] .panel-content {
+  display: flex;
+}
+
+body[data-viewport-mode="mobile"] .panel.collapsed .panel-content {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body[data-viewport-mode="mobile"] .panel-collapsed {
+  position: absolute;
+  left: -42px;
+  top: 50%;
+  width: 42px;
+  height: 96px;
+  transform: translateY(-50%);
+  border: 1px solid #d8d8d8;
+  border-right: none;
+  border-radius: 12px 0 0 12px;
+  background: #ffffff;
+  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.12);
+}
+
+body[data-viewport-mode="mobile"] .panel.expanded .panel-collapsed {
+  display: none;
+}
+
+body[data-viewport-mode="mobile"] .panel.collapsed .panel-collapsed {
+  display: flex;
+}
+
+body[data-viewport-mode="mobile"] .panel-header {
+  padding-top: max(14px, env(safe-area-inset-top));
+}
+
+body[data-viewport-mode="mobile"] .product-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  transform: none;
+  max-width: calc(100% - 16px);
+  width: auto;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
+  max-width: 92%;
+  min-height: 120px;
+  padding: 18px 14px;
+}
+
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-title {
+  font-size: 14px;
+}
+
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps {
+  font-size: 12px;
+}
+
+body[data-viewport-mode="mobile"] .measurement-deck {
+  max-height: 30vh;
+}
+
+body[data-viewport-mode="mobile"] .toolbar-icon-btn,
+body[data-viewport-mode="mobile"] .btn-save-diagram,
+body[data-viewport-mode="mobile"] .panel-close {
+  min-height: 40px;
 }
 
 .panel-header {
@@ -1341,6 +1523,11 @@ body {
   cursor: grab;
   background: #fafafa;
   padding: 8px;
+}
+
+.product-thumb:focus-visible {
+  border-color: #0b68ff;
+  box-shadow: 0 0 0 3px rgba(11, 104, 255, 0.18);
 }
 
 .product-thumb:active {

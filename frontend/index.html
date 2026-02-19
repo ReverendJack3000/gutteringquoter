@@ -2,13 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#71C43C" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Quote App – Repair Blueprint</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/styles.css?v=40" />
 </head>
 <body>
+  <a class="skip-link" href="#workspaceMain">Skip to canvas workspace</a>
+  <div id="appAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
   <div class="app">
     <div id="view-canvas" class="app-view hidden">
     <header class="toolbar toolbar-floating">
@@ -86,7 +93,7 @@
       <button type="button" class="color-swatch" data-color="#AF52DE" title="Purple" style="--swatch:#AF52DE"></button>
     </div>
 
-    <div class="workspace">
+    <main class="workspace" id="workspaceMain" role="main" aria-label="Blueprint workspace">
       <div class="blueprint-wrap" id="blueprintWrap" title="Drop a photo or drag products onto the whiteboard">
         <div class="diagram-floating-toolbar" id="diagramFloatingToolbar" role="toolbar" aria-label="Diagram tools">
           <label class="toolbar-pill-btn upload-zone" id="uploadZone" for="fileInput" title="Upload property photo or PDF (JPEG, PNG, GIF, WebP, HEIC, or PDF; max 20 MB)">
@@ -200,16 +207,16 @@
 
       <div class="resizer" id="resizer" title="Drag to resize"></div>
 
-      <aside class="panel" id="panel">
-        <div class="panel-collapsed" id="panelCollapsed" title="Open Marley products">
+      <aside class="panel" id="panel" aria-label="Marley products panel">
+        <button type="button" class="panel-collapsed" id="panelCollapsed" title="Open Marley products" aria-label="Open Marley products" aria-controls="panelContent" aria-expanded="false">
           <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 18l-6-6 6-6"/>
           </svg>
-        </div>
+        </button>
         <div class="panel-content" id="panelContent">
           <div class="panel-header">
             <h2>Marley products</h2>
-            <button type="button" class="panel-close" id="panelClose" title="Collapse panel">
+            <button type="button" class="panel-close" id="panelClose" title="Collapse panel" aria-label="Collapse products panel" aria-controls="panelContent">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
             </button>
           </div>
@@ -230,12 +237,12 @@
             </select>
           </div>
           <div class="panel-search">
-            <input type="search" id="productSearch" placeholder="Search products…" />
+            <input type="search" id="productSearch" placeholder="Search products…" aria-label="Search Marley products" />
           </div>
           <div class="product-grid" id="productGrid"></div>
         </div>
       </aside>
-    </div>
+    </main>
 
     <!-- Measurement Deck: runs (gutters, downpipes) with length entry -->
     <div class="measurement-deck" id="measurementDeck" role="region" aria-label="Measurement runs">
@@ -576,5 +583,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/app.js"></script>
+  <script src="/pwa.js"></script>
 </body>
 </html>

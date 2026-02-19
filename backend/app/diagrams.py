@@ -139,7 +139,8 @@ def create_diagram(
     except Exception as e:
         logger.warning("Upload blueprint/thumbnail failed, rolling back diagram %s: %s", diagram_id, e)
         supabase.table("saved_diagrams").delete().eq("id", str(diagram_id)).eq("user_id", str(user_id)).execute()
-        raise RuntimeError("Failed to store blueprint image. Please try again.") from e
+        msg = str(e).strip() or "Upload failed"
+        raise RuntimeError(f"Failed to store blueprint image: {msg}") from e
 
     if blueprint_url or thumbnail_url:
         payload = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -197,7 +198,8 @@ def update_diagram(
             updates["thumbnail_url"] = supabase.storage.from_(BUCKET).get_public_url(path)
     except Exception as e:
         logger.warning("Upload blueprint/thumbnail failed on update: %s", e)
-        raise RuntimeError("Failed to store blueprint image. Please try again.") from e
+        msg = str(e).strip() or "Upload failed"
+        raise RuntimeError(f"Failed to store blueprint image: {msg}") from e
 
     supabase.table("saved_diagrams").update(updates).eq("id", str(diagram_id)).eq("user_id", str(user_id)).execute()
     return get_diagram(user_id, diagram_id)

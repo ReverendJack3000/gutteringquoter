@@ -17,6 +17,8 @@ fi
 
 curl -sf "$BASE/api/health" | grep -q '"status"' && echo "GET /api/health OK" || { echo "GET /api/health FAIL"; exit 1; }
 curl -sf "$BASE/api/products" | grep -q '"products"' && echo "GET /api/products OK" || { echo "GET /api/products FAIL"; exit 1; }
+curl -sf "$BASE/manifest.webmanifest" | grep -q '"display"' && echo "GET /manifest.webmanifest OK" || { echo "GET /manifest.webmanifest FAIL"; exit 1; }
+curl -sf "$BASE/service-worker.js" | grep -q "self.addEventListener" && echo "GET /service-worker.js OK" || { echo "GET /service-worker.js FAIL"; exit 1; }
 curl -sf -X POST "$BASE/api/process-blueprint?technical_drawing=true" -F "file=@$TINY_PNG" -o /dev/null -w "" && echo "POST /api/process-blueprint OK" || { echo "POST /api/process-blueprint FAIL"; exit 1; }
 
 echo ""
