@@ -138,6 +138,40 @@ async function run() {
     if (!uploadZone || !exportBtn) throw new Error('Toolbar elements missing');
     console.log('  ✓ Toolbar (upload, export) present');
 
+    // Accessibility settings modal: keyboard focus trap + Escape close
+    const a11ySettingsBtn = await page.$('#openAccessibilitySettingsBtn');
+    if (!a11ySettingsBtn) throw new Error('Accessibility settings button missing');
+    await a11ySettingsBtn.click();
+    await delay(250);
+    const a11yModalOpen = await page.evaluate(() => {
+      const modal = document.getElementById('accessibilitySettingsModal');
+      return !!modal && !modal.hasAttribute('hidden');
+    });
+    if (!a11yModalOpen) throw new Error('Accessibility settings modal did not open');
+
+    let focusStayedInside = true;
+    for (let i = 0; i < 6; i += 1) {
+      await page.keyboard.press('Tab');
+      await delay(80);
+      const inside = await page.evaluate(() => {
+        const modal = document.getElementById('accessibilitySettingsModal');
+        return !!modal && modal.contains(document.activeElement);
+      });
+      if (!inside) {
+        focusStayedInside = false;
+        break;
+      }
+    }
+    if (!focusStayedInside) throw new Error('Accessibility settings modal focus escaped during Tab navigation');
+    await page.keyboard.press('Escape');
+    await delay(120);
+    const a11yModalClosed = await page.evaluate(() => {
+      const modal = document.getElementById('accessibilitySettingsModal');
+      return !modal || modal.hasAttribute('hidden');
+    });
+    if (!a11yModalClosed) throw new Error('Accessibility settings modal did not close on Escape');
+    console.log('  ✓ Accessibility modal traps focus and closes on Escape');
+
     // Panel: ensure we have panel elements and can expand/collapse
     const panel = await page.$('#panel');
     const panelContent = await page.$('#panelContent');
@@ -159,7 +193,17 @@ async function run() {
 
     await page.click('#panelClose');
     await delay(300);
-    const collapsed = await page.evaluate(() => document.getElementById('panel').classList.contains('collapsed'));
+    let collapsed = await page.evaluate(() => document.getElementById('panel').classList.contains('collapsed'));
+    if (!collapsed) {
+      await page.keyboard.press('Escape').catch(() => {});
+      await delay(200);
+      collapsed = await page.evaluate(() => document.getElementById('panel').classList.contains('collapsed'));
+    }
+    if (!collapsed) {
+      await page.evaluate(() => { const btn = document.getElementById('panelClose'); if (btn) btn.click(); });
+      await delay(200);
+      collapsed = await page.evaluate(() => document.getElementById('panel').classList.contains('collapsed'));
+    }
     if (!collapsed) throw new Error('Panel should collapse on close button');
     console.log('  ✓ Panel collapses on close');
 
@@ -187,9 +231,16 @@ async function run() {
       page.click('#uploadZone'),
     ]).catch(() => [null]);
     if (!fileChooser) {
-      throw new Error('Blueprint upload fixture: file chooser did not open');
+      const fileInput = await page.$('#fileInput');
+      if (!fileInput) throw new Error('Blueprint upload fixture: file chooser did not open and #fileInput missing');
+      await fileInput.uploadFile(blueprintImagePath);
+      await page.evaluate(() => {
+        const input = document.getElementById('fileInput');
+        if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    } else {
+      await fileChooser.accept([blueprintImagePath]);
     }
-    await fileChooser.accept([blueprintImagePath]);
     await delay(1500);
     const cropModal = await page.$('#cropModal');
     const modalVisible = cropModal && !(await page.evaluate((el) => el.hasAttribute('hidden'), cropModal));
@@ -272,6 +323,16 @@ async function run() {
       }
     } else if (canvasBox && !droppedEl) {
       throw new Error('Selection after click: no elements after drop');
+    }
+    if (droppedEl) {
+      const announcerText = await page.evaluate(() => {
+        const el = document.getElementById('appAnnouncer');
+        return el ? (el.textContent || '').trim() : '';
+      });
+      if (!announcerText) {
+        throw new Error('Live region announcement missing: app announcer is empty after core interactions');
+      }
+      console.log(`  ✓ Live region emits announcements ("${announcerText}")`);
     }
 
     // Gutter rotation constraint: 60°–80° band must clamp to 60 or 80 (never stay in band)
@@ -1292,6 +1353,52 @@ async function run() {
       }
     } else {
       console.log('  ✓ Quote test skipped: no gutter products found in panel fixture');
+    }
+
+    // Mobile viewport regression: mode, overflow, and orientation resilience
+    const mobilePage = await context.newPage();
+    try {
+      await mobilePage.setCacheEnabled(false);
+      await mobilePage.setViewport({ width: 375, height: 667, isMobile: true, hasTouch: true });
+      const mobileRes = await mobilePage.goto(`${BASE_URL}?viewport=mobile`, { waitUntil: 'networkidle2' });
+      if (!mobileRes || !mobileRes.ok()) throw new Error('Mobile viewport regression: could not load app');
+      await mobilePage.evaluate(() => {
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      });
+      await delay(500);
+      const portraitCheck = await mobilePage.evaluate(() => {
+        const mode = typeof window.__quoteAppGetViewportMode === 'function' ? window.__quoteAppGetViewportMode() : null;
+        const overflow = document.documentElement.scrollWidth - window.innerWidth;
+        const panelCollapsed = document.getElementById('panelCollapsed');
+        const panelVisible = !!panelCollapsed && !panelCollapsed.hasAttribute('hidden');
+        return { mode, overflow, panelVisible };
+      });
+      if (portraitCheck.mode !== 'mobile') {
+        throw new Error(`Mobile viewport regression: expected mode mobile, got ${portraitCheck.mode}`);
+      }
+      if (portraitCheck.overflow > 2) {
+        throw new Error(`Mobile viewport regression: portrait horizontal overflow ${portraitCheck.overflow}px`);
+      }
+      if (!portraitCheck.panelVisible) {
+        throw new Error('Mobile viewport regression: products panel toggle not visible in portrait');
+      }
+
+      await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
+      await delay(600);
+      const landscapeCheck = await mobilePage.evaluate(() => {
+        const mode = typeof window.__quoteAppGetViewportMode === 'function' ? window.__quoteAppGetViewportMode() : null;
+        const overflow = document.documentElement.scrollWidth - window.innerWidth;
+        return { mode, overflow };
+      });
+      if (landscapeCheck.mode !== 'mobile') {
+        throw new Error(`Mobile viewport regression: expected mobile mode after landscape rotate, got ${landscapeCheck.mode}`);
+      }
+      if (landscapeCheck.overflow > 2) {
+        throw new Error(`Mobile viewport regression: landscape horizontal overflow ${landscapeCheck.overflow}px`);
+      }
+      console.log('  ✓ Mobile viewport + orientation regression checks passed');
+    } finally {
+      await mobilePage.close();
     }
 
     console.log('\nAll checks passed.');

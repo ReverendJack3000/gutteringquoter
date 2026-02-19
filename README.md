@@ -204,9 +204,14 @@ npm install
 - **Center-drop:** Click (no drag) on a product thumb adds one element at normalized size
 - **Color tinting:** originalImage preservation, tintedCanvas creation, multiple color changes, color removal
 - **Selection over blueprint:** Can select elements after color changes
+- **Accessibility modal keyboarding:** focus trap + Escape close in accessibility settings modal
+- **Live-region announcements:** app announcer emits updates during core interactions
+- **Mobile viewport regressions:** forced mobile mode, portrait/landscape orientation, no horizontal overflow
 
 **Manual checks (optional):**
 
 - **Aspect lock:** Resize a part by a corner handle → aspect ratio stays locked. Hold **Alt** and resize → aspect can warp.
 - **Handle padding:** Selection box has a 10px gap so handles sit outside the part edges.
 - **Viewport:** After resize/move/rotate, the canvas does not zoom or pan on its own; use **Recenter View** or upload a new blueprint to re-fit.
+- **200% zoom (mobile + desktop):** no clipped primary actions in quote/product/accessibility dialogs; controls remain reachable.
+- **Modal focus order:** Tab/Shift+Tab stay inside open modal; Escape closes and focus returns to trigger.
