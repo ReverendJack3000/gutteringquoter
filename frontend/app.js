@@ -26,7 +26,7 @@ const state = {
   selectedIds: [], // multi-select; selectedId === selectedIds[0]
   groups: [], // { id: string, elementIds: string[] }
   dragOffset: { x: 0, y: 0 },
-  mode: null, // 'move' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan'
+  mode: null, // 'move' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan' | 'pinch'
   resizeHandle: null,
   products: [],
   profileFilter: '', // '' | 'storm_cloud' | 'classic' | 'other'
@@ -64,13 +64,33 @@ const state = {
   pendingResizeCanvasPos: null,
   pendingResizeAltKey: false, // Alt = allow warp; default lockAspectRatio = true
   resizeRAFId: null,
+  // 54.17: Pinch zoom – active pointers and pinch start state
+  activePointers: {}, // pointerId -> { clientX, clientY }
+  pinchStartDistance: 0,
+  pinchStartCenter: null, // { x, y } client
+  pinchStartContentX: 0,
+  pinchStartContentY: 0,
+  pinchStartViewZoom: 1,
+  pinchStartViewPanX: 0,
+  pinchStartViewPanY: 0,
   colorPaletteOpen: false, // toggled by floating toolbar colour button; when true, show #colorPalettePopover below toolbar
   transparencyPopoverOpen: false, // toggled by #blueprintTransparencyBtn; only way to open transparency slider
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
+  floatingToolbarUserMoved: false, // 54.20: when true, draw() does not reposition the element toolbar
 };
 
 /** Auth: token, user, and Supabase client for saved diagrams and product uploads. */
 const authState = { token: null, email: null, user: null, supabase: null };
+
+/** View transition history for restoring focus when returning between app views (55.2). */
+const viewTransitionHistory = [];
+
+const ACCESSIBILITY_PREFS_STORAGE_KEY = 'quote_app_accessibility_prefs_v1';
+const accessibilityPrefs = {
+  motion: 'system', // 'system' | 'reduce' | 'full'
+  largeControls: false,
+  highContrast: false,
+};
 
 /** Custom products (Product Library): persisted in localStorage under 'custom_products'. */
 let localProducts = [];
@@ -316,6 +336,8 @@ const PILL_HIT_THICKNESS = 15; // hit-test pill as 15px thick for Fitts's Law (f
 const SELECTION_BOX_STROKE_SCREEN_PX = 1.5; // bounding box stroke stays this thick on screen regardless of zoom
 const ROTATE_STEM_ALPHA = 0.5; // stem line at 50% opacity so it reads as a guide, not structural
 const SNAP_THRESHOLD = 5; // 5px snapping threshold (edge/center align); thin #FF00FF guide lines
+/** 54.18: Grid step for parts formatting so elements align and are less likely to overlap. */
+const SNAP_GRID_SIZE = 20;
 const SMART_GUIDE_COLOR = '#FF00FF';
 const HANDLE_BORDER_COLOR = '#18A0FB';
 const MEASUREMENT_BADGE_RADIUS = 12; // badge circle on canvas for gutter/downpipe run number
@@ -332,6 +354,20 @@ const ROTATION_CONSTRAINTS = {
     forbiddenMax: 80,
   },
 };
+
+/** 54.18: Snap value to grid for parts formatting (no overlap / alignment). */
+function snapToGrid(value) {
+  return Math.round(value / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
+}
+
+/** 54.18: True if two elements' axis-aligned bounding boxes overlap (with small gap). */
+function elementsOverlap(elA, elB, gapPx) {
+  const gap = gapPx ?? 2;
+  const a = rotatedRectBbox(elA.x, elA.y, elA.width, elA.height, elA.rotation || 0);
+  const b = rotatedRectBbox(elB.x, elB.y, elB.width, elB.height, elB.rotation || 0);
+  return !(a.x + a.width + gap < b.x || b.x + b.width + gap < a.x ||
+    a.y + a.height + gap < b.y || b.y + b.height + gap < a.y);
+}
 
 function cancelBboxRecalcDebounce() {
   if (state.debounceBboxTimerId != null) {
@@ -597,7 +633,6 @@ function getCroppedFile() {
 
 function showCropModal(file) {
   const modal = document.getElementById('cropModal');
-  const wrap = document.getElementById('cropCanvasWrap');
   if (!modal || !file) return;
   cropState.file = file;
   cropState.image = null;
@@ -609,7 +644,8 @@ function showCropModal(file) {
     cropState.crop = { x: 0, y: 0, w: img.width, h: img.height };
     const sel = document.getElementById('cropAspectRatio');
     if (sel) sel.value = 'free';
-    modal.removeAttribute('hidden');
+    const uploadTrigger = document.getElementById('uploadZone') || document.getElementById('fileInput');
+    openAccessibleModal('cropModal', { triggerEl: uploadTrigger });
     drawCropPreview();
   };
   img.onerror = () => {
@@ -620,8 +656,7 @@ function showCropModal(file) {
 }
 
 function hideCropModal() {
-  const modal = document.getElementById('cropModal');
-  if (modal) modal.setAttribute('hidden', '');
+  closeAccessibleModal('cropModal');
   cropState.file = null;
   cropState.image = null;
   cropState.dragging = false;
@@ -635,7 +670,6 @@ function initCropModal() {
   const btnUseFull = document.getElementById('cropUseFull');
   const btnApply = document.getElementById('cropApply');
   const btnCancel = document.getElementById('cropCancel');
-  const backdrop = document.getElementById('cropModalBackdrop');
 
   if (!modal || !canvas) return;
 
@@ -657,7 +691,6 @@ function initCropModal() {
   });
 
   btnCancel.addEventListener('click', hideCropModal);
-  backdrop.addEventListener('click', hideCropModal);
 
   canvas.addEventListener('mousedown', (e) => {
     if (!cropState.image) return;
@@ -697,8 +730,7 @@ function initCropModal() {
 }
 
 function hideQuoteModal() {
-  const modal = document.getElementById('quoteModal');
-  if (modal) modal.setAttribute('hidden', '');
+  closeAccessibleModal('quoteModal');
   setQuoteEditMode(false);
 }
 
@@ -1330,7 +1362,6 @@ function initEmptyQuoteRow(tr) {
 
 function initQuoteModal() {
   const modal = document.getElementById('quoteModal');
-  const backdrop = document.getElementById('quoteModalBackdrop');
   const btnClose = document.getElementById('quoteModalClose');
   const btnCloseFooter = document.getElementById('quoteCloseBtn');
   const btnGenerate = document.getElementById('generateQuoteBtn');
@@ -1343,7 +1374,6 @@ function initQuoteModal() {
 
   btnClose?.addEventListener('click', hideQuoteModal);
   btnCloseFooter?.addEventListener('click', hideQuoteModal);
-  backdrop?.addEventListener('click', hideQuoteModal);
 
   // Row remove X (Section 40.4): remove line from quote and recalc totals
   tableBody?.addEventListener('click', (ev) => {
@@ -1419,7 +1449,7 @@ function initQuoteModal() {
     updateQuoteTotalWarning();
 
     // Show modal
-    modal.removeAttribute('hidden');
+    openAccessibleModal('quoteModal', { triggerEl: btnGenerate });
 
     // Reset ServiceM8 feedback so it stays hidden until "Add to Job" sequence completes
     const servicem8FeedbackEl = document.getElementById('servicem8Feedback');
@@ -1527,7 +1557,13 @@ function initQuoteModal() {
 
     const confirmMessage =
       'Are you sure? This will change the price permanently in ServiceM8 and the app.\n\nOnly continue if you\'ve confirmed — otherwise Jack will be grumpy 😠';
-    if (!confirm(confirmMessage)) return;
+    const confirmed = await showAppConfirm(confirmMessage, {
+      title: 'Save pricing changes',
+      confirmText: 'Save pricing',
+      destructive: true,
+      triggerEl: savePricingBtn,
+    });
+    if (!confirmed) return;
 
     savePricingBtn.disabled = true;
     try {
@@ -1732,7 +1768,6 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
 
     resetButton();
     if (overlay) {
-      overlay.removeAttribute('hidden');
       overlay.dataset.jobUuid = job.uuid || '';
       const addBtnOverlay = document.getElementById('jobConfirmAddBtn');
       const createNewOverlay = document.getElementById('jobConfirmCreateNew');
@@ -1741,6 +1776,7 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
         addBtnOverlay.classList.remove('job-confirm-add-btn--loading', 'job-confirm-add-btn--done');
       }
       if (createNewOverlay) createNewOverlay.classList.remove('job-confirm-create-new--loading', 'job-confirm-create-new--done');
+      openAccessibleModal('jobConfirmOverlay', { triggerEl: btn, initialFocusEl: addBtnOverlay || createNewOverlay });
     }
   } catch (err) {
     console.error('Add to Job lookup failed', err);
@@ -1829,14 +1865,13 @@ function getAddToJobPayload(jobUuid) {
  */
 function initJobConfirmationOverlay() {
   const overlay = document.getElementById('jobConfirmOverlay');
-  const backdrop = document.getElementById('jobConfirmBackdrop');
   const closeBtn = document.getElementById('jobConfirmClose');
   const addBtn = document.getElementById('jobConfirmAddBtn');
   const createNewBtn = document.getElementById('jobConfirmCreateNew');
   const feedback = document.getElementById('servicem8Feedback');
 
   const hideOverlay = () => {
-    if (overlay) overlay.hidden = true;
+    closeAccessibleModal('jobConfirmOverlay');
   };
 
   const showFeedback = (msg, isError) => {
@@ -2028,7 +2063,6 @@ function initJobConfirmationOverlay() {
     updateGstDisplay(false);
   });
 
-  backdrop?.addEventListener('click', hideOverlay);
   closeBtn?.addEventListener('click', hideOverlay);
   addBtn?.addEventListener('click', handleConfirm);
   createNewBtn?.addEventListener('click', handleCreateNew);
@@ -3042,7 +3076,53 @@ function initFloatingToolbar() {
   const colorBtn = document.getElementById('floatingToolbarColor');
   const moreBtn = document.getElementById('floatingToolbarMore');
   const submenu = document.getElementById('floatingToolbarSubmenu');
+  const dragHandle = document.getElementById('floatingToolbarDragHandle');
   if (!toolbar) return;
+
+  if (dragHandle) {
+    let dragStartX = 0, dragStartY = 0, dragStartLeft = 0, dragStartTop = 0, dragPointerId = null;
+    dragHandle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      dragPointerId = e.pointerId;
+      state.floatingToolbarUserMoved = true;
+      const rect = toolbar.getBoundingClientRect();
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragStartLeft = rect.left;
+      dragStartTop = rect.top;
+      toolbar.setPointerCapture(e.pointerId);
+    });
+    toolbar.addEventListener('pointermove', (e) => {
+      if (dragPointerId == null || e.pointerId !== dragPointerId) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      let left = dragStartLeft + dx;
+      let top = dragStartTop + dy;
+      const maxLeft = window.innerWidth - (toolbar.offsetWidth || 200) - 8;
+      const maxTop = window.innerHeight - (toolbar.offsetHeight || 44) - 8;
+      left = Math.max(8, Math.min(maxLeft, left));
+      top = Math.max(8, Math.min(maxTop, top));
+      toolbar.style.left = left + 'px';
+      toolbar.style.top = top + 'px';
+    });
+    toolbar.addEventListener('pointerup', (e) => {
+      if (e.pointerId !== dragPointerId) return;
+      dragPointerId = null;
+      state.floatingToolbarUserMoved = true;
+      if (toolbar.releasePointerCapture) {
+        try { toolbar.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+    });
+    toolbar.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === dragPointerId) {
+        dragPointerId = null;
+        if (toolbar.releasePointerCapture) {
+          try { toolbar.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      }
+    });
+  }
 
   if (lockBtn) {
     lockBtn.addEventListener('click', (e) => {
@@ -3066,11 +3146,14 @@ function initFloatingToolbar() {
       state.selectedIds.forEach((id) => {
         const el = state.elements.find((x) => x.id === id);
         if (el) {
+          let dx = snapToGrid(el.x + SNAP_GRID_SIZE) - el.x;
+          let dy = snapToGrid(el.y + SNAP_GRID_SIZE) - el.y;
+          if (dx === 0 && dy === 0) { dx = SNAP_GRID_SIZE; dy = 0; }
           const dup = {
             ...el,
             id: 'el-' + ++elementIdCounter,
-            x: el.x + 20,
-            y: el.y + 20,
+            x: el.x + dx,
+            y: el.y + dy,
             zIndex: getNextElementZIndex(),
             image: el.image,
             originalImage: el.originalImage || el.image,
@@ -3078,6 +3161,14 @@ function initFloatingToolbar() {
             tintedCanvasColor: null,
             locked: !!el.locked,
           };
+          const othersDup = state.elements;
+          const nudgeDirsDup = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
+          for (let n = 0; n < 20; n++) {
+            if (!othersDup.some((o) => elementsOverlap(dup, o))) break;
+            const [nx, ny] = nudgeDirsDup[n % nudgeDirsDup.length];
+            dup.x += nx;
+            dup.y += ny;
+          }
           state.elements.push(dup);
           newIds.push(dup.id);
         }
@@ -3339,6 +3430,198 @@ function updateTransparencyPopover(rect, scale) {
   popoverEl.removeAttribute('hidden');
 }
 
+const accessibilityInspectorState = {
+  open: false,
+};
+
+function getInspectorSelectedElement() {
+  if (state.selectedBlueprint) return null;
+  if (!state.selectedIds || state.selectedIds.length !== 1) return null;
+  return state.elements.find((el) => el.id === state.selectedIds[0]) || null;
+}
+
+function setInspectorOpen(open, options = {}) {
+  accessibilityInspectorState.open = !!open;
+  const panel = document.getElementById('accessibilityInspector');
+  const openBtn = document.getElementById('openInspectorBtn');
+  if (panel) panel.hidden = !accessibilityInspectorState.open;
+  if (openBtn) openBtn.setAttribute('aria-expanded', accessibilityInspectorState.open ? 'true' : 'false');
+  if (options.announce !== false && typeof announceCanvas === 'function') {
+    announceCanvas(accessibilityInspectorState.open ? 'Inspector opened.' : 'Inspector closed.');
+  }
+}
+
+function updateAccessibilityInspector(options = {}) {
+  const panel = document.getElementById('accessibilityInspector');
+  const form = document.getElementById('inspectorForm');
+  const hint = document.getElementById('inspectorSelectionHint');
+  const openBtn = document.getElementById('openInspectorBtn');
+  const locked = document.getElementById('inspectorLocked');
+  const posX = document.getElementById('inspectorPosX');
+  const posY = document.getElementById('inspectorPosY');
+  const width = document.getElementById('inspectorWidth');
+  const height = document.getElementById('inspectorHeight');
+  const rotation = document.getElementById('inspectorRotation');
+  if (!panel || !form || !hint || !openBtn) return;
+
+  panel.hidden = !accessibilityInspectorState.open;
+  openBtn.setAttribute('aria-expanded', accessibilityInspectorState.open ? 'true' : 'false');
+  if (!accessibilityInspectorState.open) return;
+
+  const selected = getInspectorSelectedElement();
+  if (!selected) {
+    form.hidden = true;
+    hint.hidden = false;
+    if (state.selectedBlueprint) hint.textContent = 'Inspector currently supports Marley elements only.';
+    else if ((state.selectedIds || []).length > 1) hint.textContent = 'Select one element to edit transform values.';
+    else hint.textContent = 'Select one element to edit position, size, rotation, lock, and layer order.';
+    return;
+  }
+
+  form.hidden = false;
+  hint.hidden = true;
+
+  const maybeSetValue = (input, value) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    if (options.skipActiveField && document.activeElement === input) return;
+    input.value = String(Math.round((value || 0) * 100) / 100);
+  };
+
+  maybeSetValue(posX, selected.x);
+  maybeSetValue(posY, selected.y);
+  maybeSetValue(width, selected.width);
+  maybeSetValue(height, selected.height);
+  maybeSetValue(rotation, normalizeAngleDeg(selected.rotation || 0));
+  if (locked) locked.checked = !!selected.locked;
+}
+
+function initAccessibilityInspector() {
+  const panel = document.getElementById('accessibilityInspector');
+  const openBtn = document.getElementById('openInspectorBtn');
+  const closeBtn = document.getElementById('inspectorCloseBtn');
+  const posX = document.getElementById('inspectorPosX');
+  const posY = document.getElementById('inspectorPosY');
+  const width = document.getElementById('inspectorWidth');
+  const height = document.getElementById('inspectorHeight');
+  const rotation = document.getElementById('inspectorRotation');
+  const locked = document.getElementById('inspectorLocked');
+  const bringFrontBtn = document.getElementById('inspectorBringFrontBtn');
+  const sendBackBtn = document.getElementById('inspectorSendBackBtn');
+  if (!panel || !openBtn) return;
+
+  panel.hidden = true;
+  openBtn.setAttribute('aria-expanded', 'false');
+
+  openBtn.addEventListener('click', () => {
+    const nextOpen = !accessibilityInspectorState.open;
+    setInspectorOpen(nextOpen, { announce: true });
+    updateAccessibilityInspector();
+    if (nextOpen) {
+      const firstInput = getInspectorSelectedElement()
+        ? (document.getElementById('inspectorPosX') || document.getElementById('inspectorWidth'))
+        : closeBtn;
+      focusElementNoScroll(firstInput);
+    }
+  });
+
+  closeBtn?.addEventListener('click', () => {
+    setInspectorOpen(false, { announce: true });
+    updateAccessibilityInspector();
+    focusElementNoScroll(openBtn);
+  });
+
+  function applyNumberChange(input, applyFn) {
+    if (!(input instanceof HTMLInputElement)) return;
+    const selected = getInspectorSelectedElement();
+    if (!selected) return;
+    const raw = Number(input.value);
+    if (!Number.isFinite(raw)) {
+      updateAccessibilityInspector();
+      return;
+    }
+    const changed = applyFn(selected, raw);
+    if (!changed) {
+      updateAccessibilityInspector({ skipActiveField: true });
+      return;
+    }
+    draw();
+    updateAccessibilityInspector({ skipActiveField: true });
+  }
+
+  function bindNumberInput(input, applyFn) {
+    if (!(input instanceof HTMLInputElement)) return;
+    input.addEventListener('change', () => applyNumberChange(input, applyFn));
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      applyNumberChange(input, applyFn);
+    });
+  }
+
+  bindNumberInput(posX, (selected, raw) => {
+    const next = Math.round(raw * 100) / 100;
+    if (Math.abs((selected.x || 0) - next) < 0.001) return false;
+    pushUndoSnapshot();
+    selected.x = next;
+    return true;
+  });
+  bindNumberInput(posY, (selected, raw) => {
+    const next = Math.round(raw * 100) / 100;
+    if (Math.abs((selected.y || 0) - next) < 0.001) return false;
+    pushUndoSnapshot();
+    selected.y = next;
+    return true;
+  });
+  bindNumberInput(width, (selected, raw) => {
+    const next = Math.max(4, Math.round(raw * 100) / 100);
+    if (Math.abs((selected.width || 0) - next) < 0.001) return false;
+    pushUndoSnapshot();
+    selected.width = next;
+    return true;
+  });
+  bindNumberInput(height, (selected, raw) => {
+    const next = Math.max(4, Math.round(raw * 100) / 100);
+    if (Math.abs((selected.height || 0) - next) < 0.001) return false;
+    pushUndoSnapshot();
+    selected.height = next;
+    return true;
+  });
+  bindNumberInput(rotation, (selected, raw) => {
+    const next = constrainGutterRotation(normalizeAngleDeg(raw), selected).degrees;
+    if (Math.abs((selected.rotation || 0) - next) < 0.001) return false;
+    pushUndoSnapshot();
+    selected.rotation = next;
+    return true;
+  });
+
+  locked?.addEventListener('change', () => {
+    const selected = getInspectorSelectedElement();
+    if (!selected) return;
+    const next = !!locked.checked;
+    if (!!selected.locked === next) return;
+    pushUndoSnapshot();
+    selected.locked = next;
+    draw();
+    updateAccessibilityInspector();
+  });
+
+  bringFrontBtn?.addEventListener('click', () => {
+    const selected = getInspectorSelectedElement();
+    if (!selected) return;
+    pushUndoSnapshot();
+    bringToFront(selected.id);
+    updateAccessibilityInspector();
+  });
+
+  sendBackBtn?.addEventListener('click', () => {
+    const selected = getInspectorSelectedElement();
+    if (!selected) return;
+    pushUndoSnapshot();
+    sendToBack(selected.id);
+    updateAccessibilityInspector();
+  });
+}
+
 function getElementsToMove() {
   const ids = new Set(state.selectedIds);
   state.groups.forEach((g) => {
@@ -3355,11 +3638,15 @@ function setSelection(ids) {
     prev.length !== next.length || next.some((id, i) => id !== prev[i]);
   state.selectedIds = next;
   state.selectedId = state.selectedIds[0] || null;
+  if (changed) {
+    state.floatingToolbarUserMoved = false; // 54.20: reposition toolbar for new selection
+  }
   if (changed && typeof announceCanvas === 'function') {
     if (next.length === 0) announceCanvas('Selection cleared.');
-    else if (next.length === 1) announceCanvas('Element selected.');
+    else if (next.length === 1) announceCanvas('Element selected. Open Inspector for precise controls without dragging.');
     else announceCanvas(`${next.length} elements selected.`);
   }
+  updateAccessibilityInspector({ skipActiveField: true });
 }
 
 function getElementsInMarquee(start, current, windowMode) {
@@ -4895,8 +5182,10 @@ function draw() {
         const gapAbove = 12;
         const toolbarLeft = centerScreenX - (toolbarEl.offsetWidth || 200) / 2;
         const toolbarTop = topScreenY - toolbarHeight - gapAbove;
-        toolbarEl.style.left = Math.max(8, Math.min(window.innerWidth - (toolbarEl.offsetWidth || 200) - 8, toolbarLeft)) + 'px';
-        toolbarEl.style.top = Math.max(8, toolbarTop) + 'px';
+        if (!state.floatingToolbarUserMoved) {
+          toolbarEl.style.left = Math.max(8, Math.min(window.innerWidth - (toolbarEl.offsetWidth || 200) - 8, toolbarLeft)) + 'px';
+          toolbarEl.style.top = Math.max(8, toolbarTop) + 'px';
+        }
         toolbarEl.removeAttribute('hidden');
         toolbarEl.classList.toggle('floating-toolbar-has-element', !!selected && selectedElements.length === 1);
         // Update lock icon state (single icon, toggle class)
@@ -4933,6 +5222,7 @@ function draw() {
     }
   }
 
+  updateAccessibilityInspector({ skipActiveField: true });
   requestAnimationFrame(draw);
 }
 
@@ -5247,6 +5537,30 @@ function initCanvas() {
     canvas.setPointerCapture(e.pointerId);
     const rect = getCanvasRect();
     if (!rect) return;
+    // 54.17: Track active pointers for pinch zoom; enter pinch when second finger touches
+    state.activePointers[e.pointerId] = { clientX: e.clientX, clientY: e.clientY };
+    const ptrIds = Object.keys(state.activePointers);
+    if (ptrIds.length === 2 && (state.blueprintImage || state.elements.length)) {
+      const p1 = state.activePointers[ptrIds[0]];
+      const p2 = state.activePointers[ptrIds[1]];
+      const cx = (p1.clientX + p2.clientX) / 2;
+      const cy = (p1.clientY + p2.clientY) / 2;
+      const dist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
+      const display = clientToCanvasDisplay(cx, cy);
+      if (display && dist > 5) {
+        state.mode = 'pinch';
+        state.pinchStartDistance = dist;
+        state.pinchStartCenter = { x: cx, y: cy };
+        state.pinchStartContentX = (display.x - state.offsetX) / state.scale;
+        state.pinchStartContentY = (display.y - state.offsetY) / state.scale;
+        state.pinchStartViewZoom = state.viewZoom;
+        state.pinchStartViewPanX = state.viewPanX;
+        state.pinchStartViewPanY = state.viewPanY;
+        state.marqueeStart = null;
+        state.marqueeCurrent = null;
+        return;
+      }
+    }
     const canvasPos = clientToCanvas(e.clientX, e.clientY);
     const bpHandle = hitTestBlueprintHandle(e.clientX, e.clientY);
     if (bpHandle) {
@@ -5342,11 +5656,15 @@ function initCanvas() {
       if (e.altKey) {
         const el = hit.element;
         pushUndoSnapshot();
+        // 54.18: Alt+drag duplicate uses grid snap and nudge to avoid overlap
+        let dx = snapToGrid(el.x + SNAP_GRID_SIZE) - el.x;
+        let dy = snapToGrid(el.y + SNAP_GRID_SIZE) - el.y;
+        if (dx === 0 && dy === 0) { dx = SNAP_GRID_SIZE; dy = 0; }
         const dup = {
           ...el,
           id: 'el-' + ++elementIdCounter,
-          x: el.x + 20,
-          y: el.y + 20,
+          x: el.x + dx,
+          y: el.y + dy,
           zIndex: getNextElementZIndex(),
           image: el.image,
           originalImage: el.originalImage || el.image,
@@ -5354,6 +5672,14 @@ function initCanvas() {
           tintedCanvasColor: null,
           locked: !!el.locked,
         };
+        const othersAltDup = state.elements;
+        const nudgeDirsAltDup = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
+        for (let n = 0; n < 20; n++) {
+          if (!othersAltDup.some((o) => elementsOverlap(dup, o))) break;
+          const [nx, ny] = nudgeDirsAltDup[n % nudgeDirsAltDup.length];
+          dup.x += nx;
+          dup.y += ny;
+        }
         if (isMeasurableElement(dup.assetId)) {
           dup.sequenceId = state.nextSequenceId++;
           dup.measuredLength = 0;
@@ -5399,13 +5725,44 @@ function initCanvas() {
     setSelection([]);
     state.selectedBlueprint = false;
     state.hoveredId = null;
+    // 54.16: On mobile, drag on empty canvas pans the view instead of starting marquee selection.
+    if (layoutState.viewportMode === 'mobile') {
+      state.mode = 'pan';
+      state.dragOffset.x = e.clientX;
+      state.dragOffset.y = e.clientY;
+      return;
+    }
     state.mode = 'marquee';
     state.marqueeStart = { x: canvasPos.x, y: canvasPos.y };
     state.marqueeCurrent = null;
   });
 
   canvas.addEventListener('pointermove', (e) => {
+    state.activePointers[e.pointerId] = { clientX: e.clientX, clientY: e.clientY };
     const canvasPos = clientToCanvas(e.clientX, e.clientY);
+    // 54.17: Pinch zoom – update view from two-finger distance and center
+    if (state.mode === 'pinch') {
+      const ptrIds = Object.keys(state.activePointers);
+      if (ptrIds.length === 2 && state.pinchStartDistance > 0) {
+        e.preventDefault();
+        const p1 = state.activePointers[ptrIds[0]];
+        const p2 = state.activePointers[ptrIds[1]];
+        const curDist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
+        const cx = (p1.clientX + p2.clientX) / 2;
+        const cy = (p1.clientY + p2.clientY) / 2;
+        const scaleFactor = curDist / state.pinchStartDistance;
+        const newViewZoom = Math.max(MIN_VIEW_ZOOM, Math.min(MAX_VIEW_ZOOM, state.pinchStartViewZoom * scaleFactor));
+        const newScale = state.baseScale * newViewZoom;
+        const display = clientToCanvasDisplay(cx, cy);
+        if (display) {
+          state.viewZoom = newViewZoom;
+          state.viewPanX = display.x - state.pinchStartContentX * newScale - state.baseOffsetX;
+          state.viewPanY = display.y - state.pinchStartContentY * newScale - state.baseOffsetY;
+        }
+        draw();
+      }
+      return;
+    }
     if (!state.mode) {
       const handleHit = state.selectedIds.length === 1 ? hitTestHandle(e.clientX, e.clientY) : null;
       if (handleHit && handleHit.cursor) {
@@ -5428,12 +5785,26 @@ function initCanvas() {
           canvas.style.cursor = (bt && bt.locked) ? 'default' : 'grab';
         } else {
           state.hoveredId = null;
-          canvas.style.cursor = (state.blueprintImage || state.elements.length) ? 'grab' : 'default';
+          // 54.16: On mobile, show 'grab' cursor for pan hint when hovering empty canvas
+          if (layoutState.viewportMode === 'mobile' && (state.blueprintImage || state.elements.length)) {
+            canvas.style.cursor = 'grab';
+          } else {
+            canvas.style.cursor = (state.blueprintImage || state.elements.length) ? 'grab' : 'default';
+          }
         }
       }
     }
     if (state.mode === 'marquee') {
       state.marqueeCurrent = { x: canvasPos.x, y: canvasPos.y };
+      return;
+    }
+    if (state.mode === 'pan') {
+      state.viewPanX += e.clientX - state.dragOffset.x;
+      state.viewPanY += e.clientY - state.dragOffset.y;
+      state.dragOffset.x = e.clientX;
+      state.dragOffset.y = e.clientY;
+      canvas.style.cursor = 'grabbing';
+      draw();
       return;
     }
     if (state.mode === 'blueprint-move' && state.blueprintTransform) {
@@ -5503,6 +5874,13 @@ function initCanvas() {
     if (e.target && e.target.releasePointerCapture && e.pointerId != null) {
       try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
     }
+    delete state.activePointers[e.pointerId];
+    if (state.mode === 'pinch' && Object.keys(state.activePointers).length < 2) {
+      // 54.17: Clean up pinch state when exiting pinch mode
+      state.mode = null;
+      state.pinchStartDistance = 0;
+      state.pinchStartCenter = null;
+    }
     if (state.mode === 'resize' && state.selectedId && state.resizeHandle) {
       if (state.resizeRAFId != null) {
         cancelAnimationFrame(state.resizeRAFId);
@@ -5526,11 +5904,15 @@ function initCanvas() {
         primary.x = state.previewDragX;
         primary.y = state.previewDragY;
         state.activeGuides = applySnapAndReturnGuides(primary);
+        // 54.18: Snap to grid so parts stay aligned and readable
+        primary.x = snapToGrid(primary.x);
+        primary.y = snapToGrid(primary.y);
         state.dragRelativeOffsets.forEach((rel) => {
           const el = state.elements.find((x) => x.id === rel.id);
           if (el) {
-            el.x = primary.x + rel.dx;
-            el.y = primary.y + rel.dy;
+            // Snap relative offsets to grid as well for multi-select alignment
+            el.x = snapToGrid(primary.x + rel.dx);
+            el.y = snapToGrid(primary.y + rel.dy);
           }
         });
         if (state.activeGuides.length > 0) {
@@ -5574,6 +5956,13 @@ function initCanvas() {
   });
 
   canvas.addEventListener('pointerleave', (e) => {
+    delete state.activePointers[e.pointerId];
+    if (state.mode === 'pinch' && Object.keys(state.activePointers).length < 2) {
+      // 54.17: Clean up pinch state when exiting pinch mode
+      state.mode = null;
+      state.pinchStartDistance = 0;
+      state.pinchStartCenter = null;
+    }
     state.hoveredId = null;
     state.hoveredHandleId = null;
     state.dragGhostX = null;
@@ -5597,6 +5986,13 @@ function initCanvas() {
   canvas.addEventListener('pointercancel', (e) => {
     if (e.target && e.target.releasePointerCapture && e.pointerId != null) {
       try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+    delete state.activePointers[e.pointerId];
+    if (state.mode === 'pinch' && Object.keys(state.activePointers).length < 2) {
+      // 54.17: Clean up pinch state when exiting pinch mode
+      state.mode = null;
+      state.pinchStartDistance = 0;
+      state.pinchStartCenter = null;
     }
     cancelBboxRecalcDebounce();
     if (state.resizeRAFId != null) {
@@ -5771,11 +6167,14 @@ function initCanvas() {
       const img = await loadDiagramImageForDrop(diagramUrl);
       // Import normalization: if width or height > 150px, scale so max dimension = 150
       const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
+      // 54.18: Snap drop to grid, then nudge if overlapping existing parts
+      let cx = snapToGrid(canvasPos.x);
+      let cy = snapToGrid(canvasPos.y);
       const el = {
           id: 'el-' + ++elementIdCounter,
           assetId: productId,
-          x: canvasPos.x - w / 2,
-          y: canvasPos.y - h / 2,
+          x: cx - w / 2,
+          y: cy - h / 2,
           width: w,
           height: h,
           rotation: getDefaultRotationForLinear(productId),
@@ -5788,6 +6187,17 @@ function initCanvas() {
           flipX: false,
           flipY: false,
         };
+      const others = state.elements;
+      const nudgeDirs = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
+      for (let n = 0; n < 20; n++) {
+        const overlap = others.some((o) => elementsOverlap(el, o));
+        if (!overlap) break;
+        const [dx, dy] = nudgeDirs[n % nudgeDirs.length];
+        cx += dx;
+        cy += dy;
+        el.x = cx - w / 2;
+        el.y = cy - h / 2;
+      }
       if (isMeasurableElement(productId)) {
         el.sequenceId = state.nextSequenceId++;
         el.measuredLength = 0;
@@ -6481,6 +6891,8 @@ function initAuth() {
   const authEmail = document.getElementById('authEmail');
   const authPassword = document.getElementById('authPassword');
   const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authPasskeyBtn = document.getElementById('authPasskeyBtn');
+  const authPasskeyHint = document.getElementById('authPasskeyHint');
   const authSignUpBtn = document.getElementById('authSignUpBtn');
   const authError = document.getElementById('authError');
   const authUserSection = document.getElementById('authUserSection');
@@ -6493,7 +6905,52 @@ function initAuth() {
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
   const productsUserAvatar = document.getElementById('productsUserAvatar');
+  let passkeyAvailable = false;
   if (!authForm) return Promise.resolve();
+
+  function setPasswordAutocompleteMode(mode) {
+    if (authEmail) {
+      authEmail.setAttribute('autocomplete', 'username webauthn');
+      authEmail.setAttribute('inputmode', 'email');
+      authEmail.setAttribute('autocapitalize', 'none');
+      authEmail.setAttribute('spellcheck', 'false');
+    }
+    if (!authPassword) return;
+    authPassword.setAttribute('autocomplete', mode === 'signup' ? 'new-password' : 'current-password');
+    authPassword.setAttribute('autocapitalize', 'none');
+    authPassword.setAttribute('spellcheck', 'false');
+  }
+
+  function getPasskeySignInFn() {
+    const api = authState.supabase?.auth;
+    if (!api) return null;
+    if (typeof api.signInWithWebAuthn === 'function') return api.signInWithWebAuthn.bind(api);
+    if (typeof api.signInWithPasskey === 'function') return api.signInWithPasskey.bind(api);
+    return null;
+  }
+
+  async function detectPasskeySupport() {
+    if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') return false;
+    const signInFn = getPasskeySignInFn();
+    if (!signInFn) return false;
+    try {
+      if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+        const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        if (!available) return false;
+      }
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  async function refreshPasskeyUi() {
+    if (!authPasskeyBtn) return;
+    passkeyAvailable = await detectPasskeySupport();
+    authPasskeyBtn.hidden = !passkeyAvailable;
+    authPasskeyBtn.disabled = !passkeyAvailable;
+    if (authPasskeyHint) authPasskeyHint.hidden = !passkeyAvailable;
+  }
 
   function setAuthUI() {
     if (authState.token) {
@@ -6510,7 +6967,23 @@ function initAuth() {
       if (authUserSection) authUserSection.hidden = true;
       if (authForm) authForm.hidden = false;
     }
+    if (!authState.token) {
+      setPasswordAutocompleteMode('signin');
+      refreshPasskeyUi().catch(() => {});
+    }
   }
+
+  function bindButtonLikeKeyActivation(el) {
+    if (!el) return;
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      el.click();
+    });
+  }
+
+  bindButtonLikeKeyActivation(userAvatar);
+  bindButtonLikeKeyActivation(productsUserAvatar);
 
   if (userAvatar && profileDropdown) {
     userAvatar.addEventListener('click', (e) => {
@@ -6524,7 +6997,7 @@ function initAuth() {
     menuItemProducts.addEventListener('click', () => {
       if (profileDropdown) profileDropdown.hidden = true;
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
-      switchView('view-products');
+      switchView('view-products', { triggerEl: userAvatar || menuItemProducts });
     });
   }
   if (menuItemSignOut) {
@@ -6554,6 +7027,7 @@ function initAuth() {
 
   authForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    setPasswordAutocompleteMode('signin');
     if (!authState.supabase || !authEmail?.value || !authPassword?.value) return;
     if (authError) { authError.hidden = true; authError.textContent = ''; }
     authSubmitBtn.disabled = true;
@@ -6575,7 +7049,57 @@ function initAuth() {
     authSubmitBtn.disabled = false;
   });
 
+  authPasskeyBtn?.addEventListener('click', async () => {
+    if (!authState.supabase) return;
+    if (authError) { authError.hidden = true; authError.textContent = ''; }
+    authPasskeyBtn.disabled = true;
+    try {
+      const signInFn = getPasskeySignInFn();
+      if (!signInFn) {
+        throw new Error('Passkeys are not enabled for this project yet.');
+      }
+      const email = (authEmail?.value || '').trim();
+      let result = null;
+      if (email) {
+        try {
+          result = await signInFn({ email });
+        } catch (_) {
+          result = await signInFn();
+        }
+      } else {
+        result = await signInFn();
+      }
+      if (result?.error) throw result.error;
+
+      let session = result?.data?.session || null;
+      let user = result?.data?.user || session?.user || null;
+      if (!session) {
+        const current = await authState.supabase.auth.getSession();
+        session = current?.data?.session || null;
+        if (!user) user = session?.user || null;
+      }
+      if (!session) {
+        throw new Error('Passkey sign-in did not complete. Check Supabase passkey settings and try again.');
+      }
+
+      authState.token = session.access_token ?? null;
+      authState.email = user?.email ?? null;
+      authState.user = user ?? null;
+      setAuthUI();
+      switchView('view-canvas');
+      await checkServiceM8Status();
+      if (window.servicem8Connected === false) {
+        await startServiceM8Connect();
+      }
+    } catch (err) {
+      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Passkey sign in failed'; }
+    } finally {
+      authPasskeyBtn.disabled = !passkeyAvailable;
+    }
+  });
+
   authSignUpBtn?.addEventListener('click', async () => {
+    setPasswordAutocompleteMode('signup');
     if (!authState.supabase || !authEmail?.value || !authPassword?.value) return;
     if (authError) { authError.hidden = true; authError.textContent = ''; }
     authSignUpBtn.disabled = true;
@@ -6672,6 +7196,8 @@ function initAuth() {
   });
 
   setAuthUI();
+  setPasswordAutocompleteMode('signin');
+  refreshPasskeyUi().catch(() => {});
   return fetch('/api/config')
     .then((r) => r.json())
     .then((config) => {
@@ -6679,6 +7205,7 @@ function initAuth() {
       configurePwaFromConfig(resolvedConfig);
       if (resolvedConfig.supabaseUrl && resolvedConfig.anonKey && typeof window.supabase !== 'undefined') {
         authState.supabase = window.supabase.createClient(resolvedConfig.supabaseUrl, resolvedConfig.anonKey);
+        refreshPasskeyUi().catch(() => {});
         authState.supabase.auth.onAuthStateChange((event, session) => {
           authState.token = session?.access_token ?? null;
           authState.email = session?.user?.email ?? null;
@@ -6879,7 +7406,13 @@ function initServiceM8Menu() {
 
     if (window.servicem8Connected) {
       // Disconnect
-      if (!confirm('Disconnect ServiceM8 account?')) return;
+      const confirmed = await showAppConfirm('Disconnect ServiceM8 account?', {
+        title: 'Disconnect ServiceM8',
+        confirmText: 'Disconnect',
+        destructive: true,
+        triggerEl: menuItem,
+      });
+      if (!confirmed) return;
       try {
         const resp = await fetch('/api/servicem8/oauth/disconnect', {
           method: 'POST',
@@ -7149,7 +7682,7 @@ function initProductsView() {
         if (productForm) productForm.style.pointerEvents = '';
         if (productForm) productForm.style.opacity = '';
       }
-      productModal.hidden = false;
+      openAccessibleModal('productModal', { triggerEl: document.getElementById('productCardNew') || document.activeElement });
       return;
     }
     if (productModalSignInPrompt) productModalSignInPrompt.hidden = true;
@@ -7185,7 +7718,7 @@ function initProductsView() {
       btnArchiveProduct.setAttribute('data-action', isArchived ? 'unarchive' : 'archive');
       btnArchiveProduct.classList.toggle('btn-archive--destructive', !isArchived);
     }
-    productModal.hidden = false;
+    openAccessibleModal('productModal', { triggerEl: document.activeElement });
   };
 
   if (btnArchiveProduct) {
@@ -7197,7 +7730,13 @@ function initProductsView() {
       const msg = newActive
         ? 'Unarchive this product? It will appear in the Canvas sidebar again.'
         : 'Archive this product? It will no longer appear in the Canvas sidebar.';
-      if (!confirm(msg)) return;
+      const confirmed = await showAppConfirm(msg, {
+        title: newActive ? 'Unarchive product' : 'Archive product',
+        confirmText: newActive ? 'Unarchive' : 'Archive',
+        destructive: !newActive,
+        triggerEl: btnArchiveProduct,
+      });
+      if (!confirmed) return;
       btnArchiveProduct.disabled = true;
       try {
         const { error } = await authState.supabase
@@ -7205,12 +7744,15 @@ function initProductsView() {
           .update({ active: newActive })
           .eq('id', currentEditingProduct.id);
         if (error) throw error;
-        productModal.hidden = true;
+        closeAccessibleModal('productModal');
         resetProductForm();
         await renderProductLibrary();
         await loadPanelProducts();
       } catch (err) {
-        alert(err.message || 'Failed to archive product');
+        await showAppAlert(err.message || 'Failed to archive product', {
+          title: 'Archive failed',
+          triggerEl: btnArchiveProduct,
+        });
       } finally {
         btnArchiveProduct.disabled = false;
       }
@@ -7234,7 +7776,7 @@ function initProductsView() {
 
   if (btnCancelProduct && productModal) {
     btnCancelProduct.addEventListener('click', () => {
-      productModal.hidden = true;
+      closeAccessibleModal('productModal');
       resetProductForm();
     });
   }
@@ -7272,7 +7814,7 @@ function initProductsView() {
       if (!file) return;
       const validation = validateProductSvgFile(file);
       if (!validation.valid) {
-        alert(validation.message);
+        showAppAlert(validation.message, { title: 'Invalid SVG file', triggerEl: dropZone });
         clearProductFileInput();
         return;
       }
@@ -7282,7 +7824,10 @@ function initProductsView() {
         const svgContent = reader.result;
         const dims = getSvgDimensions(svgContent);
         if (dims && (dims.width > PRODUCT_SVG_DIMENSION_WARN_PX || dims.height > PRODUCT_SVG_DIMENSION_WARN_PX)) {
-          alert('This SVG has very large dimensions and may affect performance. We recommend resizing it.');
+          showAppAlert('This SVG has very large dimensions and may affect performance. We recommend resizing it.', {
+            title: 'Large SVG warning',
+            triggerEl: dropZone,
+          });
         }
         setProductFile(svgContent, file);
       };
@@ -7301,7 +7846,7 @@ function initProductsView() {
       if (!file) return;
       const validation = validateProductSvgFile(file);
       if (!validation.valid) {
-        alert(validation.message);
+        showAppAlert(validation.message, { title: 'Invalid SVG file', triggerEl: productModalFileInput });
         clearProductFileInput();
         return;
       }
@@ -7311,7 +7856,10 @@ function initProductsView() {
         const svgContent = reader.result;
         const dims = getSvgDimensions(svgContent);
         if (dims && (dims.width > PRODUCT_SVG_DIMENSION_WARN_PX || dims.height > PRODUCT_SVG_DIMENSION_WARN_PX)) {
-          alert('This SVG has very large dimensions and may affect performance. We recommend resizing it.');
+          showAppAlert('This SVG has very large dimensions and may affect performance. We recommend resizing it.', {
+            title: 'Large SVG warning',
+            triggerEl: productModalFileInput,
+          });
         }
         setProductFile(svgContent, file);
       };
@@ -7334,7 +7882,7 @@ function initProductsView() {
 
   if (btnSignInFromProductModal) {
     btnSignInFromProductModal.addEventListener('click', () => {
-      productModal.hidden = true;
+      closeAccessibleModal('productModal');
       switchView('view-login');
     });
   }
@@ -7349,7 +7897,7 @@ function initProductsView() {
       if (!authState.token) {
         showMessage('Sign in to add products.');
         switchView('view-login');
-        productModal.hidden = true;
+        closeAccessibleModal('productModal');
         return;
       }
       const name = (inputProductName?.value || '').trim();
@@ -7357,15 +7905,24 @@ function initProductsView() {
       const hasDiagram = pendingSvgContent || (currentEditingProduct && (currentEditingProduct.diagram_url || currentEditingProduct.diagramUrl));
       if (!name || !category) return;
       if (!hasDiagram) {
-        alert('Please add a diagram (drop an SVG file or ensure the product has a diagram URL).');
+        await showAppAlert('Please add a diagram (drop an SVG file or ensure the product has a diagram URL).', {
+          title: 'Diagram required',
+          triggerEl: btnSaveProduct,
+        });
         return;
       }
       if (!pendingSvgFile && !currentEditingProduct) {
-        alert('Please select an SVG file to upload');
+        await showAppAlert('Please select an SVG file to upload', {
+          title: 'SVG required',
+          triggerEl: productModalFileInput,
+        });
         return;
       }
       if (!authState.supabase) {
-        alert('Supabase is not configured');
+        await showAppAlert('Supabase is not configured', {
+          title: 'Configuration required',
+          triggerEl: btnSaveProduct,
+        });
         return;
       }
       if (btnSaveProduct) btnSaveProduct.disabled = true;
@@ -7408,12 +7965,15 @@ function initProductsView() {
           const { error } = await authState.supabase.from('products').insert([productData]);
           if (error) throw error;
         }
-        productModal.hidden = true;
+        closeAccessibleModal('productModal');
         resetProductForm();
         await renderProductLibrary();
         await loadPanelProducts();
       } catch (err) {
-        alert(err.message || 'Failed to save product');
+        await showAppAlert(err.message || 'Failed to save product', {
+          title: 'Save product failed',
+          triggerEl: btnSaveProduct,
+        });
       } finally {
         if (btnSaveProduct) btnSaveProduct.disabled = false;
       }
@@ -7519,7 +8079,6 @@ function initDiagrams() {
   const saveDiagramName = document.getElementById('saveDiagramName');
   const saveDiagramConfirmBtn = document.getElementById('saveDiagramConfirmBtn');
   const saveDiagramCancelBtn = document.getElementById('saveDiagramCancelBtn');
-  const saveDiagramModalBackdrop = document.getElementById('saveDiagramModalBackdrop');
   const saveDiagramError = document.getElementById('saveDiagramError');
   const projectNameInput = document.getElementById('toolbarProjectNameInput');
   const breadcrumbsNav = document.getElementById('toolbarBreadcrumbsNav');
@@ -7612,7 +8171,7 @@ function initDiagrams() {
     const base = (state.projectName || projectNameInput?.value || '').trim();
     saveDiagramName.value = base || 'Project';
     if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
-    saveDiagramModal.hidden = false;
+    openAccessibleModal('saveDiagramModal', { triggerEl: saveDiagramBtn, initialFocusEl: saveDiagramName });
   });
 
   saveDiagramConfirmBtn?.addEventListener('click', async () => {
@@ -7637,7 +8196,7 @@ function initDiagrams() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || 'Save failed');
       }
-      saveDiagramModal.hidden = true;
+      closeAccessibleModal('saveDiagramModal');
       updateToolbarBreadcrumbs(name);
       showMessage('Diagram saved.', 'success');
       refreshDiagramsList();
@@ -7647,8 +8206,7 @@ function initDiagrams() {
     saveDiagramConfirmBtn.disabled = false;
   });
 
-  saveDiagramCancelBtn?.addEventListener('click', () => { saveDiagramModal.hidden = true; });
-  saveDiagramModalBackdrop?.addEventListener('click', () => { saveDiagramModal.hidden = true; });
+  saveDiagramCancelBtn?.addEventListener('click', () => { closeAccessibleModal('saveDiagramModal'); });
 
   diagramsDropdownBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -7723,20 +8281,24 @@ function initDiagrams() {
     deleteBtn.className = 'diagram-item-delete';
     deleteBtn.setAttribute('aria-label', 'Delete this saved project');
     deleteBtn.innerHTML = '−';
-    deleteBtn.addEventListener('click', (e) => {
+    deleteBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!confirm('Permanently delete this saved project? This cannot be undone.')) return;
-      (async () => {
-        try {
-          const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: authHeaders() });
-          if (!r.ok) throw new Error('Delete failed');
-          refreshDiagramsList();
-          showMessage('Project deleted.', 'success');
-        } catch (err) {
-          showMessage('Could not delete project.', 'error');
-        }
-      })();
+      const confirmed = await showAppConfirm('Permanently delete this saved project? This cannot be undone.', {
+        title: 'Delete saved project',
+        confirmText: 'Delete',
+        destructive: true,
+        triggerEl: deleteBtn,
+      });
+      if (!confirmed) return;
+      try {
+        const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: authHeaders() });
+        if (!r.ok) throw new Error('Delete failed');
+        refreshDiagramsList();
+        showMessage('Project deleted.', 'success');
+      } catch (err) {
+        showMessage('Could not delete project.', 'error');
+      }
     });
 
     wrap.appendChild(btn);
@@ -7787,6 +8349,103 @@ function initDiagrams() {
     }
   }
   if (typeof window !== 'undefined') window.__quoteAppRefreshDiagramsList = refreshDiagramsList;
+}
+
+const GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_globalToolbarCollapsed';
+const GLOBAL_TOOLBAR_STORAGE_KEY_POSITION = 'quoteApp_globalToolbarPosition';
+
+function applyGlobalToolbarPadding() {
+  const wrap = document.getElementById('globalToolbarWrap');
+  const viewCanvas = document.getElementById('view-canvas');
+  if (!wrap || !viewCanvas) return;
+  const h = wrap.offsetHeight;
+  viewCanvas.style.setProperty('--global-toolbar-height', h + 'px');
+}
+
+function initGlobalToolbar() {
+  const wrap = document.getElementById('globalToolbarWrap');
+  const toolbar = document.getElementById('globalToolbar');
+  const collapseBtn = document.getElementById('toolbarCollapseBtn');
+  const dragHandle = document.getElementById('toolbarDragHandle');
+  if (!wrap || !toolbar || !collapseBtn || !dragHandle) return;
+
+  let collapsed = localStorage.getItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
+  let position = localStorage.getItem(GLOBAL_TOOLBAR_STORAGE_KEY_POSITION) || 'top';
+  if (position !== 'top' && position !== 'bottom') position = 'top';
+
+  function applyState() {
+    toolbar.classList.toggle('toolbar--collapsed', collapsed);
+    wrap.classList.toggle('global-toolbar-wrap--bottom', position === 'bottom');
+    const viewCanvas = document.getElementById('view-canvas');
+    if (viewCanvas) {
+      viewCanvas.classList.remove('view-canvas--toolbar-top', 'view-canvas--toolbar-bottom');
+      viewCanvas.classList.add(position === 'top' ? 'view-canvas--toolbar-top' : 'view-canvas--toolbar-bottom');
+    }
+    collapseBtn.setAttribute('aria-expanded', !collapsed);
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
+    collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+    const span = collapseBtn.querySelector('span');
+    if (span) span.textContent = collapsed ? '+' : '−';
+    requestAnimationFrame(applyGlobalToolbarPadding);
+  }
+
+  applyState();
+
+  collapseBtn.addEventListener('click', () => {
+    collapsed = !collapsed;
+    localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, String(collapsed));
+    applyState();
+  });
+
+  let dragStartY = 0;
+  let dragStartWrapTop = 0;
+  let dragPointerId = null;
+
+  dragHandle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    dragPointerId = e.pointerId;
+    dragStartY = e.clientY;
+    dragStartWrapTop = wrap.getBoundingClientRect().top;
+    wrap.setPointerCapture(e.pointerId);
+    wrap.style.transition = 'none';
+  });
+
+  wrap.addEventListener('pointermove', (e) => {
+    if (dragPointerId == null || e.pointerId !== dragPointerId) return;
+    const dy = e.clientY - dragStartY;
+    const wrapHeight = wrap.offsetHeight || 56; // fallback if height not yet measured
+    let newTop = dragStartWrapTop + dy;
+    newTop = Math.max(0, Math.min(window.innerHeight - wrapHeight, newTop));
+    wrap.style.top = newTop + 'px';
+    wrap.style.bottom = 'auto';
+  });
+
+  wrap.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== dragPointerId) return;
+    dragPointerId = null;
+    wrap.releasePointerCapture(e.pointerId);
+    wrap.style.transition = '';
+    const rect = wrap.getBoundingClientRect();
+    const mid = window.innerHeight / 2;
+    position = rect.top + rect.height / 2 < mid ? 'top' : 'bottom';
+    wrap.style.top = '';
+    wrap.style.bottom = '';
+    localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_POSITION, position);
+    applyState();
+  });
+  wrap.addEventListener('pointercancel', (e) => {
+    if (e.pointerId === dragPointerId) {
+      dragPointerId = null;
+      if (wrap.releasePointerCapture) {
+        try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      wrap.style.top = '';
+      wrap.style.bottom = '';
+      wrap.style.transition = '';
+      applyState();
+    }
+  });
 }
 
 function initPanel() {
@@ -8213,17 +8872,18 @@ function renderProducts(products) {
         const img = await loadDiagramImageForDrop(diagramUrl);
         const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
         
-        // Canvas Porter: Center-Drop - place at viewport center
+        // Canvas Porter: Center-Drop - place at viewport center (54.18: snap to grid, nudge if overlap)
         const rect = getCanvasRect();
         if (!rect) return;
-        const viewportCenterX = (rect.width / 2 - state.offsetX) / state.scale;
-        const viewportCenterY = (rect.height / 2 - state.offsetY) / state.scale;
-        
+        let vcx = (rect.width / 2 - state.offsetX) / state.scale;
+        let vcy = (rect.height / 2 - state.offsetY) / state.scale;
+        vcx = snapToGrid(vcx);
+        vcy = snapToGrid(vcy);
         const el = {
           id: 'el-' + ++elementIdCounter,
           assetId: p.id,
-          x: viewportCenterX - w / 2,
-          y: viewportCenterY - h / 2,
+          x: vcx - w / 2,
+          y: vcy - h / 2,
           width: w,
           height: h,
           rotation: getDefaultRotationForLinear(p.id),
@@ -8236,6 +8896,16 @@ function renderProducts(products) {
           flipX: false,
           flipY: false,
         };
+        const othersCenterDrop = state.elements;
+        const nudgeDirsCenter = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
+        for (let n = 0; n < 20; n++) {
+          if (!othersCenterDrop.some((o) => elementsOverlap(el, o))) break;
+          const [dx, dy] = nudgeDirsCenter[n % nudgeDirsCenter.length];
+          vcx += dx;
+          vcy += dy;
+          el.x = vcx - w / 2;
+          el.y = vcy - h / 2;
+        }
         if (isMeasurableElement(p.id)) {
           el.sequenceId = state.nextSequenceId++;
           el.measuredLength = 0;
@@ -8416,12 +9086,539 @@ function updateUserProfile() {
   if (productsAvatar) productsAvatar.textContent = initial;
 }
 
+const modalA11yState = {
+  registry: new Map(),
+  stack: [],
+  initialized: false,
+  keydownBound: false,
+};
+
+const appAlertDialogState = {
+  pendingResolve: null,
+  mode: 'alert',
+  destructive: false,
+  dismissResult: false,
+};
+
+function getFocusableElements(root) {
+  if (!(root instanceof HTMLElement)) return [];
+  const selector = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[contenteditable="true"]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+  return Array.from(root.querySelectorAll(selector)).filter((el) => isUsableFocusTarget(el));
+}
+
+function clearManagedInertElements() {
+  document.querySelectorAll('[data-modal-inert-managed="true"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    el.inert = false;
+    el.removeAttribute('data-modal-inert-managed');
+    if (el.getAttribute('data-modal-aria-hidden-managed') === 'true') {
+      el.removeAttribute('aria-hidden');
+      el.removeAttribute('data-modal-aria-hidden-managed');
+    }
+  });
+}
+
+function markElementInert(el) {
+  if (!(el instanceof HTMLElement)) return;
+  if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+  if (el.getAttribute('data-modal-inert-managed') === 'true') return;
+  el.inert = true;
+  el.setAttribute('data-modal-inert-managed', 'true');
+  if (!el.hasAttribute('aria-hidden')) {
+    el.setAttribute('aria-hidden', 'true');
+    el.setAttribute('data-modal-aria-hidden-managed', 'true');
+  }
+}
+
+function applyModalInertState() {
+  clearManagedInertElements();
+  const topEntry = modalA11yState.stack[modalA11yState.stack.length - 1];
+  if (!topEntry) return;
+  const cfg = modalA11yState.registry.get(topEntry.id);
+  const modal = cfg?.element;
+  if (!(modal instanceof HTMLElement) || modal.hasAttribute('hidden')) return;
+
+  let current = modal;
+  while (current && current !== document.body) {
+    const parent = current.parentElement;
+    if (!parent) break;
+    Array.from(parent.children).forEach((sibling) => {
+      if (sibling === current) return;
+      markElementInert(sibling);
+    });
+    current = parent;
+  }
+}
+
+function resolveModalInitialFocus(cfg, options = {}) {
+  if (options.initialFocusEl instanceof HTMLElement) return options.initialFocusEl;
+  if (typeof cfg.initialFocus === 'function') {
+    const candidate = cfg.initialFocus();
+    if (candidate instanceof HTMLElement) return candidate;
+  }
+  if (cfg.initialFocus instanceof HTMLElement) return cfg.initialFocus;
+  const focusable = getFocusableElements(cfg.element);
+  if (focusable.length > 0) return focusable[0];
+  if (cfg.element instanceof HTMLElement) {
+    if (!cfg.element.hasAttribute('tabindex')) cfg.element.setAttribute('tabindex', '-1');
+    return cfg.element;
+  }
+  return null;
+}
+
+function registerAccessibleModal(config) {
+  const id = config?.id;
+  const element = config?.element;
+  if (!id || !(element instanceof HTMLElement)) return;
+  modalA11yState.registry.set(id, {
+    id,
+    element,
+    backdrop: config.backdrop instanceof HTMLElement ? config.backdrop : null,
+    closeOnEscape: config.closeOnEscape !== false,
+    closeOnBackdrop: config.closeOnBackdrop !== false,
+    initialFocus: config.initialFocus || null,
+    onOpen: typeof config.onOpen === 'function' ? config.onOpen : null,
+    onClose: typeof config.onClose === 'function' ? config.onClose : null,
+  });
+}
+
+function openAccessibleModal(id, options = {}) {
+  const cfg = modalA11yState.registry.get(id);
+  if (!cfg || !(cfg.element instanceof HTMLElement)) return false;
+
+  const triggerEl = options.triggerEl instanceof HTMLElement
+    ? options.triggerEl
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+
+  const existingIndex = modalA11yState.stack.findIndex((entry) => entry.id === id);
+  if (existingIndex !== -1) modalA11yState.stack.splice(existingIndex, 1);
+  modalA11yState.stack.push({ id, trigger: triggerEl });
+
+  cfg.element.removeAttribute('hidden');
+  if (typeof cfg.onOpen === 'function') cfg.onOpen(options);
+  applyModalInertState();
+
+  requestAnimationFrame(() => {
+    const target = resolveModalInitialFocus(cfg, options);
+    focusElementNoScroll(target);
+  });
+  return true;
+}
+
+function closeAccessibleModal(id, options = {}) {
+  const cfg = modalA11yState.registry.get(id);
+  if (!cfg || !(cfg.element instanceof HTMLElement)) return false;
+
+  const stackIndex = modalA11yState.stack.findIndex((entry) => entry.id === id);
+  const entry = stackIndex === -1 ? null : modalA11yState.stack.splice(stackIndex, 1)[0];
+  cfg.element.setAttribute('hidden', '');
+  if (typeof cfg.onClose === 'function') cfg.onClose(options);
+
+  applyModalInertState();
+
+  if (options.restoreFocus !== false) {
+    const restoreTarget = options.restoreFocusEl instanceof HTMLElement
+      ? options.restoreFocusEl
+      : entry?.trigger;
+    requestAnimationFrame(() => {
+      if (focusElementNoScroll(restoreTarget)) return;
+      focusElementNoScroll(getPrimaryViewFocusTarget(getVisibleViewId()));
+    });
+  }
+  return true;
+}
+
+function initAlertDialogControls() {
+  const confirmBtn = document.getElementById('appAlertDialogConfirmBtn');
+  const cancelBtn = document.getElementById('appAlertDialogCancelBtn');
+  if (!confirmBtn || !cancelBtn) return;
+  if (confirmBtn.getAttribute('data-alert-bound') === 'true') return;
+
+  confirmBtn.setAttribute('data-alert-bound', 'true');
+  cancelBtn.setAttribute('data-alert-bound', 'true');
+  confirmBtn.addEventListener('click', () => {
+    appAlertDialogState.dismissResult = true;
+    closeAccessibleModal('appAlertDialogModal');
+  });
+  cancelBtn.addEventListener('click', () => {
+    appAlertDialogState.dismissResult = false;
+    closeAccessibleModal('appAlertDialogModal');
+  });
+}
+
+function showAppDialog(options = {}) {
+  const modal = document.getElementById('appAlertDialogModal');
+  const titleEl = document.getElementById('appAlertDialogTitle');
+  const messageEl = document.getElementById('appAlertDialogMessage');
+  const confirmBtn = document.getElementById('appAlertDialogConfirmBtn');
+  const cancelBtn = document.getElementById('appAlertDialogCancelBtn');
+  if (!modal || !titleEl || !messageEl || !confirmBtn || !cancelBtn) {
+    return Promise.resolve(options.mode === 'alert');
+  }
+
+  const mode = options.mode === 'confirm' ? 'confirm' : 'alert';
+  appAlertDialogState.mode = mode;
+  appAlertDialogState.destructive = !!options.destructive;
+  appAlertDialogState.dismissResult = mode === 'alert';
+
+  titleEl.textContent = options.title || (mode === 'confirm' ? 'Confirm action' : 'Notice');
+  messageEl.textContent = options.message || '';
+  confirmBtn.textContent = options.confirmText || (mode === 'confirm' ? 'Confirm' : 'OK');
+  cancelBtn.textContent = options.cancelText || 'Cancel';
+  cancelBtn.hidden = mode !== 'confirm';
+  confirmBtn.classList.toggle('btn-destructive', appAlertDialogState.destructive);
+
+  if (typeof appAlertDialogState.pendingResolve === 'function') {
+    appAlertDialogState.pendingResolve(false);
+  }
+
+  return new Promise((resolve) => {
+    appAlertDialogState.pendingResolve = resolve;
+    const initialFocus = mode === 'confirm' && appAlertDialogState.destructive ? cancelBtn : confirmBtn;
+    openAccessibleModal('appAlertDialogModal', { triggerEl: options.triggerEl, initialFocusEl: initialFocus });
+  });
+}
+
+function showAppAlert(message, options = {}) {
+  return showAppDialog({
+    ...options,
+    mode: 'alert',
+    message,
+    confirmText: options.confirmText || 'OK',
+  }).then(() => {});
+}
+
+function showAppConfirm(message, options = {}) {
+  return showAppDialog({
+    ...options,
+    mode: 'confirm',
+    message,
+    confirmText: options.confirmText || 'Confirm',
+    cancelText: options.cancelText || 'Cancel',
+  });
+}
+
+function normalizeAccessibilityMotionPreference(value) {
+  if (value === 'reduce' || value === 'full' || value === 'system') return value;
+  return 'system';
+}
+
+function applyAccessibilityPreferences() {
+  if (typeof document === 'undefined') return;
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle('a11y-large-controls', !!accessibilityPrefs.largeControls);
+  body.classList.toggle('a11y-high-contrast', !!accessibilityPrefs.highContrast);
+  body.classList.toggle('a11y-reduce-motion', accessibilityPrefs.motion === 'reduce');
+  body.classList.toggle('a11y-force-motion', accessibilityPrefs.motion === 'full');
+}
+
+function saveAccessibilityPreferences() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ACCESSIBILITY_PREFS_STORAGE_KEY, JSON.stringify(accessibilityPrefs));
+  } catch (_) {}
+}
+
+function loadAccessibilityPreferences() {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.localStorage.getItem(ACCESSIBILITY_PREFS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    accessibilityPrefs.motion = normalizeAccessibilityMotionPreference(parsed?.motion);
+    accessibilityPrefs.largeControls = !!parsed?.largeControls;
+    accessibilityPrefs.highContrast = !!parsed?.highContrast;
+  } catch (_) {}
+}
+
+function syncAccessibilitySettingsForm() {
+  const motionSelect = document.getElementById('accessibilityMotionPreference');
+  const largeControls = document.getElementById('accessibilityLargeControls');
+  const highContrast = document.getElementById('accessibilityHighContrast');
+  if (motionSelect) motionSelect.value = normalizeAccessibilityMotionPreference(accessibilityPrefs.motion);
+  if (largeControls) largeControls.checked = !!accessibilityPrefs.largeControls;
+  if (highContrast) highContrast.checked = !!accessibilityPrefs.highContrast;
+}
+
+function openAccessibilitySettingsModal(triggerEl) {
+  syncAccessibilitySettingsForm();
+  const firstField = document.getElementById('accessibilityMotionPreference');
+  openAccessibleModal('accessibilitySettingsModal', { triggerEl, initialFocusEl: firstField });
+}
+
+function initAccessibilitySettings() {
+  loadAccessibilityPreferences();
+  applyAccessibilityPreferences();
+
+  const motionSelect = document.getElementById('accessibilityMotionPreference');
+  const largeControls = document.getElementById('accessibilityLargeControls');
+  const highContrast = document.getElementById('accessibilityHighContrast');
+  const doneBtn = document.getElementById('accessibilitySettingsDoneBtn');
+  const toolbarBtn = document.getElementById('openAccessibilitySettingsBtn');
+  const productsBtn = document.getElementById('productsAccessibilityBtn');
+  const menuItem = document.getElementById('menuItemAccessibility');
+  const profileDropdown = document.getElementById('profileDropdown');
+  const userAvatar = document.getElementById('userAvatar');
+
+  [toolbarBtn, productsBtn, menuItem].filter(Boolean).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn === menuItem) {
+        if (profileDropdown) profileDropdown.hidden = true;
+        if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      }
+      openAccessibilitySettingsModal(btn);
+    });
+  });
+
+  motionSelect?.addEventListener('change', () => {
+    accessibilityPrefs.motion = normalizeAccessibilityMotionPreference(motionSelect.value);
+    saveAccessibilityPreferences();
+    applyAccessibilityPreferences();
+  });
+
+  largeControls?.addEventListener('change', () => {
+    accessibilityPrefs.largeControls = !!largeControls.checked;
+    saveAccessibilityPreferences();
+    applyAccessibilityPreferences();
+  });
+
+  highContrast?.addEventListener('change', () => {
+    accessibilityPrefs.highContrast = !!highContrast.checked;
+    saveAccessibilityPreferences();
+    applyAccessibilityPreferences();
+  });
+
+  doneBtn?.addEventListener('click', () => {
+    closeAccessibleModal('accessibilitySettingsModal');
+  });
+}
+
+function initModalAccessibilityFramework() {
+  if (modalA11yState.initialized) return;
+  modalA11yState.initialized = true;
+
+  registerAccessibleModal({
+    id: 'quoteModal',
+    element: document.getElementById('quoteModal'),
+    backdrop: document.getElementById('quoteModalBackdrop'),
+    initialFocus: () => document.getElementById('quoteModalClose') || document.getElementById('quoteCloseBtn'),
+  });
+  registerAccessibleModal({
+    id: 'productModal',
+    element: document.getElementById('productModal'),
+    initialFocus: () => {
+      const signInPrompt = document.getElementById('productModalSignInPrompt');
+      if (signInPrompt && !signInPrompt.hidden) return document.getElementById('btnSignInFromProductModal');
+      return document.getElementById('inputProductName') || document.getElementById('productModalFileInput');
+    },
+  });
+  registerAccessibleModal({
+    id: 'cropModal',
+    element: document.getElementById('cropModal'),
+    backdrop: document.getElementById('cropModalBackdrop'),
+    initialFocus: () => document.getElementById('cropApply') || document.getElementById('cropAspectRatio'),
+  });
+  registerAccessibleModal({
+    id: 'saveDiagramModal',
+    element: document.getElementById('saveDiagramModal'),
+    backdrop: document.getElementById('saveDiagramModalBackdrop'),
+    initialFocus: () => document.getElementById('saveDiagramName') || document.getElementById('saveDiagramConfirmBtn'),
+  });
+  registerAccessibleModal({
+    id: 'accessibilitySettingsModal',
+    element: document.getElementById('accessibilitySettingsModal'),
+    backdrop: document.getElementById('accessibilitySettingsBackdrop'),
+    initialFocus: () => document.getElementById('accessibilityMotionPreference') || document.getElementById('accessibilitySettingsDoneBtn'),
+  });
+  registerAccessibleModal({
+    id: 'jobConfirmOverlay',
+    element: document.getElementById('jobConfirmOverlay'),
+    backdrop: document.getElementById('jobConfirmBackdrop'),
+    initialFocus: () => document.getElementById('jobConfirmAddBtn') || document.getElementById('jobConfirmClose'),
+  });
+  registerAccessibleModal({
+    id: 'authModal',
+    element: document.getElementById('authModal'),
+    backdrop: document.getElementById('authModalBackdrop'),
+  });
+  registerAccessibleModal({
+    id: 'appAlertDialogModal',
+    element: document.getElementById('appAlertDialogModal'),
+    backdrop: document.getElementById('appAlertDialogBackdrop'),
+    initialFocus: () => {
+      const confirmBtn = document.getElementById('appAlertDialogConfirmBtn');
+      const cancelBtn = document.getElementById('appAlertDialogCancelBtn');
+      return appAlertDialogState.mode === 'confirm' && appAlertDialogState.destructive
+        ? (cancelBtn || confirmBtn)
+        : (confirmBtn || cancelBtn);
+    },
+    onClose: () => {
+      if (typeof appAlertDialogState.pendingResolve === 'function') {
+        const resolve = appAlertDialogState.pendingResolve;
+        appAlertDialogState.pendingResolve = null;
+        resolve(!!appAlertDialogState.dismissResult);
+      }
+      appAlertDialogState.mode = 'alert';
+      appAlertDialogState.destructive = false;
+      appAlertDialogState.dismissResult = false;
+    },
+  });
+  initAlertDialogControls();
+
+  if (modalA11yState.keydownBound) return;
+  modalA11yState.keydownBound = true;
+  document.addEventListener('keydown', (e) => {
+    const topEntry = modalA11yState.stack[modalA11yState.stack.length - 1];
+    if (!topEntry) return;
+    const cfg = modalA11yState.registry.get(topEntry.id);
+    const modal = cfg?.element;
+    if (!cfg || !(modal instanceof HTMLElement) || modal.hasAttribute('hidden')) return;
+
+    if (e.key === 'Escape') {
+      if (cfg.closeOnEscape) {
+        e.preventDefault();
+        closeAccessibleModal(topEntry.id);
+      }
+      return;
+    }
+    if (e.key !== 'Tab') return;
+
+    const focusable = getFocusableElements(modal);
+    if (focusable.length === 0) {
+      e.preventDefault();
+      focusElementNoScroll(modal);
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !modal.contains(active)) {
+        e.preventDefault();
+        focusElementNoScroll(last);
+      }
+      return;
+    }
+    if (active === last || !modal.contains(active)) {
+      e.preventDefault();
+      focusElementNoScroll(first);
+    }
+  }, true);
+
+  modalA11yState.registry.forEach((cfg, id) => {
+    if (cfg.backdrop instanceof HTMLElement) {
+      cfg.backdrop.addEventListener('click', () => {
+        if (cfg.closeOnBackdrop) closeAccessibleModal(id);
+      });
+      return;
+    }
+    cfg.element.addEventListener('click', (e) => {
+      if (!cfg.closeOnBackdrop) return;
+      if (e.target === cfg.element) closeAccessibleModal(id);
+    });
+  });
+}
+
+function getVisibleViewId() {
+  const visible = document.querySelector('.app-view:not(.hidden)');
+  return visible ? visible.id : null;
+}
+
+function isUsableFocusTarget(el) {
+  if (!(el instanceof HTMLElement)) return false;
+  if (!el.isConnected) return false;
+  if (el.hasAttribute('disabled')) return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+  if (el.hidden) return false;
+  if (el.closest('[hidden], [aria-hidden="true"]')) return false;
+  if (el.getClientRects().length === 0 && el !== document.body) return false;
+  return true;
+}
+
+function focusElementNoScroll(el) {
+  if (!isUsableFocusTarget(el)) return false;
+  try {
+    el.focus({ preventScroll: true });
+  } catch (_) {
+    el.focus();
+  }
+  return true;
+}
+
+function rememberViewTransition(fromViewId, toViewId, triggerEl) {
+  if (!fromViewId || !toViewId || fromViewId === toViewId || !(triggerEl instanceof HTMLElement)) return;
+  for (let i = viewTransitionHistory.length - 1; i >= 0; i -= 1) {
+    const entry = viewTransitionHistory[i];
+    if (entry.from === fromViewId && entry.to === toViewId) {
+      viewTransitionHistory.splice(i, 1);
+      break;
+    }
+  }
+  viewTransitionHistory.push({ from: fromViewId, to: toViewId, trigger: triggerEl });
+  while (viewTransitionHistory.length > 24) viewTransitionHistory.shift();
+}
+
+function getReturnFocusTarget(fromViewId, toViewId) {
+  for (let i = viewTransitionHistory.length - 1; i >= 0; i -= 1) {
+    const entry = viewTransitionHistory[i];
+    if (entry.from === toViewId && entry.to === fromViewId) {
+      viewTransitionHistory.splice(i, 1);
+      return entry.trigger;
+    }
+  }
+  return null;
+}
+
+function getPrimaryViewFocusTarget(viewId) {
+  if (viewId === 'view-login') {
+    const setPasswordForm = document.getElementById('authSetPasswordForm');
+    if (setPasswordForm && !setPasswordForm.hidden) {
+      return document.getElementById('authNewPassword') || document.getElementById('authSetPasswordBtn');
+    }
+    const authForm = document.getElementById('authForm');
+    if (authForm && !authForm.hidden) {
+      return document.getElementById('authEmail') || document.getElementById('authSubmitBtn');
+    }
+    return document.getElementById('authSignOutBtn') || document.getElementById('authEmail');
+  }
+  if (viewId === 'view-products') {
+    return document.getElementById('productLibrarySearch')
+      || document.getElementById('productCardNew')
+      || document.getElementById('btnBackToCanvas');
+  }
+  if (viewId === 'view-canvas') {
+    return document.getElementById('generateQuoteBtn')
+      || document.getElementById('saveDiagramBtn')
+      || document.getElementById('canvas');
+  }
+  return null;
+}
+
 /**
  * Switch the visible app view. Hides all .app-view, shows the one with id viewId.
  * If viewId === 'view-canvas', calls resizeCanvas() after making it visible (so canvas is never measured while hidden), then draw().
  * If viewId === 'view-products', calls renderProductLibrary() to ensure data is fresh.
  */
-function switchView(viewId) {
+function switchView(viewId, options = {}) {
+  const fromViewId = getVisibleViewId();
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const explicitTrigger = options.triggerEl instanceof HTMLElement ? options.triggerEl : null;
+  const explicitReturnFocus = options.returnFocusEl instanceof HTMLElement ? options.returnFocusEl : null;
+  const triggerForHistory = explicitReturnFocus || explicitTrigger || activeElement;
+  if (fromViewId && fromViewId !== viewId && triggerForHistory) {
+    rememberViewTransition(fromViewId, viewId, triggerForHistory);
+  }
+
   document.querySelectorAll('.app-view').forEach((el) => {
     el.classList.add('hidden');
   });
@@ -8433,6 +9630,16 @@ function switchView(viewId) {
       draw();
     } else if (viewId === 'view-products') {
       renderProductLibrary();
+    }
+    if (options.focus !== false) {
+      const returnTarget = fromViewId && fromViewId !== viewId
+        ? getReturnFocusTarget(fromViewId, viewId)
+        : null;
+      const fallbackTarget = getPrimaryViewFocusTarget(viewId);
+      requestAnimationFrame(() => {
+        if (focusElementNoScroll(returnTarget)) return;
+        focusElementNoScroll(fallbackTarget);
+      });
     }
   }
 }
@@ -8457,6 +9664,21 @@ function init() {
     initExport();
   } catch (e) {
     console.warn('initExport failed', e);
+  }
+  try {
+    initGlobalToolbar();
+  } catch (e) {
+    console.warn('initGlobalToolbar failed', e);
+  }
+  try {
+    initModalAccessibilityFramework();
+  } catch (e) {
+    console.warn('initModalAccessibilityFramework failed', e);
+  }
+  try {
+    initAccessibilitySettings();
+  } catch (e) {
+    console.warn('initAccessibilitySettings failed', e);
   }
   initPanel();
   initResizer();
@@ -8489,6 +9711,11 @@ function init() {
     initFloatingToolbar();
   } catch (e) {
     console.warn('initFloatingToolbar failed', e);
+  }
+  try {
+    initAccessibilityInspector();
+  } catch (e) {
+    console.warn('initAccessibilityInspector failed', e);
   }
   try {
     initServiceM8Menu();

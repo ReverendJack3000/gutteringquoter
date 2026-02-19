@@ -19,7 +19,10 @@
   <div id="appAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
   <div class="app">
     <div id="view-canvas" class="app-view hidden">
-    <header class="toolbar toolbar-floating">
+    <div id="globalToolbarWrap" class="global-toolbar-wrap" role="banner">
+    <header class="toolbar toolbar-floating" id="globalToolbar">
+      <button type="button" class="toolbar-drag-handle" id="toolbarDragHandle" aria-label="Drag to move toolbar" title="Drag to move toolbar"><span aria-hidden="true">⋮⋮</span></button>
+      <button type="button" class="toolbar-collapse-btn" id="toolbarCollapseBtn" aria-label="Collapse toolbar" aria-expanded="true" title="Collapse toolbar"><span aria-hidden="true">−</span></button>
       <div class="toolbar-left">
         <div class="toolbar-breadcrumbs-wrap">
           <nav class="toolbar-breadcrumbs" aria-label="Project" id="toolbarBreadcrumbsNav">
@@ -58,11 +61,14 @@
               <div class="diagrams-dropdown-empty" id="diagramsDropdownEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
             </div>
           </div>
+          <button type="button" class="toolbar-icon-btn btn-icon" id="openAccessibilitySettingsBtn" title="Accessibility settings" aria-label="Open accessibility settings">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="8" r="1.5"/><path d="M9 16h6"/><path d="M10.5 11.5h3v5"/></svg>
+          </button>
         </div>
         <button type="button" class="btn btn-cta" id="generateQuoteBtn" title="Generate quote from canvas elements">Generate Quote</button>
         <div class="toolbar-message" id="toolbarMessage" role="alert" aria-live="polite" hidden></div>
         <div id="userProfileWrap" class="user-profile-wrap" hidden>
-          <div id="userAvatar" class="user-avatar" role="button" aria-haspopup="true" aria-expanded="false" aria-label="User menu"></div>
+          <div id="userAvatar" class="user-avatar" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" aria-label="User menu"></div>
           <div id="profileDropdown" class="profile-dropdown" role="menu" aria-label="Profile menu" hidden>
             <div class="profile-menu-item" id="menuItemProducts" role="menuitem">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -75,6 +81,15 @@
               </svg>
               <span id="servicem8MenuText">Connect ServiceM8</span>
             </div>
+            <div class="profile-menu-item" id="menuItemAccessibility" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9"></circle>
+                <circle cx="12" cy="8" r="1.5"></circle>
+                <path d="M9 16h6"></path>
+                <path d="M10.5 11.5h3v5"></path>
+              </svg>
+              <span>Accessibility</span>
+            </div>
             <div class="profile-menu-separator"></div>
             <div class="profile-menu-item destructive" id="menuItemSignOut" role="menuitem">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -84,6 +99,7 @@
         </div>
       </div>
     </header>
+    </div>
     <div class="header-color-popover color-palette-popover" id="headerColorPalettePopover" role="menu" aria-label="Colour all diagram elements" hidden>
       <button type="button" class="color-swatch color-swatch-default" data-color="" title="Default (no tint)"><span aria-hidden="true">×</span></button>
       <button type="button" class="color-swatch" data-color="#FF3B30" title="Red" style="--swatch:#FF3B30"></button>
@@ -119,6 +135,9 @@
           </button>
           <button type="button" class="toolbar-pill-btn btn-icon" id="zoomInBtn" title="Zoom in" aria-label="Zoom in">
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button type="button" class="toolbar-pill-btn btn-icon" id="openInspectorBtn" title="Open inspector" aria-label="Open inspector panel for non-gesture controls" aria-controls="accessibilityInspector" aria-expanded="false">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
           </button>
           <div class="toolbar-header-color-wrap">
             <button type="button" class="toolbar-pill-btn btn-icon" id="headerColorDiagramBtn" title="Colour all diagram elements" aria-label="Colour all diagram elements" aria-haspopup="true" aria-expanded="false">
@@ -164,16 +183,18 @@
           <input type="number" id="badgeLengthInput" min="0" step="0.001" placeholder="m" aria-label="Length metres" />
         </div>
         <div class="floating-toolbar" id="floatingToolbar" role="toolbar" aria-label="Selection actions" hidden>
+          <p id="selectionActionsHint" class="visually-hidden">Use drag handles or open the Inspector for precise non-gesture controls.</p>
+          <span class="floating-toolbar-drag-handle" id="floatingToolbarDragHandle" role="button" tabindex="0" title="Drag to move toolbar" aria-label="Drag to move toolbar"><span aria-hidden="true">⋮⋮</span></span>
           <button type="button" class="floating-toolbar-btn" id="floatingToolbarLock" title="Lock / Unlock" aria-label="Lock / Unlock">
             <svg class="icon-lock" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
               <path class="icon-lock-open" d="M8 11V7a4 4 0 1 1 8 0v4M4 12h16v8H4z" fill="none" stroke="currentColor" stroke-width="2"/>
               <path class="icon-lock-closed" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10z" fill="currentColor"/>
             </svg>
           </button>
-          <button type="button" class="floating-toolbar-btn floating-toolbar-element-only" id="floatingToolbarDuplicate" title="Duplicate">
+          <button type="button" class="floating-toolbar-btn floating-toolbar-element-only" id="floatingToolbarDuplicate" title="Duplicate" aria-label="Duplicate selected element" aria-describedby="selectionActionsHint">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
           </button>
-          <button type="button" class="floating-toolbar-btn" id="floatingToolbarDelete" title="Delete">
+          <button type="button" class="floating-toolbar-btn" id="floatingToolbarDelete" title="Delete" aria-label="Delete selected element" aria-describedby="selectionActionsHint">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
           <div class="floating-toolbar-flip-wrap">
@@ -193,17 +214,46 @@
               </button>
             </div>
           </div>
-          <button type="button" class="floating-toolbar-btn floating-toolbar-element-only" id="floatingToolbarColor" title="Colour" aria-label="Colour"></button>
+          <button type="button" class="floating-toolbar-btn floating-toolbar-element-only" id="floatingToolbarColor" title="Colour" aria-label="Colour selected element" aria-describedby="selectionActionsHint"></button>
           <div class="floating-toolbar-more-wrap">
-            <button type="button" class="floating-toolbar-btn" id="floatingToolbarMore" title="More" aria-haspopup="true" aria-expanded="false">
+            <button type="button" class="floating-toolbar-btn" id="floatingToolbarMore" title="More" aria-label="More layer actions" aria-haspopup="true" aria-expanded="false" aria-describedby="selectionActionsHint">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg>
             </button>
             <div class="floating-toolbar-submenu" id="floatingToolbarSubmenu" hidden>
-              <button type="button" data-action="bring-to-front">Bring to Front</button>
-              <button type="button" data-action="send-to-back">Send to Back</button>
+              <button type="button" data-action="bring-to-front" aria-label="Bring selected element to front">Bring to Front</button>
+              <button type="button" data-action="send-to-back" aria-label="Send selected element to back">Send to Back</button>
             </div>
           </div>
         </div>
+        <aside class="accessibility-inspector" id="accessibilityInspector" role="region" aria-label="Element inspector" hidden>
+          <div class="accessibility-inspector-header">
+            <h3 class="accessibility-inspector-title">Inspector</h3>
+            <button type="button" class="accessibility-inspector-close" id="inspectorCloseBtn" aria-label="Close inspector">Close</button>
+          </div>
+          <p class="accessibility-inspector-help" id="inspectorSelectionHint">Select one element to edit position, size, rotation, lock, and layer order.</p>
+          <div class="accessibility-inspector-form" id="inspectorForm" hidden>
+            <div class="accessibility-inspector-grid">
+              <label for="inspectorPosX">X</label>
+              <input type="number" id="inspectorPosX" step="1" inputmode="decimal" />
+              <label for="inspectorPosY">Y</label>
+              <input type="number" id="inspectorPosY" step="1" inputmode="decimal" />
+              <label for="inspectorWidth">Width</label>
+              <input type="number" id="inspectorWidth" step="1" min="4" inputmode="decimal" />
+              <label for="inspectorHeight">Height</label>
+              <input type="number" id="inspectorHeight" step="1" min="4" inputmode="decimal" />
+              <label for="inspectorRotation">Rotation</label>
+              <input type="number" id="inspectorRotation" step="1" inputmode="decimal" />
+            </div>
+            <label class="accessibility-inspector-lock">
+              <input type="checkbox" id="inspectorLocked" />
+              <span>Locked</span>
+            </label>
+            <div class="accessibility-inspector-actions">
+              <button type="button" class="btn" id="inspectorBringFrontBtn">Bring to front</button>
+              <button type="button" class="btn" id="inspectorSendBackBtn">Send to back</button>
+            </div>
+          </div>
+        </aside>
       </div>
 
       <div class="resizer" id="resizer" title="Drag to resize"></div>
@@ -259,13 +309,15 @@
         <div id="authError" class="auth-error" role="alert" hidden></div>
         <form id="authForm" class="auth-form">
           <label for="authEmail">Email</label>
-          <input type="email" id="authEmail" required placeholder="you@example.com" autocomplete="email" />
+          <input type="email" id="authEmail" name="email" required placeholder="you@example.com" autocomplete="username webauthn" inputmode="email" autocapitalize="none" spellcheck="false" />
           <label for="authPassword">Password</label>
-          <input type="password" id="authPassword" required placeholder="••••••••" autocomplete="current-password" />
+          <input type="password" id="authPassword" name="password" required placeholder="••••••••" autocomplete="current-password" autocapitalize="none" spellcheck="false" />
           <div class="auth-actions">
             <button type="submit" class="btn btn-primary" id="authSubmitBtn">Sign in</button>
+            <button type="button" class="btn auth-passkey-btn" id="authPasskeyBtn" hidden>Sign in with Passkey</button>
             <button type="button" class="btn" id="authSignUpBtn">Create account</button>
           </div>
+          <p class="auth-passkey-hint" id="authPasskeyHint" hidden>Use Face ID, Touch ID, or device passcode where available.</p>
           <p class="auth-forgot-wrap">
             <button type="button" class="auth-forgot-link" id="authForgotPasswordBtn">Forgot password?</button>
           </p>
@@ -274,9 +326,9 @@
           <p class="auth-modal-desc">Choose a new password for your account.</p>
           <div id="authSetPasswordError" class="auth-error" role="alert" hidden></div>
           <label for="authNewPassword">New password</label>
-          <input type="password" id="authNewPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+          <input type="password" id="authNewPassword" name="new_password" required minlength="6" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" spellcheck="false" />
           <label for="authNewPasswordConfirm">Confirm password</label>
-          <input type="password" id="authNewPasswordConfirm" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+          <input type="password" id="authNewPasswordConfirm" name="new_password_confirm" required minlength="6" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" spellcheck="false" />
           <div class="auth-actions">
             <button type="submit" class="btn btn-primary" id="authSetPasswordBtn">Set password</button>
             <button type="button" class="btn" id="authSetPasswordCancelBtn">Cancel</button>
@@ -314,14 +366,18 @@
             </select>
           </div>
           <div class="header-right">
+            <button type="button" id="productsAccessibilityBtn" class="btn-text-icon" aria-label="Open accessibility settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="8" r="1.5"/><path d="M9 16h6"/><path d="M10.5 11.5h3v5"/></svg>
+              Accessibility
+            </button>
             <div id="productsProfileWrap" class="user-profile-wrap" hidden>
-              <div id="productsUserAvatar" class="user-avatar" role="button" aria-haspopup="true" aria-label="User menu"></div>
+              <div id="productsUserAvatar" class="user-avatar" role="button" tabindex="0" aria-haspopup="true" aria-label="User menu"></div>
             </div>
           </div>
         </header>
         <main class="products-grid-container">
           <div id="productsPageGrid" class="products-page-grid">
-            <div id="productCardNew" class="product-card product-card-new" role="button" tabindex="0">
+            <div id="productCardNew" class="product-card product-card-new" role="button" tabindex="0" aria-label="Create a new product">
               <div class="new-icon-wrap">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
               </div>
@@ -478,6 +534,47 @@
       <div class="auth-actions">
         <button type="button" class="btn btn-primary" id="saveDiagramConfirmBtn">Save</button>
         <button type="button" class="btn" id="saveDiagramCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="auth-modal" id="accessibilitySettingsModal" role="dialog" aria-labelledby="accessibilitySettingsTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="accessibilitySettingsBackdrop"></div>
+    <div class="auth-modal-content accessibility-settings-modal">
+      <h2 id="accessibilitySettingsTitle" class="auth-modal-title">Accessibility settings</h2>
+      <p class="auth-modal-desc">Customize motion, contrast, and control sizes. Preferences are saved on this device.</p>
+      <div class="accessibility-settings-field">
+        <label for="accessibilityMotionPreference">Motion preference</label>
+        <select id="accessibilityMotionPreference" aria-label="Motion preference">
+          <option value="system">Use system setting</option>
+          <option value="reduce">Reduce motion</option>
+          <option value="full">Full motion</option>
+        </select>
+      </div>
+      <label class="accessibility-settings-toggle" for="accessibilityLargeControls">
+        <input type="checkbox" id="accessibilityLargeControls" />
+        <span>Larger controls</span>
+      </label>
+      <label class="accessibility-settings-toggle" for="accessibilityHighContrast">
+        <input type="checkbox" id="accessibilityHighContrast" />
+        <span>High-contrast mode</span>
+      </label>
+      <p class="accessibility-settings-help">Tip: iPhone users can also enable VoiceOver, Voice Control, and larger text in iOS Settings.</p>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="accessibilitySettingsDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accessible alert/confirm dialog for in-app blocking prompts -->
+  <div class="auth-modal app-alert-modal" id="appAlertDialogModal" role="alertdialog" aria-labelledby="appAlertDialogTitle" aria-describedby="appAlertDialogMessage" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="appAlertDialogBackdrop"></div>
+    <div class="auth-modal-content">
+      <h2 id="appAlertDialogTitle" class="auth-modal-title">Confirm action</h2>
+      <p id="appAlertDialogMessage" class="auth-modal-desc"></p>
+      <div class="auth-actions">
+        <button type="button" class="btn" id="appAlertDialogCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="appAlertDialogConfirmBtn">OK</button>
       </div>
     </div>
   </div>
