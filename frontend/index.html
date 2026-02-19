@@ -30,6 +30,7 @@
             <input type="text" class="breadcrumb-project-input" id="toolbarProjectNameInput" value="" placeholder="Untitled" maxlength="255" aria-label="Project name" />
             <button type="button" class="breadcrumb-go-back" id="breadcrumbGoBackBtn" title="Go back to previous state" aria-label="Go back to previous state" hidden>← Previous</button>
           </nav>
+          <div class="project-history-dropdown-backdrop" id="projectHistoryDropdownBackdrop" hidden></div>
           <div class="project-history-dropdown diagrams-dropdown" id="projectHistoryDropdown" role="menu" aria-label="Project history" hidden>
             <div class="diagrams-dropdown-header">Saved diagrams</div>
             <div class="diagrams-dropdown-list" id="projectHistoryDropdownList"></div>
@@ -115,14 +116,11 @@
 
     <main class="workspace" id="workspaceMain" role="main" aria-label="Blueprint workspace">
       <div class="blueprint-wrap" id="blueprintWrap" title="Drop a photo or drag products onto the whiteboard">
+        <input type="file" id="fileInput" accept="image/*,application/pdf" hidden />
         <div class="diagram-floating-toolbar" id="diagramFloatingToolbar" role="toolbar" aria-label="Diagram tools">
           <button type="button" class="diagram-toolbar-drag-handle" id="diagramToolbarDragHandle" aria-label="Drag to hide toolbar" title="Drag up to hide toolbar">
             <span aria-hidden="true"></span>
           </button>
-          <label class="toolbar-pill-btn upload-zone" id="uploadZone" for="fileInput" title="Upload property photo or PDF (JPEG, PNG, GIF, WebP, HEIC, or PDF; max 20 MB)">
-            <input type="file" id="fileInput" accept="image/*,application/pdf" hidden />
-            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          </label>
           <label class="toolbar-pill-btn toggle-label toggle-label-compact" title="Technical drawing (blueprint view)">
             <input type="checkbox" id="technicalDrawingToggle" checked />
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

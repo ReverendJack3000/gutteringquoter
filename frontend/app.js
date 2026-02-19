@@ -8257,13 +8257,23 @@ function initDiagrams() {
     if (diagramsDropdown) diagramsDropdown.hidden = true;
     if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'false');
   }
+  const projectHistoryDropdownBackdrop = document.getElementById('projectHistoryDropdownBackdrop');
+  
   function closeProjectHistoryDropdown() {
     if (projectHistoryDropdown) projectHistoryDropdown.hidden = true;
+    if (projectHistoryDropdownBackdrop) projectHistoryDropdownBackdrop.hidden = true;
   }
   function openProjectHistoryDropdown() {
     closeDropdown();
-    if (projectHistoryDropdown) projectHistoryDropdown.hidden = false;
     refreshDiagramsList();
+    if (projectHistoryDropdown) projectHistoryDropdown.hidden = false;
+    if (projectHistoryDropdownBackdrop) projectHistoryDropdownBackdrop.hidden = false;
+  }
+  
+  if (projectHistoryDropdownBackdrop) {
+    projectHistoryDropdownBackdrop.addEventListener('click', () => {
+      closeProjectHistoryDropdown();
+    });
   }
 
   saveDiagramBtn.addEventListener('click', () => {
@@ -8335,7 +8345,7 @@ function initDiagrams() {
 
   document.addEventListener('click', (e) => {
     if (diagramsDropdown && !diagramsDropdown.hidden && !diagramsDropdown.contains(e.target) && !diagramsDropdownBtn.contains(e.target)) closeDropdown();
-    if (projectHistoryDropdown && !projectHistoryDropdown.hidden && !projectHistoryDropdown.contains(e.target) && !breadcrumbsNav?.contains(e.target)) closeProjectHistoryDropdown();
+    if (projectHistoryDropdown && !projectHistoryDropdown.hidden && !projectHistoryDropdown.contains(e.target) && !breadcrumbsNav?.contains(e.target) && !projectHistoryDropdownBackdrop?.contains(e.target)) closeProjectHistoryDropdown();
   });
 
   // Breadcrumb click opens project history dropdown (46.3–46.4)
