@@ -56,6 +56,7 @@ class SaveDiagramRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     data: dict[str, Any] = Field(..., description="Canvas state: elements, blueprintTransform, groups")
     blueprintImageBase64: Optional[str] = Field(None, description="PNG image as base64 data URL or raw base64")
+    blueprintImageUrl: Optional[str] = Field(None, description="When base64 not sent (e.g. tainted canvas), copy from this storage URL to persist blueprint")
     thumbnailBase64: Optional[str] = Field(None, description="Thumbnail PNG as base64")
     servicem8JobId: Optional[str] = Field(None, max_length=32, description="ServiceM8 job number to stamp on the saved project")
 
@@ -64,6 +65,7 @@ class UpdateDiagramRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     data: Optional[dict[str, Any]] = Field(None)
     blueprintImageBase64: Optional[str] = None
+    blueprintImageUrl: Optional[str] = Field(None, description="Copy from this storage URL when base64 not sent")
     thumbnailBase64: Optional[str] = None
     servicem8JobId: Optional[str] = Field(None, max_length=32)
 
@@ -353,6 +355,7 @@ def api_create_diagram(body: SaveDiagramRequest, user_id: Any = Depends(get_curr
             body.name,
             body.data,
             blueprint_bytes=blueprint_bytes,
+            blueprint_image_source_url=body.blueprintImageUrl,
             thumbnail_bytes=thumbnail_bytes,
             servicem8_job_id=body.servicem8JobId,
         )
@@ -396,6 +399,7 @@ def api_update_diagram(
         name=body.name,
         data=body.data,
         blueprint_bytes=blueprint_bytes,
+        blueprint_image_source_url=body.blueprintImageUrl,
         thumbnail_bytes=thumbnail_bytes,
         servicem8_job_id=body.servicem8JobId,
     )

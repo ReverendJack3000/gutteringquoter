@@ -8,6 +8,7 @@ const state = {
   blueprintImage: null,
   originalFile: null,
   blueprintTransform: null, // { x, y, w, h, rotation } when blueprint present; same coord system as elements
+  blueprintImageSourceUrl: null, // when blueprint was loaded from API (saved project), so we can re-persist it if canvas export fails (CORS)
   selectedBlueprint: false,
   scale: 1,
   offsetX: 0,
@@ -3915,9 +3916,11 @@ async function restoreStateFromSnapshot(snapshot) {
   if (!snapshot.hasBlueprint) {
     state.blueprintImage = null;
     state.blueprintTransform = null;
+    state.blueprintImageSourceUrl = null;
   } else {
     if (snapshot.blueprintImageRef) state.blueprintImage = snapshot.blueprintImageRef;
     if (snapshot.blueprintTransform) state.blueprintTransform = { ...snapshot.blueprintTransform };
+    state.blueprintImageSourceUrl = null; // local snapshot has no URL
   }
   state.groups = (snapshot.groups || []).map((g) => ({ id: g.id, elementIds: g.elementIds.slice() }));
   setSelection([]);
@@ -5856,6 +5859,7 @@ async function processFileAsBlueprint(file) {
     const img = new Image();
     img.onload = () => {
       state.blueprintImage = img;
+      state.blueprintImageSourceUrl = null; // new upload, not from saved project
       state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
       state.viewZoom = 1;
       state.viewPanX = 0;
@@ -6016,6 +6020,7 @@ function initUpload() {
       const img = new Image();
       img.onload = () => {
         state.blueprintImage = img;
+        state.blueprintImageSourceUrl = null; // updated from server, not from saved project URL
         state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
         state.viewZoom = 1;
         state.viewPanX = 0;
@@ -6250,9 +6255,14 @@ function getDiagramDataForSave() {
     c.height = Math.max(1, Math.round(bt.h));
     const ctx = c.getContext('2d');
     if (ctx) {
-      ctx.globalAlpha = bt.opacity ?? 1;
-      ctx.drawImage(state.blueprintImage, 0, 0, c.width, c.height);
-      blueprintImageBase64 = c.toDataURL('image/png');
+      try {
+        ctx.globalAlpha = bt.opacity ?? 1;
+        ctx.drawImage(state.blueprintImage, 0, 0, c.width, c.height);
+        blueprintImageBase64 = c.toDataURL('image/png');
+      } catch (e) {
+        // Tainted canvas (e.g. cross-origin blueprint from Storage without CORS) — leave base64 null; caller may send blueprintImageSourceUrl
+        if (typeof console !== 'undefined' && console.warn) console.warn('Blueprint canvas export skipped (tainted or error):', e);
+      }
     }
   }
   const hasContent = state.blueprintImage || state.elements.length > 0;
@@ -6267,41 +6277,45 @@ function getDiagramDataForSave() {
     tc.height = th;
     const tx = tc.getContext('2d');
     if (tx) {
-      tx.fillStyle = '#f5f5f5';
-      tx.fillRect(0, 0, tw, th);
-      tx.scale(scale, scale);
-      const { blueprintImage, elements } = state;
-      const layers = [];
-      if (blueprintImage && state.blueprintTransform) {
-        const bt = state.blueprintTransform;
-        layers.push({ zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX, type: 'blueprint', bt, img: blueprintImage });
-      }
-      elements.forEach((el) => layers.push({ zIndex: el.zIndex != null ? el.zIndex : 0, type: 'element', element: el }));
-      layers.sort((a, b) => a.zIndex - b.zIndex);
-      layers.forEach((layer) => {
-        if (layer.type === 'blueprint') {
-          const { bt, img } = layer;
-          tx.save();
-          tx.globalAlpha = bt.opacity ?? 1;
-          tx.translate(bt.x + bt.w / 2, bt.y + bt.h / 2);
-          tx.rotate(((bt.rotation || 0) * Math.PI) / 180);
-          tx.translate(-bt.w / 2, -bt.h / 2);
-          tx.drawImage(img, 0, 0, bt.w, bt.h);
-          tx.restore();
-        } else if (layer.type === 'element') {
-          const el = layer.element;
-          const renderImage = getElementRenderImage(el);
-          if (renderImage) {
-            tx.save();
-            tx.translate(el.x + el.width / 2, el.y + el.height / 2);
-            tx.rotate((el.rotation * Math.PI) / 180);
-            tx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
-            tx.drawImage(renderImage, -el.width / 2, -el.height / 2, el.width, el.height);
-            tx.restore();
-          }
+      try {
+        tx.fillStyle = '#f5f5f5';
+        tx.fillRect(0, 0, tw, th);
+        tx.scale(scale, scale);
+        const { blueprintImage, elements } = state;
+        const layers = [];
+        if (blueprintImage && state.blueprintTransform) {
+          const bt = state.blueprintTransform;
+          layers.push({ zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX, type: 'blueprint', bt, img: blueprintImage });
         }
-      });
-      thumbnailBase64 = tc.toDataURL('image/png');
+        elements.forEach((el) => layers.push({ zIndex: el.zIndex != null ? el.zIndex : 0, type: 'element', element: el }));
+        layers.sort((a, b) => a.zIndex - b.zIndex);
+        layers.forEach((layer) => {
+          if (layer.type === 'blueprint') {
+            const { bt, img } = layer;
+            tx.save();
+            tx.globalAlpha = bt.opacity ?? 1;
+            tx.translate(bt.x + bt.w / 2, bt.y + bt.h / 2);
+            tx.rotate(((bt.rotation || 0) * Math.PI) / 180);
+            tx.translate(-bt.w / 2, -bt.h / 2);
+            tx.drawImage(img, 0, 0, bt.w, bt.h);
+            tx.restore();
+          } else if (layer.type === 'element') {
+            const el = layer.element;
+            const renderImage = getElementRenderImage(el);
+            if (renderImage) {
+              tx.save();
+              tx.translate(el.x + el.width / 2, el.y + el.height / 2);
+              tx.rotate((el.rotation * Math.PI) / 180);
+              tx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+              tx.drawImage(renderImage, -el.width / 2, -el.height / 2, el.width, el.height);
+              tx.restore();
+            }
+          }
+        });
+        thumbnailBase64 = tc.toDataURL('image/png');
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) console.warn('Thumbnail export skipped (tainted or error):', e);
+      }
     }
   }
   return { data, blueprintImageBase64, thumbnailBase64 };
@@ -6321,6 +6335,7 @@ function autoSaveDiagramWithJobNumber(jobNumber) {
     name,
     data,
     blueprintImageBase64: blueprintImageBase64 || undefined,
+    blueprintImageUrl: (!blueprintImageBase64 && state.blueprintImageSourceUrl) ? state.blueprintImageSourceUrl : undefined,
     thumbnailBase64: thumbnailBase64 || undefined,
     servicem8JobId: String(jobNumber),
   };
@@ -6362,22 +6377,26 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
   if (!d.hasBlueprint) {
     state.blueprintImage = null;
     state.blueprintTransform = null;
+    state.blueprintImageSourceUrl = null;
   } else {
     state.blueprintTransform = d.blueprintTransform ? { ...d.blueprintTransform } : null;
     if (apiSnapshot.blueprintImageUrl) {
       try {
         const img = await loadImage(apiSnapshot.blueprintImageUrl);
         state.blueprintImage = img;
+        state.blueprintImageSourceUrl = apiSnapshot.blueprintImageUrl; // so we can re-persist if canvas export fails (CORS)
         if (!state.blueprintTransform && img) {
           state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
         }
       } catch (err) {
         console.warn('Failed to load blueprint image from URL', err);
         state.blueprintImage = null;
+        state.blueprintImageSourceUrl = null;
         showMessage('Blueprint image could not be loaded.', 'info');
       }
     } else {
       state.blueprintImage = null;
+      state.blueprintImageSourceUrl = null;
       if (d.hasBlueprint) showMessage('Blueprint image was not saved with this project.', 'info');
     }
   }
@@ -7335,7 +7354,13 @@ function initDiagrams() {
     if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
     try {
       const { data, blueprintImageBase64, thumbnailBase64 } = getDiagramDataForSave();
-      const body = { name, data, blueprintImageBase64: blueprintImageBase64 || undefined, thumbnailBase64: thumbnailBase64 || undefined };
+      const body = {
+        name,
+        data,
+        blueprintImageBase64: blueprintImageBase64 || undefined,
+        blueprintImageUrl: (!blueprintImageBase64 && state.blueprintImageSourceUrl) ? state.blueprintImageSourceUrl : undefined,
+        thumbnailBase64: thumbnailBase64 || undefined,
+      };
       const res = await fetch('/api/diagrams', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

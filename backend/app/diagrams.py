@@ -3,15 +3,42 @@ Saved diagrams (blueprints) per user. Persists canvas state to public.saved_diag
 and blueprint/thumbnail images to Supabase Storage bucket 'blueprints'.
 """
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+import httpx
 from app.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
 BUCKET = "blueprints"
+
+
+def _allowed_storage_base() -> str:
+    """Base URL prefix for our Supabase Storage public blueprints (SSRF guard)."""
+    url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+    return f"{url}/storage/v1/object/public/{BUCKET}/" if url else ""
+
+
+def _fetch_blueprint_from_storage_url(url: str) -> Optional[bytes]:
+    """Fetch image bytes from URL only if it is our Supabase Storage public blueprints path. Returns None if invalid or fetch fails."""
+    base = _allowed_storage_base()
+    if not base or not url or not url.startswith(base):
+        return None
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            ct = (r.headers.get("content-type") or "").lower()
+            if "image/" not in ct and "octet-stream" not in ct:
+                logger.warning("Blueprint source URL did not return an image: %s", ct)
+                return None
+            return r.content
+    except Exception as e:
+        logger.warning("Fetch blueprint from storage URL failed: %s", e)
+        return None
 
 
 def _storage_path(user_id: UUID, diagram_id: UUID, filename: str) -> str:
@@ -76,10 +103,13 @@ def create_diagram(
     data: dict,
     *,
     blueprint_bytes: Optional[bytes] = None,
+    blueprint_image_source_url: Optional[str] = None,
     thumbnail_bytes: Optional[bytes] = None,
     servicem8_job_id: Optional[str] = None,
 ) -> dict:
     """Insert row and optionally upload blueprint/thumbnail to Storage. Returns created diagram meta."""
+    if not blueprint_bytes and blueprint_image_source_url:
+        blueprint_bytes = _fetch_blueprint_from_storage_url(blueprint_image_source_url)
     supabase = get_supabase()
     insert = {
         "user_id": str(user_id),
@@ -139,10 +169,13 @@ def update_diagram(
     name: Optional[str] = None,
     data: Optional[dict] = None,
     blueprint_bytes: Optional[bytes] = None,
+    blueprint_image_source_url: Optional[str] = None,
     thumbnail_bytes: Optional[bytes] = None,
     servicem8_job_id: Optional[str] = None,
 ) -> Optional[dict]:
     """Update diagram; optionally replace image/thumbnail. Returns updated row or None if not found."""
+    if not blueprint_bytes and blueprint_image_source_url:
+        blueprint_bytes = _fetch_blueprint_from_storage_url(blueprint_image_source_url)
     existing = get_diagram(user_id, diagram_id)
     if not existing:
         return None

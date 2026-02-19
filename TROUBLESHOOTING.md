@@ -258,6 +258,16 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Blueprint images do not persist from past projects / when re-saving (Add to Job) – 2026-02
+
+- **Symptom:** Saved projects show no blueprint in the dropdown preview or on load; or after loading a project and doing "Add to Job" / "Create New Job", the new saved project has no blueprint image.
+- **Cause:** (1) Diagrams saved before the blueprint upload feature have `blueprint_image_url` NULL. (2) When the current blueprint was loaded from a URL (Supabase Storage), drawing it to canvas and calling `toDataURL()` can throw (tainted canvas) if Storage doesn’t send CORS headers for the app origin, so no base64 is sent and the new diagram is saved without a blueprint.
+- **Fix:** 
+  1. **Frontend:** Track `state.blueprintImageSourceUrl` when loading from API (`restoreStateFromApiSnapshot`). Clear it when setting blueprint from a new upload. Wrap canvas export in `getDiagramDataForSave()` in try/catch so tainted canvas doesn’t break save. When sending save/auto-save request, if `blueprintImageBase64` is missing but `state.blueprintImageSourceUrl` is set, send `blueprintImageUrl: state.blueprintImageSourceUrl`.
+  2. **Backend:** Accept optional `blueprintImageUrl` in SaveDiagramRequest and UpdateDiagramRequest. When no `blueprintImageBase64` but `blueprintImageUrl` is provided, validate the URL is our Supabase Storage public blueprints path (SSRF guard), fetch the image with httpx, upload to the new diagram’s path, and set `blueprint_image_url` on the row. See `backend/app/diagrams.py` `_fetch_blueprint_from_storage_url` and create_diagram/update_diagram.
+
+---
+
 <!-- Example entry format:
 
 ## Short title (optional: date)
