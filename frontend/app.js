@@ -8811,8 +8811,41 @@ function getPanelProducts() {
   return list;
 }
 
+/** Blob URLs created for panel thumbnails (filled SVG); revoked when panel re-renders. */
+let panelThumbBlobUrls = new Set();
+
+/**
+ * Fetch an SVG and return a blob URL of the same SVG with injected fill so line-art reads as solid in the panel.
+ * Used only for mobile product thumbnails when the source is SVG. Revoke the returned URL when no longer needed (e.g. on next render).
+ * @param {string} url - Same-origin or CORS-allowed SVG URL
+ * @returns {Promise<string|null>} Blob URL or null on failure
+ */
+async function createFilledSvgThumbUrl(url) {
+  if (typeof url !== 'string' || !/\.svg($|\?)/i.test(url)) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const text = await res.text();
+    const fillStyle = '<style>path, ellipse, circle, rect, polygon, polyline { fill: #5a5a5a !important; stroke: #333 !important; }</style>';
+    const insertAt = text.indexOf('<svg');
+    if (insertAt === -1) return null;
+    const afterSvgTag = text.indexOf('>', insertAt) + 1;
+    const injected = text.slice(0, afterSvgTag) + fillStyle + text.slice(afterSvgTag);
+    const blob = new Blob([injected], { type: 'image/svg+xml' });
+    const blobUrl = URL.createObjectURL(blob);
+    panelThumbBlobUrls.add(blobUrl);
+    return blobUrl;
+  } catch {
+    return null;
+  }
+}
+
 function renderProducts(products) {
   const grid = document.getElementById('productGrid');
+  for (const u of panelThumbBlobUrls) {
+    try { URL.revokeObjectURL(u); } catch (_) {}
+  }
+  panelThumbBlobUrls.clear();
   grid.innerHTML = '';
   // Display name overrides for manual-length products (remove meter from gutters, use MM for downpipes)
   const displayNameOverrides = {
@@ -8834,10 +8867,16 @@ function renderProducts(products) {
     const thumbImgSrc = rawThumbUrl && (rawThumbUrl.startsWith('http') || rawThumbUrl.startsWith('/')) ? rawThumbUrl : `/assets/marley/${p.id}.svg`;
     thumb.dataset.diagramUrl = diagramUrl;
     const img = document.createElement('img');
-    img.src = thumbImgSrc;
     img.alt = displayName;
+    img.src = thumbImgSrc;
     thumb.appendChild(img);
     thumb.appendChild(document.createElement('span')).textContent = displayName;
+    // Mobile-only: Improve panel thumbnail appearance - when source is SVG (diagram used as thumb), show a filled version so line-art reads as solid
+    if (layoutState.viewportMode === 'mobile' && /\.svg($|\?)/i.test(thumbImgSrc)) {
+      createFilledSvgThumbUrl(thumbImgSrc).then((blobUrl) => {
+        if (blobUrl && img.parentNode) img.src = blobUrl;
+      });
+    }
     
     // Canvas Porter: Center-Drop - click (not drag) to add at viewport center
     let wasDragged = false;

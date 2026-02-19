@@ -12,6 +12,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Product thumbnails in Marley panel show as unfilled outlines (mobile) – 2026-02
+
+- **Symptom:** On mobile, in the Marley products bottom sheet panel, product thumbnails appear as line-art or wireframe outlines instead of solid/filled icons.
+- **Cause:** When a product has no dedicated `thumbnail_url` in the database, the app uses the diagram asset (SVG) as the thumbnail. Diagram SVGs are technical line drawings (`fill="none"`, stroke only), so they look unfilled in the panel, especially on small mobile screens.
+- **Fix (code, mobile-only):** On mobile viewports, the app (1) fetches SVG thumbnail sources when possible, injects a default fill so shapes render solid in the panel, and uses that for the thumb image (same-origin and CORS-allowed URLs only; otherwise the original image is shown). (2) Mobile panel thumb cards use a slightly darker background (`#f0f0f0`) and thumb images have a minimum height (`48px`) so line art is easier to see. Desktop thumbnails remain unchanged (line-art style). If mobile thumbnails still look like outlines for remote SVGs, ensure the Storage bucket allows CORS for GET, or set a dedicated `thumbnail_url` per product (e.g. a PNG or photo) in the Product Library so the panel uses that instead of the diagram.
+
+---
+
 ## ServiceM8 attachment upload returns 200 but PNG not visible on job – 2026-02
 
 - **Symptom:** `POST /api/servicem8/upload-job-attachment` returns 200 OK and logs show success, but the PNG does not appear in the ServiceM8 job (Job Diary or Attachments).

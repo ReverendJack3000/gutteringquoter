@@ -1772,6 +1772,11 @@ body[data-viewport-mode="mobile"] .panel-close {
 }
 body[data-viewport-mode="mobile"] .product-thumb {
   min-height: 44px;
+  background: #f0f0f0;
+}
+
+body[data-viewport-mode="mobile"] .product-thumb img {
+  min-height: 48px;
 }
 /* panel-collapsed on mobile is full-width bottom bar (54.5); min touch target satisfied by 56px height */
 
