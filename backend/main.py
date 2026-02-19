@@ -360,6 +360,9 @@ def api_create_diagram(body: SaveDiagramRequest, user_id: Any = Depends(get_curr
             servicem8_job_id=body.servicem8JobId,
         )
         return created
+    except RuntimeError as e:
+        logger.exception("Create diagram failed: %s", e)
+        raise HTTPException(500, str(e))
     except Exception as e:
         logger.exception("Create diagram failed: %s", e)
         raise HTTPException(500, "Failed to save diagram")
@@ -393,16 +396,20 @@ def api_update_diagram(
         raise HTTPException(404, "Diagram not found")
     blueprint_bytes = _decode_base64_image(body.blueprintImageBase64) if body.blueprintImageBase64 else None
     thumbnail_bytes = _decode_base64_image(body.thumbnailBase64) if body.thumbnailBase64 else None
-    updated = update_diagram(
-        user_id,
-        did,
-        name=body.name,
-        data=body.data,
-        blueprint_bytes=blueprint_bytes,
-        blueprint_image_source_url=body.blueprintImageUrl,
-        thumbnail_bytes=thumbnail_bytes,
-        servicem8_job_id=body.servicem8JobId,
-    )
+    try:
+        updated = update_diagram(
+            user_id,
+            did,
+            name=body.name,
+            data=body.data,
+            blueprint_bytes=blueprint_bytes,
+            blueprint_image_source_url=body.blueprintImageUrl,
+            thumbnail_bytes=thumbnail_bytes,
+            servicem8_job_id=body.servicem8JobId,
+        )
+    except RuntimeError as e:
+        logger.exception("Update diagram failed: %s", e)
+        raise HTTPException(500, str(e))
     if not updated:
         raise HTTPException(404, "Diagram not found")
     return updated

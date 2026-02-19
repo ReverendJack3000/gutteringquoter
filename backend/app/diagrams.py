@@ -127,21 +127,19 @@ def create_diagram(
     blueprint_url = None
     thumbnail_url = None
 
-    if blueprint_bytes:
-        path = _storage_path(user_id, diagram_id, "blueprint.png")
-        try:
+    try:
+        if blueprint_bytes:
+            path = _storage_path(user_id, diagram_id, "blueprint.png")
             supabase.storage.from_(BUCKET).upload(path, blueprint_bytes, {"content-type": "image/png"})
-            pub = supabase.storage.from_(BUCKET).get_public_url(path)
-            blueprint_url = pub
-        except Exception as e:
-            logger.warning("Upload blueprint image failed: %s", e)
-    if thumbnail_bytes:
-        path = _storage_path(user_id, diagram_id, "thumb.png")
-        try:
+            blueprint_url = supabase.storage.from_(BUCKET).get_public_url(path)
+        if thumbnail_bytes:
+            path = _storage_path(user_id, diagram_id, "thumb.png")
             supabase.storage.from_(BUCKET).upload(path, thumbnail_bytes, {"content-type": "image/png"})
             thumbnail_url = supabase.storage.from_(BUCKET).get_public_url(path)
-        except Exception as e:
-            logger.warning("Upload thumbnail failed: %s", e)
+    except Exception as e:
+        logger.warning("Upload blueprint/thumbnail failed, rolling back diagram %s: %s", diagram_id, e)
+        supabase.table("saved_diagrams").delete().eq("id", str(diagram_id)).eq("user_id", str(user_id)).execute()
+        raise RuntimeError("Failed to store blueprint image. Please try again.") from e
 
     if blueprint_url or thumbnail_url:
         payload = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -188,20 +186,18 @@ def update_diagram(
     if servicem8_job_id is not None:
         updates["servicem8_job_id"] = servicem8_job_id[:32] if servicem8_job_id else None
 
-    if blueprint_bytes:
-        path = _storage_path(user_id, diagram_id, "blueprint.png")
-        try:
+    try:
+        if blueprint_bytes:
+            path = _storage_path(user_id, diagram_id, "blueprint.png")
             supabase.storage.from_(BUCKET).upload(path, blueprint_bytes, {"content-type": "image/png", "upsert": "true"})
             updates["blueprint_image_url"] = supabase.storage.from_(BUCKET).get_public_url(path)
-        except Exception as e:
-            logger.warning("Upload blueprint image failed: %s", e)
-    if thumbnail_bytes:
-        path = _storage_path(user_id, diagram_id, "thumb.png")
-        try:
+        if thumbnail_bytes:
+            path = _storage_path(user_id, diagram_id, "thumb.png")
             supabase.storage.from_(BUCKET).upload(path, thumbnail_bytes, {"content-type": "image/png", "upsert": "true"})
             updates["thumbnail_url"] = supabase.storage.from_(BUCKET).get_public_url(path)
-        except Exception as e:
-            logger.warning("Upload thumbnail failed: %s", e)
+    except Exception as e:
+        logger.warning("Upload blueprint/thumbnail failed on update: %s", e)
+        raise RuntimeError("Failed to store blueprint image. Please try again.") from e
 
     supabase.table("saved_diagrams").update(updates).eq("id", str(diagram_id)).eq("user_id", str(user_id)).execute()
     return get_diagram(user_id, diagram_id)

@@ -268,6 +268,15 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Diagram saved but blueprint missing on re-open (e.g. "Backend save 1") – 2026-02
+
+- **Symptom:** A project saves successfully (201) but when re-opened it has no blueprint image; `saved_diagrams.blueprint_image_url` is NULL while `data.hasBlueprint` is true.
+- **Root cause:** **Insert-then-upload + silent failure.** The backend inserts the row first, then uploads blueprint/thumbnail to Storage. If the upload fails (Storage policy, network, size, etc.), the code only logged and continued, so the row was left with `blueprint_image_url` and `thumbnail_url` NULL. The API still returned 201, so the frontend showed "saved" but the diagram was half-broken.
+- **Solution A (implemented): Rollback on upload failure.** In `create_diagram`, wrap blueprint/thumbnail upload in try/except. On any upload exception: delete the newly inserted row (rollback) and raise `RuntimeError("Failed to store blueprint image. Please try again.")`. The API then returns 500 with that message; the user sees save failed and can retry. No diagram is left with `hasBlueprint` but no image. Same for `update_diagram`: raise instead of silently skipping so the client can retry.
+- **Solution B (alternative): Upload-first, then insert.** Generate `diagram_id` (UUID) in the backend before inserting. Upload blueprint and thumbnail to Storage using that id in the path. Only if both uploads succeed, insert the row with that id and the URLs. If upload fails, never insert, so no half-saved diagram. Requires inserting with an explicit id (e.g. `uuid.uuid4()`) instead of relying on `gen_random_uuid()` default.
+
+---
+
 <!-- Example entry format:
 
 ## Short title (optional: date)
