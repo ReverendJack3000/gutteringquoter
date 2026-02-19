@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quote App – Repair Blueprint</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="stylesheet" href="/styles.css?v=40" />
 </head>
 <body>
@@ -28,8 +30,12 @@
       <div class="toolbar-center"></div>
 
       <div class="toolbar-right">
-        <div class="toolbar-actions-secondary">
-          <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="Not connected to ServiceM8. Connect via profile menu (top right) to sync quotes and add to jobs." aria-label="ServiceM8 not connected. Connect via profile menu to sync quotes and add to jobs." hidden aria-hidden="true">⚠</span>
+        <div class="toolbar-actions-secondary toolbar-servicem8-warning-wrap">
+          <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="" aria-label="ServiceM8 not connected" hidden aria-hidden="true">⚠</span>
+          <div id="servicem8WarningPopover" class="servicem8-warning-popover" role="tooltip" aria-live="polite" hidden>
+            <p class="servicem8-warning-popover-text">You're not signed in to ServiceM8.</p>
+            <a href="#" id="servicem8WarningPopoverLink" class="servicem8-warning-popover-link">Connect ServiceM8</a>
+          </div>
           <button type="button" class="toolbar-icon-btn btn-icon" id="exportBtn" title="Download blueprint with all products as PNG" aria-label="Export PNG">
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>

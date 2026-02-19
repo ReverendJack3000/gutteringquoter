@@ -6583,10 +6583,78 @@ function initAuth() {
  */
 function updateServicem8ToolbarWarning() {
   const el = document.getElementById('servicem8ExportWarning');
+  const wrap = el?.closest('.toolbar-servicem8-warning-wrap');
   if (!el) return;
   const visible = window.servicem8Connected === false;
   el.hidden = !visible;
   el.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (wrap) wrap.classList.toggle('toolbar-servicem8-warning-wrap--active', visible);
+}
+
+/**
+ * Hover popover for ServiceM8 warning: red warning message + "Connect ServiceM8" link.
+ * Link opens profile and triggers Connect ServiceM8, or switches to login if not signed in.
+ * Uses the wrap as hover target so there is always a hit area when the warning is active.
+ */
+function initServicem8WarningPopover() {
+  const trigger = document.getElementById('servicem8ExportWarning');
+  const wrap = trigger?.closest('.toolbar-servicem8-warning-wrap');
+  const popover = document.getElementById('servicem8WarningPopover');
+  const link = document.getElementById('servicem8WarningPopoverLink');
+  if (!trigger || !wrap || !popover || !link) return;
+
+  let hideTimeout = null;
+
+  function positionAndShow() {
+    if (window.servicem8Connected !== false) return;
+    const rect = wrap.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+    if (popover.parentNode !== document.body) document.body.appendChild(popover);
+    popover.style.left = `${rect.left}px`;
+    popover.style.top = `${rect.bottom + 6}px`;
+    popover.hidden = false;
+    link.textContent = authState.token ? 'Connect ServiceM8' : 'Sign in';
+    if (hideTimeout) clearTimeout(hideTimeout);
+    hideTimeout = null;
+  }
+
+  function scheduleHide() {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(() => {
+      popover.hidden = true;
+      hideTimeout = null;
+    }, 200);
+  }
+
+  function cancelHide() {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    hideTimeout = null;
+  }
+
+  wrap.addEventListener('mouseenter', positionAndShow);
+  wrap.addEventListener('mouseleave', scheduleHide);
+  popover.addEventListener('mouseenter', cancelHide);
+  popover.addEventListener('mouseleave', () => {
+    popover.hidden = true;
+  });
+
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    popover.hidden = true;
+    if (authState.token) {
+      const profileDropdown = document.getElementById('profileDropdown');
+      const userAvatar = document.getElementById('userAvatar');
+      const menuItem = document.getElementById('menuItemServiceM8');
+      if (profileDropdown && userAvatar) {
+        profileDropdown.hidden = false;
+        userAvatar.setAttribute('aria-expanded', 'true');
+      }
+      if (menuItem) menuItem.click();
+    } else {
+      switchView('view-login');
+      showMessage('Sign in first to connect ServiceM8', 'error');
+    }
+  });
 }
 
 async function checkServiceM8Status() {
@@ -8025,6 +8093,11 @@ function init() {
     initServiceM8Menu();
   } catch (e) {
     console.warn('initServiceM8Menu failed', e);
+  }
+  try {
+    initServicem8WarningPopover();
+  } catch (e) {
+    console.warn('initServicem8WarningPopover failed', e);
   }
   try {
     initDiagrams();

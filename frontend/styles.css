@@ -238,7 +238,17 @@ body {
   gap: 4px;
 }
 
-/* Task 52.9: visible only when not connected; larger size; tooltip gives help */
+/* Task 52.9: visible only when not connected; larger size; hover shows red warning popover */
+.toolbar-servicem8-warning-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+/* When warning is visible, ensure wrap has a hover target even if layout is odd */
+.toolbar-servicem8-warning-wrap.toolbar-servicem8-warning-wrap--active {
+  min-width: 28px;
+  min-height: 28px;
+}
 .toolbar-servicem8-warning {
   display: inline-flex;
   align-items: center;
@@ -253,6 +263,39 @@ body {
 }
 .toolbar-servicem8-warning[hidden] {
   display: none;
+}
+
+/* Red warning popover on hover – matches UI (toolbar-message.error style) */
+.servicem8-warning-popover {
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 12px 14px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.servicem8-warning-popover[hidden] {
+  display: none !important;
+}
+.servicem8-warning-popover .servicem8-warning-popover-text {
+  margin: 0 0 10px;
+  font-weight: 500;
+}
+.servicem8-warning-popover .servicem8-warning-popover-link {
+  display: inline-block;
+  color: #b91c1c;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.servicem8-warning-popover .servicem8-warning-popover-link:hover {
+  color: #991b1b;
 }
 
 .toolbar-icon-btn {

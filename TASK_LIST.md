@@ -34,6 +34,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
+| 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 ---
 
@@ -1188,6 +1189,15 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **52.7** **Labour hours warning placement (52.1):** Display the no-labour warning **inside the quote modal** (e.g. in the Add to Job section or a dedicated message block in the modal), not on the canvas/toolbar. When the user clicks Add to Job (or opens the Add to Job flow) with no labour row or zero labour hours, show the warning in-context in the modal; remove or replace the current `showMessage()` so the warning does not appear in the toolbar.
 - [x] **52.8** **Confirm Job popup button UI (52.3, 52.4, 51.7):** (a) Centre-align the load wheel in both "Add to Job #…" and "Create New Job Instead" buttons (spinner in centre of button, replacing text until done). (b) Make button shape more rectangular: add min-height and sufficient top/bottom padding (match quote footer Add to Job button: e.g. min-height 40px, padding 10px 20px); avoid thin-pill appearance. (c) Add a blue border to "Create New Job Instead" matching the shape of the Add to Job # button (border-radius, border colour). (d) Use the same spinner pattern and spacing as the quote footer Add to Job button (`.quote-servicem8-btn`) for both overlay buttons.
 - [x] **52.9** **ServiceM8 disconnection warning (52.5, 52.6):** (a) Ensure the toolbar warning symbol is visible **only when the user is not signed into ServiceM8** (fix any logic or initial state that causes it to always display). (b) Increase the symbol size so it is clearly visible. (c) Provide clear information/help: e.g. improved tooltip or short explanatory text (e.g. "Not connected to ServiceM8 — connect via profile menu"), so the user knows what to do. (d) When the Add to Job section is greyed out, ensure the small red explanation text (52.6) is visible and helpful (e.g. "Not signed in to ServiceM8" / "Complete manual entries (Metres?) first" / "Missing materials" as appropriate).
+
+---
+
+## 53. Login screen branding and ServiceM8 at login
+
+*Context: Customise the login screen with a branded image (user will upload) and, if required, integrate ServiceM8 authentication with the login flow so users can connect or sign in with ServiceM8 where appropriate.*
+
+- [ ] **53.1** **Login screen custom image:** Set up the login screen (`#view-login`) to use a custom branding/background image. User will upload the image asset; implement the UI/CSS to display it (e.g. as background, hero image, or logo area). Ensure layout remains usable and accessible; document recommended dimensions/format for the uploaded image.
+- [ ] **53.2** **ServiceM8 and login (if needed):** If product or user research determines that ServiceM8 should be part of the login experience (e.g. “Connect ServiceM8” or sign-in-with-ServiceM8 on the login screen), implement the required flow. Otherwise document that ServiceM8 remains optional and is connected from the canvas profile menu after sign-in.
 
 ---
 
