@@ -1456,7 +1456,11 @@ function initQuoteModal() {
         labourHours += parseFloat(row.querySelector('.quote-labour-hours-input')?.value) || 0;
       });
       if (labourHours <= 0) {
-        showMessage('Add labour hours to the quote before adding to a job.', 'info');
+        const labourWarnEl = document.getElementById('quoteLabourWarning');
+        if (labourWarnEl) {
+          labourWarnEl.textContent = 'Add labour hours to the quote before adding to a job.';
+          labourWarnEl.hidden = false;
+        }
         return;
       }
       if (servicem8AddToJobBtn.classList.contains('quote-servicem8-btn--loading')) return;
@@ -1571,7 +1575,14 @@ function updateServiceM8SectionState(hasIncomplete) {
   const input = document.getElementById('servicem8JobIdInput');
   const btn = document.getElementById('servicem8AddToJobBtn');
   const reasonEl = document.getElementById('quoteServicem8DisabledReason');
+  const labourWarnEl = document.getElementById('quoteLabourWarning');
   if (!section || !input || !btn) return;
+  // Hide labour warning when user has labour hours (Task 52.7)
+  let labourHours = 0;
+  getLabourRowsOrdered().forEach((row) => {
+    labourHours += parseFloat(row.querySelector('.quote-labour-hours-input')?.value) || 0;
+  });
+  if (labourWarnEl) labourWarnEl.hidden = labourHours > 0;
   // Disable if manual entries incomplete OR ServiceM8 not connected
   const shouldDisable = hasIncomplete || !window.servicem8Connected;
   if (shouldDisable) {
@@ -6566,9 +6577,16 @@ function initAuth() {
  * Check if user has connected ServiceM8 account.
  * Updates UI to show "Connect" or "Disconnect" accordingly.
  */
+/**
+ * Show toolbar ServiceM8 warning only when explicitly not connected (Task 52.9).
+ * When status is unknown (undefined) or connected, keep the symbol hidden.
+ */
 function updateServicem8ToolbarWarning() {
   const el = document.getElementById('servicem8ExportWarning');
-  if (el) el.hidden = window.servicem8Connected === true;
+  if (!el) return;
+  const visible = window.servicem8Connected === false;
+  el.hidden = !visible;
+  el.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
 
 async function checkServiceM8Status() {

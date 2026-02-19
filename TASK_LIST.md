@@ -159,6 +159,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 - [x] **33.1** Ability to save diagrams/blueprints as project files (e.g. export to .json or save to backend; load from file or backend to restore blueprint + elements + view state).
 - [x] **33.2** When loading from a project (saved diagram), load the **blueprint image** as well; currently only elements are restored and the blueprint image is not. Enhance save/load so the blueprint image is persisted and restored.
+- [x] **33.3** Fix blueprint not persisting on save: rollback diagram row when Storage upload fails (no half-saved diagram); send blueprintImageUrl when canvas export fails (CORS/tainted); surface upload error in 500 response; ensure SUPABASE_SERVICE_ROLE_KEY is set on Railway for Storage uploads (see TROUBLESHOOTING).
 
 ---
 
@@ -1181,6 +1182,12 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [x] **52.5** When the user is **not signed into ServiceM8**, display a **warning symbol** to the left of the **download (Export)** icon in the canvas view toolbar (top left area). Visible only when ServiceM8 is not connected.
 - [x] **52.6** When the **Add to Job** section (Job # input and Add to Job button) is **greyed out**, display **small red text** explaining why: e.g. "Not signed in to ServiceM8" or "Complete manual entries (Metres?) first" / "Missing materials" as appropriate. Ensures users understand why the section is disabled.
+
+**Refinements (Feb 2026) – behaviour/placement/UX fixes**
+
+- [x] **52.7** **Labour hours warning placement (52.1):** Display the no-labour warning **inside the quote modal** (e.g. in the Add to Job section or a dedicated message block in the modal), not on the canvas/toolbar. When the user clicks Add to Job (or opens the Add to Job flow) with no labour row or zero labour hours, show the warning in-context in the modal; remove or replace the current `showMessage()` so the warning does not appear in the toolbar.
+- [x] **52.8** **Confirm Job popup button UI (52.3, 52.4, 51.7):** (a) Centre-align the load wheel in both "Add to Job #…" and "Create New Job Instead" buttons (spinner in centre of button, replacing text until done). (b) Make button shape more rectangular: add min-height and sufficient top/bottom padding (match quote footer Add to Job button: e.g. min-height 40px, padding 10px 20px); avoid thin-pill appearance. (c) Add a blue border to "Create New Job Instead" matching the shape of the Add to Job # button (border-radius, border colour). (d) Use the same spinner pattern and spacing as the quote footer Add to Job button (`.quote-servicem8-btn`) for both overlay buttons.
+- [x] **52.9** **ServiceM8 disconnection warning (52.5, 52.6):** (a) Ensure the toolbar warning symbol is visible **only when the user is not signed into ServiceM8** (fix any logic or initial state that causes it to always display). (b) Increase the symbol size so it is clearly visible. (c) Provide clear information/help: e.g. improved tooltip or short explanatory text (e.g. "Not connected to ServiceM8 — connect via profile menu"), so the user knows what to do. (d) When the Add to Job section is greyed out, ensure the small red explanation text (52.6) is visible and helpful (e.g. "Not signed in to ServiceM8" / "Complete manual entries (Metres?) first" / "Missing materials" as appropriate).
 
 ---
 

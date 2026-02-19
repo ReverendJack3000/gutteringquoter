@@ -238,16 +238,21 @@ body {
   gap: 4px;
 }
 
+/* Task 52.9: visible only when not connected; larger size; tooltip gives help */
 .toolbar-servicem8-warning {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
   line-height: 1;
   color: #c62828;
   flex-shrink: 0;
+  cursor: help;
+}
+.toolbar-servicem8-warning[hidden] {
+  display: none;
 }
 
 .toolbar-icon-btn {
@@ -2705,6 +2710,14 @@ body {
   pointer-events: none;
 }
 
+.quote-labour-warning {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  color: #c62828;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .quote-servicem8-disabled-reason {
   margin: 6px 0 0;
   font-size: 12px;
@@ -3167,19 +3180,26 @@ body {
   gap: 16px;
   flex-wrap: wrap;
 }
+/* Task 52.8: rectangular shape, padding, blue border on Create New; same pattern as quote-servicem8-btn */
 .job-confirm-create-new {
-  padding: 10px 0;
-  border: none;
-  background: none;
+  min-height: 40px;
+  padding: 10px 20px;
+  border: 2px solid #2563eb;
+  border-radius: 8px;
+  background: transparent;
   font-size: 14px;
+  font-weight: 600;
   color: #2563eb;
   cursor: pointer;
   text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 .job-confirm-create-new:hover {
-  text-decoration: underline;
+  background: rgba(37, 99, 235, 0.08);
+  text-decoration: none;
 }
 .job-confirm-add-btn {
+  min-height: 40px;
   padding: 10px 20px;
   border: none;
   border-radius: 8px;
@@ -3188,16 +3208,24 @@ body {
   color: #fff;
   background: #5cb85c;
   cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .job-confirm-add-btn:hover {
   background: #4cae4c;
 }
+.job-confirm-add-btn:active:not(:disabled),
+.job-confirm-create-new:active:not(:disabled) {
+  transform: scale(0.98);
+}
 
-/* Overlay button loaders and tick (52.3, 52.4): same pattern as quote-servicem8-btn */
+/* Overlay button loaders and tick (52.3, 52.4, 52.8): same pattern as quote-servicem8-btn – centred stack */
 .job-confirm-add-btn,
 .job-confirm-create-new {
   position: relative;
   min-width: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .job-confirm-add-btn .job-confirm-btn-text,
 .job-confirm-add-btn .job-confirm-spinner,
@@ -3214,12 +3242,23 @@ body {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .job-confirm-add-btn .job-confirm-spinner,
 .job-confirm-add-btn .job-confirm-done,
 .job-confirm-create-new .job-confirm-spinner,
 .job-confirm-create-new .job-confirm-done {
   opacity: 0;
+}
+/* Spinner centred in button (same as quote-servicem8-btn) */
+.job-confirm-add-btn .job-confirm-spinner,
+.job-confirm-create-new .job-confirm-spinner {
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  margin-left: -9px;
+  margin-top: -9px;
 }
 .job-confirm-add-btn.job-confirm-add-btn--loading .job-confirm-btn-text,
 .job-confirm-create-new.job-confirm-create-new--loading .job-confirm-btn-text {
@@ -3239,7 +3278,7 @@ body {
 .job-confirm-create-new.job-confirm-create-new--done .job-confirm-done {
   opacity: 1;
   transform: scale(1);
-  transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .job-confirm-add-btn .job-confirm-done,
 .job-confirm-create-new .job-confirm-done {

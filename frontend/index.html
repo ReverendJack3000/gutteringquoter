@@ -29,7 +29,7 @@
 
       <div class="toolbar-right">
         <div class="toolbar-actions-secondary">
-          <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="Not connected to ServiceM8" aria-label="ServiceM8 not connected" hidden>⚠</span>
+          <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="Not connected to ServiceM8. Connect via profile menu (top right) to sync quotes and add to jobs." aria-label="ServiceM8 not connected. Connect via profile menu to sync quotes and add to jobs." hidden aria-hidden="true">⚠</span>
           <button type="button" class="toolbar-icon-btn btn-icon" id="exportBtn" title="Download blueprint with all products as PNG" aria-label="Export PNG">
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -486,6 +486,7 @@
       </div>
       <div class="quote-servicem8-section quote-servicem8-section--disabled" id="quoteServicem8Section" aria-live="polite">
         <p class="quote-servicem8-title">Add to existing job (ServiceM8)</p>
+        <p id="quoteLabourWarning" class="quote-labour-warning" aria-live="polite" hidden>Add labour hours to the quote before adding to a job.</p>
         <div class="quote-servicem8-controls">
           <label for="servicem8JobIdInput" class="quote-servicem8-job-label">Job #</label>
           <input type="text" id="servicem8JobIdInput" inputmode="numeric" maxlength="5" placeholder="e.g. 4999" aria-label="ServiceM8 job number (1 to 5 digits)" class="quote-servicem8-job-input" disabled />
