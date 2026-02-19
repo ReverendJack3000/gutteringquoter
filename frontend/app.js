@@ -6548,19 +6548,93 @@ function initAuth() {
     loadPanelProducts();
   });
 
+  const authForgotPasswordBtn = document.getElementById('authForgotPasswordBtn');
+  const authSetPasswordForm = document.getElementById('authSetPasswordForm');
+  const authSetPasswordError = document.getElementById('authSetPasswordError');
+  const authNewPassword = document.getElementById('authNewPassword');
+  const authNewPasswordConfirm = document.getElementById('authNewPasswordConfirm');
+  const authSetPasswordCancelBtn = document.getElementById('authSetPasswordCancelBtn');
+
+  authForgotPasswordBtn?.addEventListener('click', async () => {
+    const email = authEmail?.value?.trim();
+    if (!email) {
+      if (authError) { authError.hidden = false; authError.textContent = 'Enter your email above, then click Forgot password.'; }
+      return;
+    }
+    if (!authState.supabase) return;
+    if (authError) { authError.hidden = true; authError.textContent = ''; }
+    authForgotPasswordBtn.disabled = true;
+    try {
+      const redirectTo = `${window.location.origin}/`;
+      const { error } = await authState.supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      if (authError) { authError.hidden = false; authError.textContent = ''; authError.style.color = ''; authError.textContent = 'Check your email for a link to set your password.'; authError.style.color = '#166534'; }
+    } catch (err) {
+      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Could not send reset email.'; }
+    }
+    authForgotPasswordBtn.disabled = false;
+  });
+
+  authSetPasswordForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPass = authNewPassword?.value ?? '';
+    const confirmPass = authNewPasswordConfirm?.value ?? '';
+    if (newPass.length < 6) {
+      if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = 'Password must be at least 6 characters.'; }
+      return;
+    }
+    if (newPass !== confirmPass) {
+      if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = 'Passwords do not match.'; }
+      return;
+    }
+    if (!authState.supabase) return;
+    if (authSetPasswordError) authSetPasswordError.hidden = true;
+    const btn = document.getElementById('authSetPasswordBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const { error } = await authState.supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      if (authForm) authForm.hidden = false;
+      authSetPasswordForm.hidden = true;
+      authNewPassword.value = '';
+      authNewPasswordConfirm.value = '';
+      setAuthUI();
+      switchView('view-canvas');
+    } catch (err) {
+      if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = err.message || 'Could not set password.'; }
+    }
+    if (btn) btn.disabled = false;
+  });
+
+  authSetPasswordCancelBtn?.addEventListener('click', () => {
+    authSetPasswordForm.hidden = true;
+    if (authForm) authForm.hidden = false;
+    if (authSetPasswordError) authSetPasswordError.hidden = true;
+    authNewPassword.value = '';
+    authNewPasswordConfirm.value = '';
+  });
+
   setAuthUI();
   return fetch('/api/config')
     .then((r) => r.json())
     .then((config) => {
       if (config.supabaseUrl && config.anonKey && typeof window.supabase !== 'undefined') {
         authState.supabase = window.supabase.createClient(config.supabaseUrl, config.anonKey);
-        authState.supabase.auth.onAuthStateChange((_event, session) => {
+        authState.supabase.auth.onAuthStateChange((event, session) => {
           authState.token = session?.access_token ?? null;
           authState.email = session?.user?.email ?? null;
           authState.user = session?.user ?? null;
           setAuthUI();
           loadPanelProducts();
           checkServiceM8Status();
+          if (event === 'PASSWORD_RECOVERY') {
+            const authFormEl = document.getElementById('authForm');
+            const setPasswordForm = document.getElementById('authSetPasswordForm');
+            const authUserSection = document.getElementById('authUserSection');
+            if (authFormEl) authFormEl.hidden = true;
+            if (authUserSection) authUserSection.hidden = true;
+            if (setPasswordForm) { setPasswordForm.hidden = false; document.getElementById('authNewPassword')?.focus(); }
+          }
         });
         return authState.supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {

@@ -258,6 +258,21 @@
             <button type="submit" class="btn btn-primary" id="authSubmitBtn">Sign in</button>
             <button type="button" class="btn" id="authSignUpBtn">Create account</button>
           </div>
+          <p class="auth-forgot-wrap">
+            <button type="button" class="auth-forgot-link" id="authForgotPasswordBtn">Forgot password?</button>
+          </p>
+        </form>
+        <form id="authSetPasswordForm" class="auth-form" hidden>
+          <p class="auth-modal-desc">Choose a new password for your account.</p>
+          <div id="authSetPasswordError" class="auth-error" role="alert" hidden></div>
+          <label for="authNewPassword">New password</label>
+          <input type="password" id="authNewPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+          <label for="authNewPasswordConfirm">Confirm password</label>
+          <input type="password" id="authNewPasswordConfirm" required minlength="6" placeholder="••••••••" autocomplete="new-password" />
+          <div class="auth-actions">
+            <button type="submit" class="btn btn-primary" id="authSetPasswordBtn">Set password</button>
+            <button type="button" class="btn" id="authSetPasswordCancelBtn">Cancel</button>
+          </div>
         </form>
         <div class="auth-user" id="authUserSection" hidden>
           <p>Signed in as <strong id="authUserEmail"></strong></p>

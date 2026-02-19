@@ -2015,6 +2015,22 @@ body {
 .auth-error[hidden] {
   display: none;
 }
+.auth-forgot-wrap {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.auth-forgot-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #007aff;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: inherit;
+}
+.auth-forgot-link:hover {
+  text-decoration: underline;
+}
 .auth-actions {
   display: flex;
   flex-wrap: wrap;

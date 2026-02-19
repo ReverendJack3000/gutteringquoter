@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Invite / auth emails send users to localhost:3000 – 2026-02
+
+- **Symptom:** When inviting other users (or using magic link / email confirmation), the link in the email sends them to `http://localhost:3000` instead of the production app.
+- **Cause:** Supabase Auth uses the **Site URL** from your project’s URL configuration for confirmation and invite links. If Site URL is set to `http://localhost:3000` (or another local URL), all those emails will point there. The Quote App does not set this in code; it is configured in the Supabase Dashboard.
+- **Fix:** In [Supabase Dashboard](https://supabase.com/dashboard/project/rlptjmkejfykisaefkeh/auth/url-configuration) go to **Authentication → URL Configuration**. Set **Site URL** to your production app URL (e.g. `https://quote-app-production-7897.up.railway.app` with no trailing slash). Under **Redirect URLs**, add the same URL, e.g. `https://quote-app-production-7897.up.railway.app/**`. Save. New invite/confirmation emails will then link to production. (Optional: add `http://localhost:8000/**` for local testing.)
+
+---
+
 ## ServiceM8 attachment upload returns 200 but PNG not visible on job – 2026-02
 
 - **Symptom:** `POST /api/servicem8/upload-job-attachment` returns 200 OK and logs show success, but the PNG does not appear in the ServiceM8 job (Job Diary or Attachments).
@@ -274,6 +282,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 - **Root cause:** **Insert-then-upload + silent failure.** The backend inserts the row first, then uploads blueprint/thumbnail to Storage. If the upload fails (Storage policy, network, size, etc.), the code only logged and continued, so the row was left with `blueprint_image_url` and `thumbnail_url` NULL. The API still returned 201, so the frontend showed "saved" but the diagram was half-broken.
 - **Solution A (implemented): Rollback on upload failure.** In `create_diagram`, wrap blueprint/thumbnail upload in try/except. On any upload exception: delete the newly inserted row (rollback) and raise `RuntimeError("Failed to store blueprint image. Please try again.")`. The API then returns 500 with that message; the user sees save failed and can retry. No diagram is left with `hasBlueprint` but no image. Same for `update_diagram`: raise instead of silently skipping so the client can retry.
 - **Solution B (alternative): Upload-first, then insert.** Generate `diagram_id` (UUID) in the backend before inserting. Upload blueprint and thumbnail to Storage using that id in the path. Only if both uploads succeed, insert the row with that id and the URLs. If upload fails, never insert, so no half-saved diagram. Requires inserting with an explicit id (e.g. `uuid.uuid4()`) instead of relying on `gen_random_uuid()` default.
+
+---
+
+## 500 when saving diagram: "Failed to store blueprint image" (Railway / Production) – 2026-02
+
+- **Symptom:** POST to `/api/diagrams` returns 500. Response body includes `"detail": "Failed to store blueprint image: <underlying error>"`. Diagram is not created (rollback).
+- **Cause:** Supabase Storage upload failed. Common cause: backend is using the **anon** key instead of the **service_role** key. Storage allows uploads when using the service role (it bypasses RLS); with anon key, RLS on `storage.objects` blocks INSERT unless you have a policy, so you get errors like "new row violates row-level security policy for table \"objects\"".
+- **Fix:** In Railway (or your host) set **`SUPABASE_SERVICE_ROLE_KEY`** (from Supabase → Settings → API → service_role). The backend prefers it over `SUPABASE_ANON_KEY`; without it, Storage uploads fail. See **docs/RAILWAY_DEPLOYMENT.md** (env vars table). After setting, redeploy. The 500 response body now includes the underlying exception message so you can confirm (e.g. RLS vs network error).
 
 ---
 
