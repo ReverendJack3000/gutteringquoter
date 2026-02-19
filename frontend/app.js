@@ -9084,6 +9084,22 @@ function renderProducts(products) {
 
     grid.appendChild(thumb);
   });
+
+  // Mobile: update collapsed Products pill facepile (first 3 product thumbnails)
+  const facepile = document.getElementById('panelCollapsedFacepile');
+  if (facepile) {
+    facepile.innerHTML = '';
+    const first3 = products.slice(0, 3);
+    first3.forEach((p) => {
+      const rawThumbUrl = p.thumbnailUrl || p.thumbnail_url || p.diagramUrl || p.diagram_url || '';
+      const thumbImgSrc = rawThumbUrl && (rawThumbUrl.startsWith('http') || rawThumbUrl.startsWith('/')) ? rawThumbUrl : `/assets/marley/${p.id}.svg`;
+      const img = document.createElement('img');
+      img.className = 'facepile-thumb';
+      img.alt = '';
+      img.src = thumbImgSrc;
+      facepile.appendChild(img);
+    });
+  }
 }
 
 /**

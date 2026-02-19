@@ -1614,6 +1614,11 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   background: #eee;
 }
 
+.panel-collapsed-label,
+.panel-collapsed-facepile {
+  display: none;
+}
+
 .panel.expanded .panel-collapsed {
   display: none;
 }
@@ -1739,33 +1744,81 @@ body[data-viewport-mode="mobile"] .panel.collapsed .panel-content {
   overflow: hidden;
 }
 
-/* Bottom bar (open trigger): full-width, 56px, chevron up + label */
+/* Floating pill (open trigger): centered at bottom, frosted glass, facepile */
+body[data-viewport-mode="mobile"] .panel.collapsed {
+  height: auto;
+  min-height: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+body[data-viewport-mode="mobile"] .panel.collapsed #panelCollapsed {
+  pointer-events: auto;
+}
+
 body[data-viewport-mode="mobile"] .panel-collapsed {
   position: static;
   left: auto;
   top: auto;
-  width: 100%;
-  height: 3.5rem;
-  min-height: 3.5rem;
+  width: auto;
+  max-width: calc(100% - 32px);
+  height: auto;
+  min-height: 44px;
+  padding: 12px 24px;
+  margin: 16px auto 0;
   transform: none;
   border: none;
-  border-radius: 12px 12px 0 0;
-  background: #ffffff;
-  box-shadow: none;
-  display: flex;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: clamp(0.875rem, 0.2vw + 0.82rem, 1rem);
   font-weight: 600;
   color: #1a1a1a;
 }
+
 body[data-viewport-mode="mobile"] .panel-collapsed .chevron-icon {
   transform: rotate(-90deg); /* point up when closed (expand upward) */
   flex-shrink: 0;
 }
-body[data-viewport-mode="mobile"] .panel-collapsed::after {
-  content: 'Products';
+
+body[data-viewport-mode="mobile"] .panel-collapsed-label {
+  display: inline;
+}
+
+body[data-viewport-mode="mobile"] .panel-collapsed-facepile {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: 4px;
+}
+
+body[data-viewport-mode="mobile"] .panel-collapsed-facepile .facepile-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid white;
+  margin-left: -8px;
+  box-sizing: border-box;
+  background: #e5e5ea;
+}
+
+body[data-viewport-mode="mobile"] .panel-collapsed-facepile .facepile-thumb:first-child {
+  margin-left: 0;
 }
 
 body[data-viewport-mode="mobile"] .panel.expanded .panel-collapsed {
@@ -1811,28 +1864,34 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
-  top: auto;
-  bottom: 0.75rem;
-  left: 0.5rem;
-  right: 0.5rem;
-  transform: none;
-  max-width: calc(100% - 1rem);
+  top: 16px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  margin: 16px auto;
+  max-width: calc(100% - 32px);
   width: auto;
   display: flex;
   justify-content: flex-start;
   align-items: center;
   gap: 0.5rem; /* 54.10: spacing between touch targets */
-  padding: 0.5rem 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem 0.625rem;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
-  border-radius: 999px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden {
-  transform: translateY(calc(100% + 1rem));
+  transform: translateX(-50%) translateY(calc(-100% - 1rem));
   opacity: 0;
   pointer-events: none;
 }
