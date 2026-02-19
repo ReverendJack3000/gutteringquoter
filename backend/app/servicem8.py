@@ -440,17 +440,17 @@ def upload_job_attachment(
     *,
     attachment_name: str = "Blueprint_Design.png",
     file_type: str = ".png",
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
     """
     Upload a file as a ServiceM8 job attachment via multipart/form-data.
     Requires OAuth scope: manage_attachments.
-    Returns (success, error_message).
+    Returns (success, error_message, response_body).
     """
     base_url = "https://api.servicem8.com"
     url = f"{base_url}/api_1.0/attachment.json"
     headers = {"Authorization": f"Bearer {access_token}"}
     data = {
-        "related_object": "job",
+        "related_object": "JOB",
         "related_object_uuid": job_uuid,
         "attachment_name": attachment_name,
         "file_type": file_type,
@@ -461,16 +461,18 @@ def upload_job_attachment(
         with httpx.Client() as client:
             resp = client.post(url, data=data, files=files, headers=headers)
         resp.raise_for_status()
+        body = None
         try:
             body = resp.json()
-            logger.info("ServiceM8 upload job attachment response: %s", body)
+            active_val = body.get("active") if isinstance(body, dict) else None
+            logger.info("ServiceM8 upload job attachment response: %s | active=%s", body, active_val)
         except Exception:
-            pass
-        return True, None
+            logger.info("ServiceM8 upload job attachment response: (non-JSON)")
+        return True, None, body
     except httpx.HTTPStatusError as e:
-        body = e.response.text
-        logger.warning("ServiceM8 upload job attachment failed: %s %s", e.response.status_code, body)
-        return False, body or str(e)
+        err_body = e.response.text
+        logger.warning("ServiceM8 upload job attachment failed: %s %s", e.response.status_code, err_body)
+        return False, err_body or str(e), None
     except Exception as e:
         logger.warning("ServiceM8 upload job attachment failed: %s", e)
-        return False, str(e)
+        return False, str(e), None

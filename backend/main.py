@@ -587,7 +587,7 @@ def api_servicem8_upload_job_attachment(
     attachment_name = (body.attachment_name or "Blueprint_Design.png").strip() or "Blueprint_Design.png"
     if not attachment_name.lower().endswith(".png"):
         attachment_name = attachment_name + ".png"
-    ok, err = sm8.upload_job_attachment(
+    ok, err, sm8_response = sm8.upload_job_attachment(
         tokens["access_token"],
         body.job_uuid,
         image_bytes,
@@ -596,7 +596,10 @@ def api_servicem8_upload_job_attachment(
     )
     if not ok:
         raise HTTPException(502, f"Failed to upload attachment: {err or 'unknown'}")
-    return {"success": True}
+    return {
+        "success": True,
+        "servicem8": sm8_response,
+    }
 
 
 # Serve static frontend and assets (must be after API routes)

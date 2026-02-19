@@ -1825,9 +1825,14 @@ function initJobConfirmationOverlay() {
             },
             body: JSON.stringify({ job_uuid: jobUuidForAttachment, image_base64: base64 }),
           });
+          const attachData = await attachResp.json().catch(() => ({}));
           if (!attachResp.ok) {
             showFeedback('Added to job successfully. Blueprint could not be attached.', false);
           } else {
+            if (attachData.servicem8 != null) {
+              const sm8 = attachData.servicem8;
+              console.log('[ServiceM8 attachment] response:', sm8, '| active:', sm8.active);
+            }
             showFeedback('Added to job successfully. Blueprint attached.', false);
           }
         } catch (_) {
