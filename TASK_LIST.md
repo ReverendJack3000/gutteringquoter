@@ -37,6 +37,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.16–54.20 | (Complete) Mobile pan, pinch zoom, parts formatting, movable toolbars |
+| 54 | 54.21–54.25 | (Complete) Mobile: Projects header + iOS bottom sheet for diagram menu (Apple HIG) |
 ---
 
 ## Locked decisions
@@ -1251,6 +1252,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **54.19** **Global toolbar: collapsible and movable.** Allow the global (top) toolbar to be collapsed and moved around the screen so the user can free up space; position is user-adjustable (e.g. drag to reposition).
 - [x] **54.20** **Element toolbars: movable.** Allow the element-specific toolbars (e.g. floating toolbar for selection actions) to be moved around the screen for more space. No need to add collapse for element toolbars—movable only.
 
+**Projects header and diagram menu (mobile-only, Apple HIG)**
+
+- [x] **54.21** **Unhide and position "Projects / Untitled" on mobile.** Ensure the header is visible in the top-left of the mobile toolbar; style as a clean tappable area (system font, semi-bold project name, downward chevron); min 44px touch target. No desktop changes.
+- [x] **54.22** **Add mobile-only bottom sheet container and backdrop.** New DOM (e.g. diagrams bottom sheet + backdrop) and CSS: translucent backdrop (bg-black/40, backdrop-blur), sheet with white/system background, 24px top rounded corners, gray pill drag handle. All styling under `body[data-viewport-mode="mobile"]`; desktop never uses this.
+- [x] **54.23** **Wire mobile to open/close bottom sheet; desktop unchanged.** On mobile, tapping the Projects header (and optionally clock icon) opens the bottom sheet and populates it with the same diagram list; close on backdrop tap and Escape; focus trap and restore. Desktop keeps current dropdown behaviour.
+- [x] **54.24** **Format bottom sheet list and delete (Apple style, mobile only).** Rows: min 44px height, flex layout, diagram name left (16px, high-contrast), 1px bottom border between rows. Trash icon trailing, Apple red (#FF3B30); keep iOS-style confirmation or smooth fade-out on delete. Desktop list styling unchanged.
+- [x] **54.25** **Accessibility and regression.** Bottom sheet: role="dialog", aria-modal, focus trap, Escape close, focus restore; delete buttons labelled. Verify no desktop regression; mobile 200% zoom and orientation.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
@@ -1274,4 +1283,4 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope). Section 55 complete (55.1–55.10).
 
-*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.15 complete); 54.16–54.20 added (mobile pan vs drag-select, pinch zoom, parts overlap, movable/collapsible toolbars). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
+*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.25 complete; 54.21–54.25 mobile Projects header + iOS bottom sheet for diagram menu, Apple HIG). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*

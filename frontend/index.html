@@ -28,6 +28,9 @@
           <nav class="toolbar-breadcrumbs" aria-label="Project" id="toolbarBreadcrumbsNav">
             <span class="breadcrumb-prefix">Projects / </span>
             <input type="text" class="breadcrumb-project-input" id="toolbarProjectNameInput" value="" placeholder="Untitled" maxlength="255" aria-label="Project name" />
+            <span class="breadcrumb-chevron" aria-hidden="true" title="Open saved diagrams">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
             <button type="button" class="breadcrumb-go-back" id="breadcrumbGoBackBtn" title="Go back to previous state" aria-label="Go back to previous state" hidden>← Previous</button>
           </nav>
           <div class="project-history-dropdown-backdrop" id="projectHistoryDropdownBackdrop" hidden></div>
@@ -103,6 +106,16 @@
         </div>
       </div>
     </header>
+    </div>
+    <!-- Mobile-only: diagrams bottom sheet (54.21–54.25). Hidden on desktop. -->
+    <div id="diagramsBottomSheetBackdrop" class="diagrams-bottom-sheet-backdrop" hidden aria-hidden="true"></div>
+    <div id="diagramsBottomSheet" class="diagrams-bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="diagramsBottomSheetTitle" aria-label="Saved diagrams" tabindex="-1" hidden>
+      <div class="diagrams-bottom-sheet-drag-handle" aria-hidden="true"></div>
+      <h2 id="diagramsBottomSheetTitle" class="diagrams-bottom-sheet-title">Saved diagrams</h2>
+      <div class="diagrams-bottom-sheet-list-wrap">
+        <div class="diagrams-bottom-sheet-list" id="diagramsBottomSheetList" role="list"></div>
+        <div class="diagrams-bottom-sheet-empty" id="diagramsBottomSheetEmpty" hidden>No saved diagrams. Sign in and use Save to store your work.</div>
+      </div>
     </div>
     <div class="header-color-popover color-palette-popover" id="headerColorPalettePopover" role="menu" aria-label="Colour all diagram elements" hidden>
       <button type="button" class="color-swatch color-swatch-default" data-color="" title="Default (no tint)"><span aria-hidden="true">×</span></button>

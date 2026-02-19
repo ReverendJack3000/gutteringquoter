@@ -8332,6 +8332,20 @@ function initDiagrams() {
       showMessage('Sign in to open saved diagrams.', 'error');
       return;
     }
+    if (layoutState.viewportMode === 'mobile') {
+      const sheet = document.getElementById('diagramsBottomSheet');
+      const open = sheet && !sheet.hidden;
+      if (open) {
+        closeAccessibleModal('diagramsBottomSheet');
+        return;
+      }
+      closeDropdown();
+      closeProjectHistoryDropdown();
+      refreshDiagramsList().then(() => {
+        openAccessibleModal('diagramsBottomSheet', { triggerEl: diagramsDropdownBtn });
+      });
+      return;
+    }
     const open = diagramsDropdown && !diagramsDropdown.hidden;
     if (open) {
       closeDropdown();
@@ -8344,17 +8358,33 @@ function initDiagrams() {
   });
 
   document.addEventListener('click', (e) => {
+    const sheet = document.getElementById('diagramsBottomSheet');
+    if (sheet && !sheet.hidden && sheet.contains(e.target)) return;
     if (diagramsDropdown && !diagramsDropdown.hidden && !diagramsDropdown.contains(e.target) && !diagramsDropdownBtn.contains(e.target)) closeDropdown();
     if (projectHistoryDropdown && !projectHistoryDropdown.hidden && !projectHistoryDropdown.contains(e.target) && !breadcrumbsNav?.contains(e.target) && !projectHistoryDropdownBackdrop?.contains(e.target)) closeProjectHistoryDropdown();
   });
 
-  // Breadcrumb click opens project history dropdown (46.3–46.4)
+  // Breadcrumb click: on mobile opens bottom sheet (54.21–54.25), on desktop opens project history dropdown (46.3–46.4)
   if (breadcrumbsNav) {
     breadcrumbsNav.addEventListener('click', (e) => {
       if (e.target === projectNameInput || e.target === goBackBtn) return;
       e.preventDefault();
       if (!authState.token) {
         showMessage('Sign in to open saved diagrams.', 'error');
+        return;
+      }
+      if (layoutState.viewportMode === 'mobile') {
+        const sheet = document.getElementById('diagramsBottomSheet');
+        const open = sheet && !sheet.hidden;
+        if (open) {
+          closeAccessibleModal('diagramsBottomSheet');
+          return;
+        }
+        closeDropdown();
+        closeProjectHistoryDropdown();
+        refreshDiagramsList().then(() => {
+          openAccessibleModal('diagramsBottomSheet', { triggerEl: breadcrumbsNav });
+        });
         return;
       }
       const open = projectHistoryDropdown && !projectHistoryDropdown.hidden;
@@ -8397,11 +8427,13 @@ function initDiagrams() {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className = 'diagram-item-delete';
-    deleteBtn.setAttribute('aria-label', 'Delete this saved project');
-    deleteBtn.innerHTML = '−';
+    const itemName = item.name || 'Untitled';
+    deleteBtn.setAttribute('aria-label', `Delete ${itemName}`);
+    deleteBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
     deleteBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      /* Destructive action: confirmation required (in-app dialog) before delete – avoids accidental taps on mobile. */
       const confirmed = await showAppConfirm('Permanently delete this saved project? This cannot be undone.', {
         title: 'Delete saved project',
         confirmText: 'Delete',
@@ -8425,6 +8457,7 @@ function initDiagrams() {
     btn.addEventListener('click', async () => {
       closeDropdown();
       closeProjectHistoryDropdown();
+      if (wrap.closest('#diagramsBottomSheet')) closeAccessibleModal('diagramsBottomSheet');
       try {
         preLoadSnapshot = capturePreLoadSnapshot();
         updateGoBackButtonVisibility();
@@ -8448,6 +8481,11 @@ function initDiagrams() {
       { list: diagramsDropdownList, empty: diagramsDropdownEmpty },
       { list: projectHistoryDropdownList, empty: projectHistoryDropdownEmpty },
     ].filter((t) => t.list && t.empty);
+    const diagramsBottomSheetListEl = document.getElementById('diagramsBottomSheetList');
+    const diagramsBottomSheetEmptyEl = document.getElementById('diagramsBottomSheetEmpty');
+    if (diagramsBottomSheetListEl && diagramsBottomSheetEmptyEl) {
+      listTargets.push({ list: diagramsBottomSheetListEl, empty: diagramsBottomSheetEmptyEl });
+    }
     if (listTargets.length === 0) return;
     try {
       const res = await fetch('/api/diagrams', { headers: authHeaders() });
@@ -8460,7 +8498,11 @@ function initDiagrams() {
       listTargets.forEach(({ list, empty }) => {
         empty.hidden = diagramList.length > 0;
         list.innerHTML = '';
-        diagramList.forEach((item) => list.appendChild(createDiagramItem(item)));
+        diagramList.forEach((item) => {
+          const el = createDiagramItem(item);
+          if (list.id === 'diagramsBottomSheetList') el.setAttribute('role', 'listitem');
+          list.appendChild(el);
+        });
       });
     } catch (_) {
       listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
@@ -9649,6 +9691,67 @@ function initModalAccessibilityFramework() {
       appAlertDialogState.dismissResult = false;
     },
   });
+  (function registerDiagramsBottomSheetModal() {
+    const SHEET_ID = 'diagramsBottomSheet';
+    const SWIPE_CLOSE_THRESHOLD_PX = 50;
+    let touchStartY = 0;
+    let touchInHeader = false;
+
+    function handleSheetTouchStart(e) {
+      const sheet = document.getElementById('diagramsBottomSheet');
+      if (!sheet || sheet.hidden) return;
+      const header = sheet.querySelector('.diagrams-bottom-sheet-drag-handle, .diagrams-bottom-sheet-title');
+      touchInHeader = !!(header && (e.target === header || header.contains(e.target)));
+      touchStartY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    }
+
+    function handleSheetTouchEnd(e) {
+      const sheet = document.getElementById('diagramsBottomSheet');
+      if (!sheet || sheet.hidden || !touchInHeader) return;
+      const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+      if (endY - touchStartY >= SWIPE_CLOSE_THRESHOLD_PX) {
+        closeAccessibleModal(SHEET_ID);
+      }
+    }
+
+    registerAccessibleModal({
+      id: SHEET_ID,
+      element: document.getElementById('diagramsBottomSheet'),
+      backdrop: document.getElementById('diagramsBottomSheetBackdrop'),
+      closeOnBackdrop: true,
+      closeOnEscape: true,
+      initialFocus: () => {
+        const sheet = document.getElementById('diagramsBottomSheet');
+        if (!sheet) return null;
+        const focusable = getFocusableElements(sheet);
+        return focusable[0] || sheet;
+      },
+      onOpen: () => {
+        const backdrop = document.getElementById('diagramsBottomSheetBackdrop');
+        if (backdrop) backdrop.removeAttribute('hidden');
+        document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'true');
+        document.getElementById('diagramsDropdownBtn')?.setAttribute('aria-expanded', 'true');
+        document.body.classList.add('diagrams-bottom-sheet-open');
+        const sheet = document.getElementById('diagramsBottomSheet');
+        if (sheet) {
+          sheet.addEventListener('touchstart', handleSheetTouchStart, { passive: true });
+          sheet.addEventListener('touchend', handleSheetTouchEnd, { passive: true });
+        }
+      },
+      onClose: () => {
+        const backdrop = document.getElementById('diagramsBottomSheetBackdrop');
+        if (backdrop) backdrop.setAttribute('hidden', '');
+        document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'false');
+        document.getElementById('diagramsDropdownBtn')?.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('diagrams-bottom-sheet-open');
+        const sheet = document.getElementById('diagramsBottomSheet');
+        if (sheet) {
+          sheet.removeEventListener('touchstart', handleSheetTouchStart);
+          sheet.removeEventListener('touchend', handleSheetTouchEnd);
+        }
+      },
+    });
+  })();
   initAlertDialogControls();
 
   if (modalA11yState.keydownBound) return;
