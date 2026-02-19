@@ -8,11 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/diagram-toolbar-freeform
-- Based on: main
-- Status: In Progress (implementation complete; verify then merge)
-- Related Tasks:
-  - [x] 54.41–54.45 Diagram toolbar Freeform-style
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
