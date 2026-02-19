@@ -552,26 +552,14 @@ def api_servicem8_add_to_job(
     if not ok:
         raise HTTPException(502, f"Failed to add job material: {err or 'unknown'}")
 
-    def _fmt_qty(q: float) -> str:
-        return f"{q:g}"
-
-    def _fmt_hours(h: float) -> str:
-        h_fmt = f"{h:g}" if h == int(h) else f"{h}"
-        return f"{h_fmt} hour" if h == 1 else f"{h_fmt} hours"
-
-    lines = [f"- {e.name} x {_fmt_qty(e.qty)}" for e in body.elements]
-    people_line = f"    - People Req = {body.people_count}" if body.people_count else None
-    note_body = [
-        body.user_name or "Quote App User",
-        *lines,
-        "",
-        f"Total Price = ${body.quote_total:.2f} exc gst",
-        f"- Total Time used = {_fmt_hours(body.labour_hours)}",
-    ]
-    if people_line:
-        note_body.append(people_line)
-    note_body.append(f"- Material Cost = ${body.material_cost:.2f} exc gst")
-    note_text = "\n".join(note_body)
+    note_text = _build_job_note_text(
+        body.user_name,
+        body.elements,
+        body.quote_total,
+        body.labour_hours,
+        body.people_count,
+        body.material_cost,
+    )
     ok, err = sm8.add_job_note(tokens["access_token"], body.job_uuid, note_text)
     if not ok:
         raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
@@ -624,7 +612,11 @@ def _build_job_note_text(
     people_count: int,
     material_cost: float,
 ) -> str:
-    """Build the same note text used for add-to-job and create-new-job (note to both jobs)."""
+    """
+    Build the note text used for add-to-job, create-new-job (both notes), and new job description.
+    Format matches: user/email, then "- Name x qty" lines, blank line, Total Price, Total Time used,
+    People Req, Material Cost (all exc gst).
+    """
     def _fmt_qty(q: float) -> str:
         return f"{q:g}"
 
@@ -633,17 +625,15 @@ def _build_job_note_text(
         return f"{h_fmt} hour" if h == 1 else f"{h_fmt} hours"
 
     lines = [f"- {e.name} x {_fmt_qty(e.qty)}" for e in elements]
-    people_line = f"    - People Req = {people_count}" if people_count else None
     note_body = [
         user_name or "Quote App User",
         *lines,
         "",
         f"Total Price = ${quote_total:.2f} exc gst",
         f"- Total Time used = {_fmt_hours(labour_hours)}",
+        f"- People Req = {people_count}",
+        f"- Material Cost = ${material_cost:.2f} exc gst",
     ]
-    if people_line:
-        note_body.append(people_line)
-    note_body.append(f"- Material Cost = ${material_cost:.2f} exc gst")
     return "\n".join(note_body)
 
 
