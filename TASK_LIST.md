@@ -8,12 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/section-33-52
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 33.2 Load blueprint image when loading from project
-  - [x] 52.1–52.6 Quote modal & ServiceM8 UI enhancements
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
