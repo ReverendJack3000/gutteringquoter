@@ -5517,6 +5517,104 @@ function resizeCanvas() {
   }
 }
 
+const DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN = 'quoteApp_diagramToolbarHidden';
+
+function initDiagramToolbarDrag() {
+  const toolbar = document.getElementById('diagramFloatingToolbar');
+  const dragHandle = document.getElementById('diagramToolbarDragHandle');
+  if (!toolbar || !dragHandle) return;
+  
+  // Only enable drag on mobile
+  if (layoutState.viewportMode !== 'mobile') {
+    dragHandle.style.display = 'none';
+    toolbar.classList.remove('diagram-toolbar-hidden');
+    return;
+  }
+  
+  dragHandle.style.display = 'block';
+
+  let hidden = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN) === 'true';
+  
+  function applyState() {
+    toolbar.classList.toggle('diagram-toolbar-hidden', hidden);
+    dragHandle.setAttribute('aria-label', hidden ? 'Drag down to show toolbar' : 'Drag up to hide toolbar');
+    dragHandle.title = hidden ? 'Drag down to show toolbar' : 'Drag up to hide toolbar';
+  }
+
+  applyState();
+
+  let dragStartY = 0;
+  let dragStartTime = 0;
+  let isDragging = false;
+  let hasMoved = false;
+
+  function handleDragStart(e) {
+    if (e.button !== 0 && e.type !== 'touchstart') return;
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = true;
+    hasMoved = false;
+    dragStartY = e.touches ? e.touches[0].clientY : e.clientY;
+    dragStartTime = Date.now();
+    dragHandle.style.cursor = 'grabbing';
+  }
+
+  function handleDragMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+    const deltaY = dragStartY - currentY;
+    const threshold = 30;
+    
+    if (Math.abs(deltaY) > 5) hasMoved = true;
+    
+    if (deltaY > threshold && !hidden) {
+      hidden = true;
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'true');
+      applyState();
+      isDragging = false;
+    } else if (deltaY < -threshold && hidden) {
+      hidden = false;
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'false');
+      applyState();
+      isDragging = false;
+    }
+  }
+
+  function handleDragEnd(e) {
+    if (!isDragging) return;
+    const currentY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    const deltaY = dragStartY - currentY;
+    const dragDuration = Date.now() - dragStartTime;
+    isDragging = false;
+    dragHandle.style.cursor = '';
+    
+    if (hasMoved && dragDuration > 0) {
+      const velocity = Math.abs(deltaY) / dragDuration;
+      const flickThreshold = 50;
+      const velocityThreshold = 0.3;
+      
+      if (deltaY > flickThreshold || (deltaY > 20 && velocity > velocityThreshold)) {
+        hidden = true;
+        localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'true');
+        applyState();
+      } else if (deltaY < -flickThreshold || (deltaY < -20 && velocity > velocityThreshold)) {
+        hidden = false;
+        localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'false');
+        applyState();
+      }
+    }
+  }
+
+  dragHandle.addEventListener('touchstart', handleDragStart, { passive: false });
+  dragHandle.addEventListener('touchmove', handleDragMove, { passive: false });
+  dragHandle.addEventListener('touchend', handleDragEnd, { passive: false });
+  dragHandle.addEventListener('mousedown', handleDragStart);
+  document.addEventListener('mousemove', handleDragMove);
+  document.addEventListener('mouseup', handleDragEnd);
+}
+
 function initCanvas() {
   resizeCanvas();
   const canvas = getCanvasElement();
@@ -5529,6 +5627,8 @@ function initCanvas() {
     diagramToolbar.addEventListener('pointerdown', (e) => e.stopPropagation());
     diagramToolbar.addEventListener('click', (e) => e.stopPropagation());
   }
+  
+  initDiagramToolbarDrag();
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -8663,6 +8763,10 @@ function applyViewportMode(mode, options = {}) {
     const shouldExpandPanelByDefault = normalizedMode === 'desktop';
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
     if (options.announce !== false) announceViewportMode(normalizedMode);
+    // Re-initialize diagram toolbar drag when switching to mobile
+    if (normalizedMode === 'mobile') {
+      requestAnimationFrame(() => initDiagramToolbarDrag());
+    }
     return;
   }
 

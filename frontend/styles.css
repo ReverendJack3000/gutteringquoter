@@ -1747,7 +1747,8 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
-  top: 0.5rem;
+  top: auto;
+  bottom: 0.75rem;
   left: 0.5rem;
   right: 0.5rem;
   transform: none;
@@ -1755,8 +1756,56 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   width: auto;
   justify-content: flex-start;
   gap: 0.5rem; /* 54.10: spacing between touch targets */
-  padding: 0.5rem 0.625rem;
+  padding: 0.5rem 0.625rem 0.75rem;
   overflow-x: auto;
+  position: relative;
+  border-radius: 999px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden {
+  transform: translateY(calc(100% + 1rem));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.diagram-toolbar-drag-handle {
+  display: none;
+}
+
+body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle {
+  display: block;
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border: none;
+  border-radius: 2px;
+  cursor: grab;
+  padding: 0;
+  touch-action: none;
+  z-index: 1;
+}
+
+.diagram-toolbar-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.diagram-toolbar-drag-handle span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .upload-zone,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .blueprint-transparency-btn {
+  min-height: 44px;
+  min-width: 44px;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .upload-zone,
