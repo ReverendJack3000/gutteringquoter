@@ -8,11 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/create-new-job-instead
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [ ] 49.27–49.27.5 (Create New Job Instead)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
@@ -34,7 +31,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
-| **49** | **49.27–49.27.5** | **Add New Job: create job, materials, note/diagram to both jobs, job contact** |
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
