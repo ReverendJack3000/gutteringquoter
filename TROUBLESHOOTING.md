@@ -7,8 +7,8 @@ When we hit an issue that might come up again, add an entry here so the project 
 ## ServiceM8 attachment upload returns 200 but PNG not visible on job – 2026-02
 
 - **Symptom:** `POST /api/servicem8/upload-job-attachment` returns 200 OK and logs show success, but the PNG does not appear in the ServiceM8 job (Job Diary or Attachments).
-- **Cause:** ServiceM8 creates new attachments as **inactive** (hidden) by default. The upload succeeds but the record is marked inactive so it does not show in the UI.
-- **Fix:** In `backend/app/servicem8.py`, in `upload_job_attachment()`, add `"active": "1"` to the multipart form `data` dict sent to `POST /api_1.0/attachment.json`. Also ensure the file part uses explicit MIME type: `(attachment_name, image_bytes, "image/png")`. After deploy, check Railway logs for `ServiceM8 upload job attachment response:` to confirm the API returns `"active": 1`. If it still returns `"active": 0`, check payload structure or ServiceM8 docs for attachment metadata.
+- **Cause (two parts):** (1) ServiceM8’s official flow is **two steps**: create an attachment *record* via `POST Attachment.json` (metadata only), then upload the file to `POST Attachment/{uuid}.file`. A single multipart POST to `attachment.json` with file data does **not** attach the binary to the record, so the file never appears. (2) New attachment records can also default to inactive; set `"active": true` in the create-record payload.
+- **Fix:** In `backend/app/servicem8.py`, `upload_job_attachment()` must use the **2-step flow**: (1) POST to `api_1.0/Attachment.json` with JSON body only (`related_object`, `related_object_uuid`, `attachment_name`, `file_type`, `active`), read `x-record-uuid` from response headers; (2) POST the file to `api_1.0/Attachment/{attachment_uuid}.file` with multipart form field `file` (MIME type `image/png`). See TASK_LIST.md 49.26–49.26.3.
 
 ---
 

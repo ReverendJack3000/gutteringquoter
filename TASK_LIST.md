@@ -1071,7 +1071,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **49.24.5** Update `api_servicem8_add_to_job()` in `backend/main.py` to pass `displayed_amount` (from `quote_total`) and `displayed_cost` (from `material_cost`) to `add_job_material()` call.
 - [x] **49.25** Add Job Note formatting: Remove square brackets from element names; format quantities (whole numbers without decimal: 1 not 1.0); add blank line before totals; add dollar signs and "exc gst" to Total Price and Material Cost; format time used with singular/plural ("1 hour" vs "1.5 hours"). Format: `[appUserName]\n- Item Name x Qty\n- Item Name x Qty\n\nTotal Price = $[quotePrice] exc gst\n- Time used = [labourHours] hour(s)\n- Material Cost = $[materialCost] exc gst`.
 
-*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5): added displayed_amount and displayed_cost fields (matching price/cost), fixed naming convention, added TODO comment. Note formatting complete (49.25): removed brackets, added exc gst labels, formatted quantities/hours. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+**ServiceM8 job attachment full flow (2-step – required for file to appear in Job Diary)**
+
+- [x] **49.26** Implement ServiceM8 attachment per official guide: two-step flow so the file appears in the Job Diary. Single multipart POST to attachment.json creates the record but does not attach file data; ServiceM8 requires a second request to upload the binary.
+- [x] **49.26.1** Step 1 – Create attachment record: POST to `https://api.servicem8.com/api_1.0/Attachment.json` with JSON body only (no file): `related_object` (e.g. "job" or "JOB" per API), `related_object_uuid`, `attachment_name`, `file_type`, `active`. Read `x-record-uuid` from response headers to get the new attachment UUID.
+- [x] **49.26.2** Step 2 – Submit file data: POST the binary to `https://api.servicem8.com/api_1.0/Attachment/{attachment_uuid}.file` with the file as multipart form field `file` (or raw body per API). This attaches the file to the record and makes it visible in the job diary.
+- [x] **49.26.3** Wire `upload_job_attachment()` in `backend/app/servicem8.py` to perform step 1 then step 2; return success/error and optional response payload for logging. Keep frontend and `/api/servicem8/upload-job-attachment` contract unchanged.
+
+*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5): added displayed_amount and displayed_cost fields (matching price/cost), fixed naming convention, added TODO comment. Note formatting complete (49.25): removed brackets, added exc gst labels, formatted quantities/hours. Attachment: 49.26–49.26.3 define two-step attachment flow (create record → upload to .file). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
 
 ---
 

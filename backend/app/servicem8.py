@@ -442,37 +442,69 @@ def upload_job_attachment(
     file_type: str = ".png",
 ) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
     """
-    Upload a file as a ServiceM8 job attachment via multipart/form-data.
+    Upload a file as a ServiceM8 job attachment using the official 2-step flow.
+    Step 1: Create attachment record (POST Attachment.json), get x-record-uuid.
+    Step 2: POST file to Attachment/{uuid}.file so it appears in Job Diary.
     Requires OAuth scope: manage_attachments.
     Returns (success, error_message, response_body).
     """
     base_url = "https://api.servicem8.com"
-    url = f"{base_url}/api_1.0/attachment.json"
     headers = {"Authorization": f"Bearer {access_token}"}
-    data = {
-        "related_object": "JOB",
+
+    # Step 1: Create attachment record (metadata only, no file)
+    create_url = f"{base_url}/api_1.0/Attachment.json"
+    create_payload = {
+        "related_object": "job",
         "related_object_uuid": job_uuid,
         "attachment_name": attachment_name,
         "file_type": file_type,
-        "active": "1",
+        "active": True,
     }
+    try:
+        with httpx.Client() as client:
+            create_resp = client.post(
+                create_url,
+                json=create_payload,
+                headers={**headers, "Content-Type": "application/json", "Accept": "application/json"},
+            )
+        create_resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        err_body = e.response.text
+        logger.warning("ServiceM8 upload job attachment step 1 (create record) failed: %s %s", e.response.status_code, err_body)
+        return False, err_body or str(e), None
+    except Exception as e:
+        logger.warning("ServiceM8 upload job attachment step 1 failed: %s", e)
+        return False, str(e), None
+
+    attachment_uuid = create_resp.headers.get("x-record-uuid")
+    if not attachment_uuid:
+        attachment_uuid = create_resp.headers.get("X-Record-Uuid")
+    if not attachment_uuid:
+        logger.warning("ServiceM8 upload job attachment: no x-record-uuid in step 1 response headers: %s", dict(create_resp.headers))
+        return False, "No attachment UUID in response", None
+
+    attachment_uuid = attachment_uuid.strip()
+    logger.info("ServiceM8 attachment record created: uuid=%s", attachment_uuid)
+
+    # Step 2: Submit file data to Attachment/{uuid}.file
+    file_url = f"{base_url}/api_1.0/Attachment/{attachment_uuid}.file"
     files = {"file": (attachment_name, image_bytes, "image/png")}
     try:
         with httpx.Client() as client:
-            resp = client.post(url, data=data, files=files, headers=headers)
-        resp.raise_for_status()
-        body = None
-        try:
-            body = resp.json()
-            active_val = body.get("active") if isinstance(body, dict) else None
-            logger.info("ServiceM8 upload job attachment response: %s | active=%s", body, active_val)
-        except Exception:
-            logger.info("ServiceM8 upload job attachment response: (non-JSON)")
-        return True, None, body
+            file_resp = client.post(file_url, files=files, headers=headers)
+        file_resp.raise_for_status()
     except httpx.HTTPStatusError as e:
         err_body = e.response.text
-        logger.warning("ServiceM8 upload job attachment failed: %s %s", e.response.status_code, err_body)
+        logger.warning("ServiceM8 upload job attachment step 2 (.file) failed: %s %s", e.response.status_code, err_body)
         return False, err_body or str(e), None
     except Exception as e:
-        logger.warning("ServiceM8 upload job attachment failed: %s", e)
+        logger.warning("ServiceM8 upload job attachment step 2 failed: %s", e)
         return False, str(e), None
+
+    body = None
+    try:
+        body = file_resp.json()
+        logger.info("ServiceM8 upload job attachment step 2 response: %s", body)
+    except Exception:
+        pass
+    return True, None, body or {"uuid": attachment_uuid}
