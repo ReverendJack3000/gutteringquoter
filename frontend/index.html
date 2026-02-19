@@ -47,6 +47,9 @@
             <p class="servicem8-warning-popover-text">You're not signed in to ServiceM8.</p>
             <a href="#" id="servicem8WarningPopoverLink" class="servicem8-warning-popover-link">Connect ServiceM8</a>
           </div>
+          <button type="button" class="toolbar-icon-btn btn-icon" id="cameraUploadBtn" title="Upload property photo or PDF" aria-label="Upload photo">
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
           <button type="button" class="toolbar-icon-btn btn-icon" id="exportBtn" title="Download blueprint with all products as PNG" aria-label="Export PNG">
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -157,8 +160,8 @@
         <canvas id="canvas" aria-label="Blueprint canvas"></canvas>
         <div class="canvas-placeholder" id="canvasPlaceholder">
           <div class="placeholder-card">
-            <span class="placeholder-title">Upload or drop a photo to add to the whiteboard</span>
-            <span class="placeholder-steps">Open the panel (→) and drag products here — move, resize, and rotate like a Canva board</span>
+            <span class="placeholder-title">Tap the Camera icon above to add a background photo, or tap Products below to start building.</span>
+            <span class="placeholder-steps">Drag products onto the blueprint — move, resize, and rotate like a Canva board</span>
           </div>
         </div>
         <div class="canvas-tooltip" id="canvasTooltip" aria-live="polite" hidden></div>

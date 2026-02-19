@@ -6354,9 +6354,17 @@ async function processFileAsBlueprint(file) {
 function initUpload() {
   const fileInput = document.getElementById('fileInput');
   const uploadZone = document.getElementById('uploadZone');
+  const cameraUploadBtn = document.getElementById('cameraUploadBtn');
   const placeholder = document.getElementById('canvasPlaceholder');
   const toggle = document.getElementById('technicalDrawingToggle');
   const blueprintWrap = document.getElementById('blueprintWrap');
+
+  // Camera icon in header: trigger file upload dialog
+  if (cameraUploadBtn && fileInput) {
+    cameraUploadBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+  }
 
   // Do not add a click handler to uploadZone: the label's for="fileInput" already activates the file input.
   // A redundant uploadZone.addEventListener('click', () => fileInput.click()) would open the file dialog twice.
