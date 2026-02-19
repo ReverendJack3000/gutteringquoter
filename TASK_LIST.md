@@ -8,8 +8,11 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/create-new-job-instead
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [ ] 49.27–49.27.5 (Create New Job Instead)
 
 **Uncompleted tasks (by section):**
 
@@ -31,7 +34,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
-| **49** | **49.1–49.22** | **ServiceM8 OAuth 2.0 Auth setup** |
+| **49** | **49.27–49.27.5** | **Add New Job: create job, materials, note/diagram to both jobs, job contact** |
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
@@ -1078,7 +1081,25 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **49.26.2** Step 2 – Submit file data: POST the binary to `https://api.servicem8.com/api_1.0/Attachment/{attachment_uuid}.file` with the file as multipart form field `file` (or raw body per API). This attaches the file to the record and makes it visible in the job diary.
 - [x] **49.26.3** Wire `upload_job_attachment()` in `backend/app/servicem8.py` to perform step 1 then step 2; return success/error and optional response payload for logging. Keep frontend and `/api/servicem8/upload-job-attachment` contract unchanged.
 
-*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5): added displayed_amount and displayed_cost fields (matching price/cost), fixed naming convention, added TODO comment. Note formatting complete (49.25): removed brackets, added exc gst labels, formatted quantities/hours. Attachment: 49.26–49.26.3 define two-step attachment flow (create record → upload to .file). Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+*Implementation nuance (verified working):* Step 1 uses **JSON only** (no file): `Content-Type: application/json`, body `related_object: "job"` (lowercase per official “Attaching files to a Job Diary” guide), `active: true` (boolean). URL path is `Attachment.json` (capital A). Read **`x-record-uuid`** from response headers (check both `x-record-uuid` and `X-Record-Uuid`); if missing, fail with a clear error. Step 2: POST to `Attachment/{attachment_uuid}.file` with **multipart** form key `file`, value `(filename, image_bytes, "image/png")`; do not set Content-Type (let httpx set multipart boundary). The file must not be sent in step 1.
+
+**Add New Job (Create new Job from confirm popup)**
+
+*Pickup context:* Flow runs **after** the user has already matched a job by `generated_job_id` (job number) as we do today. The confirm job details popup shows “Add to Job #…” and “**Create New Job Instead**” (button id `jobConfirmCreateNew` in `frontend/index.html`; handler `handleCreateNew` in `frontend/app.js` in `initJobConfirmationOverlay()` — currently only hides overlay with a TODO). Backend: `backend/app/servicem8.py` has `add_job_material`, `add_job_note`, `upload_job_attachment` (2-step: create record then .file); `backend/main.py` has `POST /api/servicem8/add-to-job` and `POST /api/servicem8/upload-job-attachment`. Quote payload for add-to-job is built by `getAddToJobPayload(jobUuid)`; blueprint PNG by `getExportCanvasDataURL()`. New job flow must use **our generated UUID** for the new job (ServiceM8 often does not return the job UUID in the response header despite docs). All steps below assume we have the **original job** (from lookup) and will create one **new job** and apply materials/note/diagram to **both** where specified.
+
+- [x] **49.27** Wire the “Create New Job Instead” button in the confirm job details popup to the new Add New Job flow: on click, run the 4 steps below (make job → add materials to new job → add note to both jobs → add diagram to both jobs) plus job contact (get contact from original job, create BILLING contact on new job). Show success/error feedback (e.g. re-use `servicem8Feedback` or similar). Frontend calls a new backend endpoint (e.g. `POST /api/servicem8/create-new-job`) that receives the same quote payload plus original job UUID and performs all steps server-side; or frontend orchestrates multiple existing/new endpoints. Ensure existing “Add to current Job” flow is unchanged.
+
+- [x] **49.27.1** **Make Job.** POST `https://api.servicem8.com/api_1.0/job.json`. **Generate the new job UUID on our side** (e.g. UUID4) and send it as the `uuid` field so we can use it for all subsequent calls. Body: `uuid` = our generated UUID; `job_description` = dynamic string from quote form, e.g. “New job created via Jacks app for repairs …” plus full list of parts/elements used (same content as used for the job note); `status` = `"Quote"` (hard-coded). Populate from the **job already retrieved by job number** (the “original” job); if any field is missing, still proceed except **`company_uuid`** — if `company_uuid` is missing, do not create the job and display an “unmatched” or “company_uuid missing” error to the user. Fields to copy from original job into the POST body: `job_address`, `lat`, `lng`, `company_uuid`, `billing_address`, `geo_is_valid`, `category_uuid`, `badges` (and any other required fields per ServiceM8 job create API). Original job body may be provided by the frontend (from the lookup response) or re-fetched by the backend via GET job.json with `$filter=uuid eq 'ORIGINAL_JOB_UUID'`.
+
+- [x] **49.27.2** **Add materials to new job.** Same format as the current add-to-job flow, populated from the quote table. POST `https://api.servicem8.com/api_1.0/jobmaterial.json`. **`job_uuid` must be the UUID we generated** in 49.27.1 (not from ServiceM8 response header). Payload shape and source identical to existing add-to-job (e.g. bundled line + displayed_amount/displayed_cost per 49.24).
+
+- [x] **49.27.3** **Add note to original job and new job.** Two POSTs with **identical note content** (same format as current add-to-job note: user name, element list, totals, labour hours, material cost, etc.). One POST for the **original job’s `job_uuid`**, one for the **new job’s `job_uuid`**. Use existing `add_job_note(access_token, job_uuid, note_text)` or equivalent.
+
+- [x] **49.27.4** **Add diagram image to original job and new job.** Two separate runs of the existing 2-step attachment flow (create attachment record, then POST file to `Attachment/{uuid}.file`), with **identical blueprint PNG** each time. First run: `related_object_uuid` = **original job UUID**. Second run: `related_object_uuid` = **new job UUID**. Re-use `upload_job_attachment()` or the same logic for both.
+
+- [x] **49.27.5** **Job contact for new job.** (1) **Get** job contact info for the original job: `GET https://api.servicem8.com/api_1.0/jobcontact.json?$filter=job_uuid eq 'ORIGINAL_JOB_UUID'` (use the original job’s UUID in the filter). (2) **POST** to create a job contact for the new job: `POST https://api.servicem8.com/api_1.0/jobcontact.json`. Body: `job_uuid` = **new job’s UUID** (the one we generated); `type` = `"BILLING"`. Populate from the GET response and include in the POST: `first`, `last`, `phone`, `mobile`, `email` (copy from the retrieved job contact(s) as appropriate — e.g. primary or first BILLING contact). If no job contact is returned for the original job, skip creating a job contact for the new job (no POST).
+
+*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5). Note formatting complete (49.25). Attachment: 49.26–49.26.3 two-step flow implemented and verified. Create New Job (49.27–49.27.5): create-new-job endpoint and frontend wired; create job, materials, note/diagram to both jobs, job contact. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
 
 ---
 

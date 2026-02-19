@@ -362,6 +362,84 @@ def fetch_job_by_generated_id(user_id: str, generated_job_id: str) -> Optional[d
         return None
 
 
+def fetch_job_by_uuid(access_token: str, job_uuid: str) -> Optional[dict[str, Any]]:
+    """
+    Fetch a ServiceM8 job by uuid.
+    Uses filter: $filter=uuid eq 'VALUE'. Returns the first matching job or None.
+    """
+    job_uuid = str(job_uuid).strip()
+    if not job_uuid:
+        return None
+    filter_expr = f"uuid eq '{job_uuid}'"
+    params = {"$filter": filter_expr}
+    try:
+        resp = make_api_request("GET", "/api_1.0/job.json", access_token, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        jobs = data if isinstance(data, list) else []
+        return jobs[0] if jobs else None
+    except Exception as e:
+        logger.warning("ServiceM8 job fetch by uuid failed for uuid=%s: %s", job_uuid, e)
+        return None
+
+
+def create_job(access_token: str, payload: dict[str, Any]) -> tuple[bool, Optional[str]]:
+    """
+    POST to ServiceM8 job.json to create a job.
+    Payload must include uuid (we generate it), job_description, status, and fields copied from original job.
+    Returns (success, error_message).
+    """
+    try:
+        resp = make_api_request("POST", "/api_1.0/job.json", access_token, json_data=payload)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 create job failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 create job failed: %s", e)
+        return False, str(e)
+
+
+def get_job_contacts(access_token: str, job_uuid: str) -> list[dict[str, Any]]:
+    """
+    GET job contacts for a job. Returns list of contact records (may be empty).
+    """
+    job_uuid = str(job_uuid).strip()
+    if not job_uuid:
+        return []
+    filter_expr = f"job_uuid eq '{job_uuid}'"
+    params = {"$filter": filter_expr}
+    try:
+        resp = make_api_request("GET", "/api_1.0/jobcontact.json", access_token, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning("ServiceM8 get job contacts failed for job_uuid=%s: %s", job_uuid, e)
+        return []
+
+
+def create_job_contact(access_token: str, payload: dict[str, Any]) -> tuple[bool, Optional[str]]:
+    """
+    POST to ServiceM8 jobcontact.json to create a job contact.
+    Payload: job_uuid, type (e.g. BILLING), first, last, phone, mobile, email as needed.
+    Returns (success, error_message).
+    """
+    try:
+        resp = make_api_request("POST", "/api_1.0/jobcontact.json", access_token, json_data=payload)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 create job contact failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 create job contact failed: %s", e)
+        return False, str(e)
+
+
 # Default material UUID for Add to Job bundled line.
 # TODO: Remind us to come back to a more detailed bundle of uuids.
 ADD_TO_JOB_DEFAULT_MATERIAL_UUID = "6129948b-4f79-4fc1-b611-23bbc4f9726b"

@@ -1848,9 +1848,57 @@ function initJobConfirmationOverlay() {
     }
   };
 
-  const handleCreateNew = () => {
-    hideOverlay();
-    // TODO: Create new job (emit onCreateNew)
+  const handleCreateNew = async () => {
+    const originalJobUuid = overlay?.dataset?.jobUuid;
+    if (!originalJobUuid) {
+      showFeedback('No job selected.', true);
+      return;
+    }
+    const payload = getAddToJobPayload(originalJobUuid);
+    if (!payload) {
+      showFeedback('No quote data to add.', true);
+      return;
+    }
+    let imageBase64 = null;
+    const dataUrl = getExportCanvasDataURL();
+    if (dataUrl && dataUrl.startsWith('data:image/png;base64,')) {
+      imageBase64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+    }
+    const body = {
+      original_job_uuid: originalJobUuid,
+      elements: payload.elements,
+      quote_total: payload.quote_total,
+      labour_hours: payload.labour_hours,
+      material_cost: payload.material_cost,
+      user_name: payload.user_name,
+      profile: payload.profile,
+      people_count: payload.people_count,
+      image_base64: imageBase64,
+    };
+    if (createNewBtn) createNewBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/servicem8/create-new-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (authState.token || ''),
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to create new job.';
+        showFeedback(msg, true);
+        return;
+      }
+      hideOverlay();
+      showFeedback('New job created. Note and blueprint added to both jobs.', false);
+    } catch (err) {
+      console.error('Create New Job failed', err);
+      showFeedback('Network error. Try again.', true);
+    } finally {
+      if (createNewBtn) createNewBtn.disabled = false;
+    }
   };
 
   const gstToggleWrap = document.getElementById('jobConfirmGstToggleWrap');

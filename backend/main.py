@@ -4,6 +4,7 @@ Blueprint processing, product list, static frontend. API-ready for future integr
 """
 import base64
 import logging
+import uuid as uuid_lib
 from pathlib import Path
 from typing import Any, Optional
 
@@ -85,6 +86,19 @@ class UploadJobAttachmentRequest(BaseModel):
     job_uuid: str = Field(..., min_length=1, description="ServiceM8 job UUID to attach the file to")
     image_base64: str = Field(..., min_length=1, description="PNG image as base64 string (no data URL prefix)")
     attachment_name: Optional[str] = Field(None, max_length=127, description="Optional filename for the attachment (default: Blueprint_Design.png)")
+
+
+class CreateNewJobRequest(BaseModel):
+    """Request for Create New Job Instead: original job UUID + same quote payload as add-to-job + optional blueprint PNG."""
+    original_job_uuid: str = Field(..., min_length=1, description="ServiceM8 UUID of the job we looked up (to copy fields and add note/diagram to both)")
+    elements: list[AddToJobElement] = Field(..., min_length=1)
+    quote_total: float = Field(..., ge=0)
+    labour_hours: float = Field(..., ge=0)
+    material_cost: float = Field(..., ge=0)
+    user_name: str = Field("", description="Name of app user for note")
+    profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
+    people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
+    image_base64: Optional[str] = Field(None, description="PNG blueprint image as base64 (no data URL prefix); attached to both original and new job")
 
 
 app = FastAPI(
@@ -600,6 +614,169 @@ def api_servicem8_upload_job_attachment(
         "success": True,
         "servicem8": sm8_response,
     }
+
+
+def _build_job_note_text(
+    user_name: str,
+    elements: list,
+    quote_total: float,
+    labour_hours: float,
+    people_count: int,
+    material_cost: float,
+) -> str:
+    """Build the same note text used for add-to-job and create-new-job (note to both jobs)."""
+    def _fmt_qty(q: float) -> str:
+        return f"{q:g}"
+
+    def _fmt_hours(h: float) -> str:
+        h_fmt = f"{h:g}" if h == int(h) else f"{h}"
+        return f"{h_fmt} hour" if h == 1 else f"{h_fmt} hours"
+
+    lines = [f"- {e.name} x {_fmt_qty(e.qty)}" for e in elements]
+    people_line = f"    - People Req = {people_count}" if people_count else None
+    note_body = [
+        user_name or "Quote App User",
+        *lines,
+        "",
+        f"Total Price = ${quote_total:.2f} exc gst",
+        f"- Total Time used = {_fmt_hours(labour_hours)}",
+    ]
+    if people_line:
+        note_body.append(people_line)
+    note_body.append(f"- Material Cost = ${material_cost:.2f} exc gst")
+    return "\n".join(note_body)
+
+
+@app.post("/api/servicem8/create-new-job")
+def api_servicem8_create_new_job(
+    body: CreateNewJobRequest,
+    user_id: Any = Depends(get_current_user_id),
+):
+    """
+    Create a new ServiceM8 job from the confirm popup (Create New Job Instead).
+    Uses our generated UUID; copies fields from original job; adds materials to new job only;
+    adds same note and diagram to both original and new job; copies job contact to new job.
+    """
+    tokens = sm8.get_tokens(str(user_id))
+    if not tokens:
+        raise HTTPException(401, "ServiceM8 not connected")
+    access_token = tokens["access_token"]
+
+    # Fetch original job (re-fetch by UUID so we have full body for copy)
+    original_job = sm8.fetch_job_by_uuid(access_token, body.original_job_uuid)
+    if not original_job:
+        raise HTTPException(400, "Original job not found")
+    if not original_job.get("company_uuid"):
+        raise HTTPException(400, "company_uuid missing — cannot create new job for this job")
+
+    new_job_uuid = str(uuid_lib.uuid4())
+
+    # Job description = same content as note (parts list, totals, etc.)
+    job_description = _build_job_note_text(
+        body.user_name,
+        body.elements,
+        body.quote_total,
+        body.labour_hours,
+        body.people_count,
+        body.material_cost,
+    )
+    job_description = "New job created via Jacks app for repairs.\n\n" + job_description
+
+    # Build create-job payload from original job (required: company_uuid; copy optional fields)
+    create_payload = {
+        "uuid": new_job_uuid,
+        "job_description": job_description,
+        "status": "Quote",
+        "company_uuid": original_job["company_uuid"],
+    }
+    for key in ("job_address", "lat", "lng", "billing_address", "geo_is_valid", "category_uuid", "badges"):
+        if key in original_job and original_job[key] is not None:
+            create_payload[key] = original_job[key]
+
+    ok, err = sm8.create_job(access_token, create_payload)
+    if not ok:
+        raise HTTPException(502, f"Failed to create job: {err or 'unknown'}")
+
+    # Add materials to new job (same format as add-to-job)
+    profile_label = "spouting"
+    if body.profile and body.profile.lower() == "stormcloud":
+        profile_label = "Stormcloud"
+    elif body.profile and body.profile.lower() == "classic":
+        profile_label = "Classic"
+    material_name = f"{profile_label} repairs, labour & materials"
+    price_str = f"{body.quote_total:.2f}"
+    cost_str = f"{body.material_cost:.2f}"
+    ok, err = sm8.add_job_material(
+        access_token,
+        new_job_uuid,
+        material_name,
+        "1",
+        price_str,
+        cost=cost_str,
+        displayed_amount=price_str,
+        displayed_cost=cost_str,
+    )
+    if not ok:
+        raise HTTPException(502, f"Failed to add materials to new job: {err or 'unknown'}")
+
+    # Add note to both jobs (identical content)
+    note_text = _build_job_note_text(
+        body.user_name,
+        body.elements,
+        body.quote_total,
+        body.labour_hours,
+        body.people_count,
+        body.material_cost,
+    )
+    ok, err = sm8.add_job_note(access_token, body.original_job_uuid, note_text)
+    if not ok:
+        raise HTTPException(502, f"Failed to add note to original job: {err or 'unknown'}")
+    ok, err = sm8.add_job_note(access_token, new_job_uuid, note_text)
+    if not ok:
+        raise HTTPException(502, f"Failed to add note to new job: {err or 'unknown'}")
+
+    # Add diagram to both jobs (same PNG)
+    if body.image_base64:
+        try:
+            image_bytes = base64.b64decode(body.image_base64, validate=True)
+        except Exception as e:
+            logger.warning("Create new job: invalid image_base64: %s", e)
+            raise HTTPException(400, "Invalid image_base64")
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(400, "Image too large (max 10MB)")
+        attachment_name = "Blueprint_Design.png"
+        for jid in (body.original_job_uuid, new_job_uuid):
+            ok, err, _ = sm8.upload_job_attachment(
+                access_token, jid, image_bytes, attachment_name=attachment_name, file_type=".png"
+            )
+            if not ok:
+                raise HTTPException(502, f"Failed to attach blueprint to job: {err or 'unknown'}")
+
+    # Job contact: get from original, create BILLING on new job (skip if no contact)
+    contacts = sm8.get_job_contacts(access_token, body.original_job_uuid)
+    if contacts:
+        # Prefer first BILLING; else first contact
+        contact = None
+        for c in contacts:
+            if (c.get("type") or "").upper() == "BILLING":
+                contact = c
+                break
+        if contact is None:
+            contact = contacts[0]
+        contact_payload = {
+            "job_uuid": new_job_uuid,
+            "type": "BILLING",
+            "first": contact.get("first") or "",
+            "last": contact.get("last") or "",
+            "phone": contact.get("phone") or "",
+            "mobile": contact.get("mobile") or "",
+            "email": contact.get("email") or "",
+        }
+        ok, err = sm8.create_job_contact(access_token, contact_payload)
+        if not ok:
+            raise HTTPException(502, f"Failed to create job contact: {err or 'unknown'}")
+
+    return {"success": True, "new_job_uuid": new_job_uuid}
 
 
 # Serve static frontend and assets (must be after API routes)
