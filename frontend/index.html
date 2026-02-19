@@ -29,6 +29,7 @@
 
       <div class="toolbar-right">
         <div class="toolbar-actions-secondary">
+          <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="Not connected to ServiceM8" aria-label="ServiceM8 not connected" hidden>⚠</span>
           <button type="button" class="toolbar-icon-btn btn-icon" id="exportBtn" title="Download blueprint with all products as PNG" aria-label="Export PNG">
             <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -495,6 +496,7 @@
           </button>
           <span id="servicem8Feedback" class="quote-servicem8-feedback quote-servicem8-feedback--success quote-servicem8-feedback--hidden" aria-live="polite">Success</span>
         </div>
+        <p id="quoteServicem8DisabledReason" class="quote-servicem8-disabled-reason" aria-live="polite" hidden></p>
       </div>
       <!-- JobConfirmationOverlay: centered over Quote modal; onConfirm, onCreateNew, onClose -->
       <div class="job-confirm-overlay" id="jobConfirmOverlay" role="dialog" aria-labelledby="jobConfirmTitle" aria-modal="true" hidden>
@@ -527,8 +529,16 @@
             </div>
           </div>
           <div class="job-confirm-actions">
-            <button type="button" class="job-confirm-create-new" id="jobConfirmCreateNew">Create New Job Instead</button>
-            <button type="button" class="job-confirm-add-btn" id="jobConfirmAddBtn">Add to Job #<span id="jobConfirmAddId"></span></button>
+            <button type="button" class="job-confirm-create-new" id="jobConfirmCreateNew">
+              <span class="job-confirm-btn-text">Create New Job Instead</span>
+              <span class="job-confirm-spinner job-confirm-spinner--blue" aria-hidden="true"></span>
+              <span class="job-confirm-done" aria-hidden="true">✅</span>
+            </button>
+            <button type="button" class="job-confirm-add-btn" id="jobConfirmAddBtn">
+              <span class="job-confirm-btn-text">Add to Job #<span id="jobConfirmAddId"></span></span>
+              <span class="job-confirm-spinner job-confirm-spinner--white" aria-hidden="true"></span>
+              <span class="job-confirm-done" aria-hidden="true">✅</span>
+            </button>
           </div>
         </div>
       </div>

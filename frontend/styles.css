@@ -238,6 +238,18 @@ body {
   gap: 4px;
 }
 
+.toolbar-servicem8-warning {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 1;
+  color: #c62828;
+  flex-shrink: 0;
+}
+
 .toolbar-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -2051,20 +2063,62 @@ body {
   color: #666;
   font-size: 13px;
 }
+.diagram-item-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.diagram-item-wrap:hover .diagram-item-delete {
+  opacity: 1;
+}
 .diagram-item {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  cursor: pointer;
+  padding: 10px 40px 10px 12px;
   border: none;
-  background: none;
-  width: 100%;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
   text-align: left;
   font-size: 14px;
+  color: inherit;
+  min-width: 0;
 }
 .diagram-item:hover {
   background: #f0f8ff;
+}
+.diagram-item-delete {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #c62828;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+.diagram-item-delete:hover {
+  background: #b71c1c;
+}
+.diagram-item-delete:focus {
+  outline: 2px solid #c62828;
+  outline-offset: 2px;
 }
 .diagram-item-thumb {
   width: 64px;
@@ -2651,6 +2705,13 @@ body {
   pointer-events: none;
 }
 
+.quote-servicem8-disabled-reason {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #c62828;
+  font-weight: 500;
+}
+
 .quote-servicem8-job-input:disabled,
 .quote-servicem8-btn:disabled {
   cursor: not-allowed;
@@ -3130,6 +3191,78 @@ body {
 }
 .job-confirm-add-btn:hover {
   background: #4cae4c;
+}
+
+/* Overlay button loaders and tick (52.3, 52.4): same pattern as quote-servicem8-btn */
+.job-confirm-add-btn,
+.job-confirm-create-new {
+  position: relative;
+  min-width: 140px;
+}
+.job-confirm-add-btn .job-confirm-btn-text,
+.job-confirm-add-btn .job-confirm-spinner,
+.job-confirm-add-btn .job-confirm-done,
+.job-confirm-create-new .job-confirm-btn-text,
+.job-confirm-create-new .job-confirm-spinner,
+.job-confirm-create-new .job-confirm-done {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.job-confirm-add-btn .job-confirm-spinner,
+.job-confirm-add-btn .job-confirm-done,
+.job-confirm-create-new .job-confirm-spinner,
+.job-confirm-create-new .job-confirm-done {
+  opacity: 0;
+}
+.job-confirm-add-btn.job-confirm-add-btn--loading .job-confirm-btn-text,
+.job-confirm-create-new.job-confirm-create-new--loading .job-confirm-btn-text {
+  opacity: 0;
+}
+.job-confirm-add-btn.job-confirm-add-btn--loading .job-confirm-spinner,
+.job-confirm-create-new.job-confirm-create-new--loading .job-confirm-spinner {
+  opacity: 1;
+}
+.job-confirm-add-btn.job-confirm-add-btn--done .job-confirm-btn-text,
+.job-confirm-add-btn.job-confirm-add-btn--done .job-confirm-spinner,
+.job-confirm-create-new.job-confirm-create-new--done .job-confirm-btn-text,
+.job-confirm-create-new.job-confirm-create-new--done .job-confirm-spinner {
+  opacity: 0;
+}
+.job-confirm-add-btn.job-confirm-add-btn--done .job-confirm-done,
+.job-confirm-create-new.job-confirm-create-new--done .job-confirm-done {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.job-confirm-add-btn .job-confirm-done,
+.job-confirm-create-new .job-confirm-done {
+  transform: scale(0);
+}
+.job-confirm-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: job-confirm-spin 0.7s linear infinite;
+}
+.job-confirm-spinner--white {
+  border-top-color: #fff;
+}
+.job-confirm-spinner--blue {
+  border-color: rgba(37, 99, 235, 0.35);
+  border-top-color: #2563eb;
+}
+@keyframes job-confirm-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .quote-servicem8-btn:disabled {

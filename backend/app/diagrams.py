@@ -19,11 +19,11 @@ def _storage_path(user_id: UUID, diagram_id: UUID, filename: str) -> str:
 
 
 def list_diagrams(user_id: UUID):
-    """Return list of saved diagrams for user (id, name, thumbnail_url, created_at, updated_at)."""
+    """Return list of saved diagrams for user (id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, created_at, updated_at)."""
     supabase = get_supabase()
     resp = (
         supabase.table("saved_diagrams")
-        .select("id, name, thumbnail_url, created_at, updated_at")
+        .select("id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, created_at, updated_at")
         .eq("user_id", str(user_id))
         .order("created_at", desc=True)
         .execute()
@@ -34,6 +34,8 @@ def list_diagrams(user_id: UUID):
             "id": str(r["id"]),
             "name": r.get("name", ""),
             "thumbnailUrl": r.get("thumbnail_url"),
+            "blueprintImageUrl": r.get("blueprint_image_url"),
+            "servicem8JobId": r.get("servicem8_job_id"),
             "createdAt": r.get("created_at"),
             "updatedAt": r.get("updated_at"),
         }
@@ -62,6 +64,7 @@ def get_diagram(user_id: UUID, diagram_id: UUID) -> Optional[dict]:
         "data": r.get("data") or {},
         "blueprintImageUrl": r.get("blueprint_image_url"),
         "thumbnailUrl": r.get("thumbnail_url"),
+        "servicem8JobId": r.get("servicem8_job_id"),
         "createdAt": r.get("created_at"),
         "updatedAt": r.get("updated_at"),
     }
@@ -74,6 +77,7 @@ def create_diagram(
     *,
     blueprint_bytes: Optional[bytes] = None,
     thumbnail_bytes: Optional[bytes] = None,
+    servicem8_job_id: Optional[str] = None,
 ) -> dict:
     """Insert row and optionally upload blueprint/thumbnail to Storage. Returns created diagram meta."""
     supabase = get_supabase()
@@ -82,6 +86,8 @@ def create_diagram(
         "name": name,
         "data": data,
     }
+    if servicem8_job_id is not None:
+        insert["servicem8_job_id"] = servicem8_job_id[:32] if servicem8_job_id else None
     resp = supabase.table("saved_diagrams").insert(insert).execute()
     rows = resp.data or []
     if not rows:
@@ -120,6 +126,7 @@ def create_diagram(
         "name": name,
         "blueprintImageUrl": blueprint_url,
         "thumbnailUrl": thumbnail_url,
+        "servicem8JobId": insert.get("servicem8_job_id"),
         "createdAt": row.get("created_at"),
         "updatedAt": row.get("updated_at"),
     }
@@ -133,6 +140,7 @@ def update_diagram(
     data: Optional[dict] = None,
     blueprint_bytes: Optional[bytes] = None,
     thumbnail_bytes: Optional[bytes] = None,
+    servicem8_job_id: Optional[str] = None,
 ) -> Optional[dict]:
     """Update diagram; optionally replace image/thumbnail. Returns updated row or None if not found."""
     existing = get_diagram(user_id, diagram_id)
@@ -144,6 +152,8 @@ def update_diagram(
         updates["name"] = name
     if data is not None:
         updates["data"] = data
+    if servicem8_job_id is not None:
+        updates["servicem8_job_id"] = servicem8_job_id[:32] if servicem8_job_id else None
 
     if blueprint_bytes:
         path = _storage_path(user_id, diagram_id, "blueprint.png")

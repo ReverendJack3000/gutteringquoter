@@ -1449,6 +1449,15 @@ function initQuoteModal() {
         showMessage('Enter a job number (1–5 digits) to add materials to an existing job.', 'info');
         return;
       }
+      const labourRows = getLabourRowsOrdered();
+      let labourHours = 0;
+      labourRows.forEach((row) => {
+        labourHours += parseFloat(row.querySelector('.quote-labour-hours-input')?.value) || 0;
+      });
+      if (labourHours <= 0) {
+        showMessage('Add labour hours to the quote before adding to a job.', 'info');
+        return;
+      }
       if (servicem8AddToJobBtn.classList.contains('quote-servicem8-btn--loading')) return;
       runAddToJobLookupAndConfirm(servicem8AddToJobBtn, jobId);
     });
@@ -1560,6 +1569,7 @@ function updateServiceM8SectionState(hasIncomplete) {
   const section = document.getElementById('quoteServicem8Section');
   const input = document.getElementById('servicem8JobIdInput');
   const btn = document.getElementById('servicem8AddToJobBtn');
+  const reasonEl = document.getElementById('quoteServicem8DisabledReason');
   if (!section || !input || !btn) return;
   // Disable if manual entries incomplete OR ServiceM8 not connected
   const shouldDisable = hasIncomplete || !window.servicem8Connected;
@@ -1567,10 +1577,17 @@ function updateServiceM8SectionState(hasIncomplete) {
     section.classList.add('quote-servicem8-section--disabled');
     input.disabled = true;
     btn.disabled = true;
+    if (reasonEl) {
+      reasonEl.textContent = !window.servicem8Connected
+        ? 'Not signed in to ServiceM8'
+        : 'Complete manual entries (Metres?) first';
+      reasonEl.hidden = false;
+    }
   } else {
     section.classList.remove('quote-servicem8-section--disabled');
     input.disabled = false;
     btn.disabled = false;
+    if (reasonEl) reasonEl.hidden = true;
     updateServicem8InputState();
   }
 }
@@ -1681,7 +1698,12 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
       overlay.removeAttribute('hidden');
       overlay.dataset.jobUuid = job.uuid || '';
       const addBtnOverlay = document.getElementById('jobConfirmAddBtn');
-      if (addBtnOverlay) addBtnOverlay.disabled = false;
+      const createNewOverlay = document.getElementById('jobConfirmCreateNew');
+      if (addBtnOverlay) {
+        addBtnOverlay.disabled = false;
+        addBtnOverlay.classList.remove('job-confirm-add-btn--loading', 'job-confirm-add-btn--done');
+      }
+      if (createNewOverlay) createNewOverlay.classList.remove('job-confirm-create-new--loading', 'job-confirm-create-new--done');
     }
   } catch (err) {
     console.error('Add to Job lookup failed', err);
@@ -1795,6 +1817,7 @@ function initJobConfirmationOverlay() {
       return;
     }
     addBtn.disabled = true;
+    addBtn.classList.add('job-confirm-add-btn--loading');
     try {
       const resp = await fetch('/api/servicem8/add-to-job', {
         method: 'POST',
@@ -1808,12 +1831,13 @@ function initJobConfirmationOverlay() {
       if (!resp.ok) {
         const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to add to job.';
         showFeedback(msg, true);
+        addBtn.classList.remove('job-confirm-add-btn--loading');
         addBtn.disabled = false;
         return;
       }
-      hideOverlay();
       const jobUuidForAttachment = payload.job_uuid;
       const dataUrl = getExportCanvasDataURL();
+      let feedbackMsg = 'Added to job successfully.';
       if (dataUrl && jobUuidForAttachment) {
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
         try {
@@ -1825,25 +1849,25 @@ function initJobConfirmationOverlay() {
             },
             body: JSON.stringify({ job_uuid: jobUuidForAttachment, image_base64: base64 }),
           });
-          const attachData = await attachResp.json().catch(() => ({}));
-          if (!attachResp.ok) {
-            showFeedback('Added to job successfully. Blueprint could not be attached.', false);
-          } else {
-            if (attachData.servicem8 != null) {
-              const sm8 = attachData.servicem8;
-              console.log('[ServiceM8 attachment] response:', sm8, '| active:', sm8.active);
-            }
-            showFeedback('Added to job successfully. Blueprint attached.', false);
-          }
+          feedbackMsg = attachResp.ok ? 'Added to job successfully. Blueprint attached.' : 'Added to job successfully. Blueprint could not be attached.';
         } catch (_) {
-          showFeedback('Added to job successfully. Blueprint could not be attached.', false);
+          feedbackMsg = 'Added to job successfully. Blueprint could not be attached.';
         }
-      } else {
-        showFeedback('Added to job successfully.', false);
       }
+      addBtn.classList.remove('job-confirm-add-btn--loading');
+      addBtn.classList.add('job-confirm-add-btn--done');
+      const jobNumberForSave = document.getElementById('jobConfirmAddId')?.textContent?.trim() || '';
+      setTimeout(() => {
+        hideOverlay();
+        showFeedback(feedbackMsg, false);
+        addBtn.classList.remove('job-confirm-add-btn--done');
+        addBtn.disabled = false;
+        if (jobNumberForSave) autoSaveDiagramWithJobNumber(jobNumberForSave);
+      }, 800);
     } catch (err) {
       console.error('Add to Job failed', err);
       showFeedback('Network error. Try again.', true);
+      addBtn.classList.remove('job-confirm-add-btn--loading');
       addBtn.disabled = false;
     }
   };
@@ -1875,7 +1899,10 @@ function initJobConfirmationOverlay() {
       people_count: payload.people_count,
       image_base64: imageBase64,
     };
-    if (createNewBtn) createNewBtn.disabled = true;
+    if (createNewBtn) {
+      createNewBtn.disabled = true;
+      createNewBtn.classList.add('job-confirm-create-new--loading');
+    }
     try {
       const resp = await fetch('/api/servicem8/create-new-job', {
         method: 'POST',
@@ -1889,15 +1916,33 @@ function initJobConfirmationOverlay() {
       if (!resp.ok) {
         const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to create new job.';
         showFeedback(msg, true);
+        if (createNewBtn) {
+          createNewBtn.classList.remove('job-confirm-create-new--loading');
+          createNewBtn.disabled = false;
+        }
         return;
       }
-      hideOverlay();
-      showFeedback('New job created. Note and blueprint added to both jobs.', false);
+      if (createNewBtn) {
+        createNewBtn.classList.remove('job-confirm-create-new--loading');
+        createNewBtn.classList.add('job-confirm-create-new--done');
+      }
+      const newJobNumber = data.generated_job_id || data.new_job_uuid || '';
+      setTimeout(() => {
+        hideOverlay();
+        showFeedback('New job created. Note and blueprint added to both jobs.', false);
+        if (createNewBtn) {
+          createNewBtn.classList.remove('job-confirm-create-new--done');
+          createNewBtn.disabled = false;
+        }
+        if (newJobNumber) autoSaveDiagramWithJobNumber(newJobNumber);
+      }, 800);
     } catch (err) {
       console.error('Create New Job failed', err);
       showFeedback('Network error. Try again.', true);
-    } finally {
-      if (createNewBtn) createNewBtn.disabled = false;
+      if (createNewBtn) {
+        createNewBtn.classList.remove('job-confirm-create-new--loading');
+        createNewBtn.disabled = false;
+      }
     }
   };
 
@@ -2678,7 +2723,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = profile;
-      headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -2736,7 +2781,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = sectionHeaderId;
-      headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.001" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -6262,6 +6307,37 @@ function getDiagramDataForSave() {
   return { data, blueprintImageBase64, thumbnailBase64 };
 }
 
+/**
+ * Auto-save current diagram with a ServiceM8 Job # stamp (after Add to Job or Create New Job).
+ * Creates a new saved project with name "ProjectName (Job #123)" and servicem8JobId set.
+ */
+function autoSaveDiagramWithJobNumber(jobNumber) {
+  if (!jobNumber || !authState.token) return;
+  const projectNameInput = document.getElementById('toolbarProjectNameInput');
+  const projectName = (projectNameInput?.value || '').trim() || 'Untitled';
+  const name = projectName + ' (Job #' + jobNumber + ')';
+  const { data, blueprintImageBase64, thumbnailBase64 } = getDiagramDataForSave();
+  const body = {
+    name,
+    data,
+    blueprintImageBase64: blueprintImageBase64 || undefined,
+    thumbnailBase64: thumbnailBase64 || undefined,
+    servicem8JobId: String(jobNumber),
+  };
+  fetch('/api/diagrams', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+    .then((res) => {
+      if (res.ok) {
+        if (typeof window.__quoteAppRefreshDiagramsList === 'function') window.__quoteAppRefreshDiagramsList();
+        showMessage('Project saved with Job #' + jobNumber + '.', 'success');
+      }
+    })
+    .catch(() => {});
+}
+
 /** Restore canvas from API snapshot (no blueprintImageRef; optional blueprint_image_url). */
 async function restoreStateFromApiSnapshot(apiSnapshot) {
   const d = apiSnapshot.data || {};
@@ -6298,9 +6374,11 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
       } catch (err) {
         console.warn('Failed to load blueprint image from URL', err);
         state.blueprintImage = null;
+        showMessage('Blueprint image could not be loaded.', 'info');
       }
     } else {
       state.blueprintImage = null;
+      if (d.hasBlueprint) showMessage('Blueprint image was not saved with this project.', 'info');
     }
   }
   setSelection([]);
@@ -6469,11 +6547,17 @@ function initAuth() {
  * Check if user has connected ServiceM8 account.
  * Updates UI to show "Connect" or "Disconnect" accordingly.
  */
+function updateServicem8ToolbarWarning() {
+  const el = document.getElementById('servicem8ExportWarning');
+  if (el) el.hidden = window.servicem8Connected === true;
+}
+
 async function checkServiceM8Status() {
   if (!authState.token) {
     const menuItem = document.getElementById('menuItemServiceM8');
     if (menuItem) menuItem.style.display = 'none';
     window.servicem8Connected = false;
+    updateServicem8ToolbarWarning();
     return;
   }
 
@@ -6493,6 +6577,7 @@ async function checkServiceM8Status() {
       menuItem.style.display = 'block';
     }
     window.servicem8Connected = data.connected || false;
+    updateServicem8ToolbarWarning();
     // Update quote modal ServiceM8 section state if modal is open
     const modal = document.getElementById('quoteModal');
     if (modal && !modal.hasAttribute('hidden')) {
@@ -6502,6 +6587,7 @@ async function checkServiceM8Status() {
   } catch (e) {
     console.error('Failed to check ServiceM8 status:', e);
     window.servicem8Connected = false;
+    updateServicem8ToolbarWarning();
   }
 }
 
@@ -7308,7 +7394,12 @@ function initDiagrams() {
     });
   }
 
+  const diagramItemFallbackThumb = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect fill="%23eee" width="64" height="48"/><text x="32" y="26" text-anchor="middle" fill="%23999" font-size="12">No preview</text></svg>';
+
   function createDiagramItem(item) {
+    const wrap = document.createElement('div');
+    wrap.className = 'diagram-item-wrap';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'diagram-item';
@@ -7316,7 +7407,8 @@ function initDiagrams() {
     const thumb = document.createElement('img');
     thumb.className = 'diagram-item-thumb';
     thumb.alt = '';
-    thumb.src = item.thumbnailUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect fill="%23eee" width="64" height="48"/><text x="32" y="26" text-anchor="middle" fill="%23999" font-size="12">No preview</text></svg>';
+    thumb.src = item.thumbnailUrl || item.blueprintImageUrl || diagramItemFallbackThumb;
+    thumb.onerror = function () { this.src = diagramItemFallbackThumb; };
     const info = document.createElement('div');
     info.className = 'diagram-item-info';
     const nameEl = document.createElement('div');
@@ -7329,25 +7421,50 @@ function initDiagrams() {
     info.appendChild(dateEl);
     btn.appendChild(thumb);
     btn.appendChild(info);
-        btn.addEventListener('click', async () => {
-          closeDropdown();
-          closeProjectHistoryDropdown();
-          try {
-            preLoadSnapshot = capturePreLoadSnapshot();
-            updateGoBackButtonVisibility();
-            const r = await fetch('/api/diagrams/' + item.id, { headers: authHeaders() });
-            if (!r.ok) throw new Error('Failed to load');
-            const diagram = await r.json();
-            await restoreStateFromApiSnapshot(diagram);
-            updateToolbarBreadcrumbs(diagram.name || null);
-            showMessage('Diagram loaded.', 'success');
-          } catch (err) {
-            preLoadSnapshot = null;
-            updateGoBackButtonVisibility();
-            showMessage('Could not load diagram.', 'error');
-          }
-        });
-    return btn;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'diagram-item-delete';
+    deleteBtn.setAttribute('aria-label', 'Delete this saved project');
+    deleteBtn.innerHTML = '−';
+    deleteBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!confirm('Permanently delete this saved project? This cannot be undone.')) return;
+      (async () => {
+        try {
+          const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: authHeaders() });
+          if (!r.ok) throw new Error('Delete failed');
+          refreshDiagramsList();
+          showMessage('Project deleted.', 'success');
+        } catch (err) {
+          showMessage('Could not delete project.', 'error');
+        }
+      })();
+    });
+
+    wrap.appendChild(btn);
+    wrap.appendChild(deleteBtn);
+
+    btn.addEventListener('click', async () => {
+      closeDropdown();
+      closeProjectHistoryDropdown();
+      try {
+        preLoadSnapshot = capturePreLoadSnapshot();
+        updateGoBackButtonVisibility();
+        const r = await fetch('/api/diagrams/' + item.id, { headers: authHeaders() });
+        if (!r.ok) throw new Error('Failed to load');
+        const diagram = await r.json();
+        await restoreStateFromApiSnapshot(diagram);
+        updateToolbarBreadcrumbs(diagram.name || null);
+        showMessage('Diagram loaded.', 'success');
+      } catch (err) {
+        preLoadSnapshot = null;
+        updateGoBackButtonVisibility();
+        showMessage('Could not load diagram.', 'error');
+      }
+    });
+    return wrap;
   }
 
   async function refreshDiagramsList() {
@@ -7373,6 +7490,7 @@ function initDiagrams() {
       listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
     }
   }
+  if (typeof window !== 'undefined') window.__quoteAppRefreshDiagramsList = refreshDiagramsList;
 }
 
 function initPanel() {
@@ -7878,6 +7996,7 @@ function init() {
   authReady.then(() => {
     if (authState.token) {
       switchView('view-canvas');
+      updateServicem8ToolbarWarning();
     } else {
       switchView('view-login');
     }

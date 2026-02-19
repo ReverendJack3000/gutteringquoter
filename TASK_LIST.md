@@ -8,8 +8,12 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/section-33-52
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 33.2 Load blueprint image when loading from project
+  - [x] 52.1–52.6 Quote modal & ServiceM8 UI enhancements
 
 **Uncompleted tasks (by section):**
 
@@ -35,7 +39,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-
 ---
 
 ## Locked decisions
@@ -159,6 +162,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 *Context: Allow users to persist and reload full diagram/blueprint state as project files.*
 
 - [x] **33.1** Ability to save diagrams/blueprints as project files (e.g. export to .json or save to backend; load from file or backend to restore blueprint + elements + view state).
+- [x] **33.2** When loading from a project (saved diagram), load the **blueprint image** as well; currently only elements are restored and the blueprint image is not. Enhance save/load so the blueprint image is persisted and restored.
 
 ---
 
@@ -1160,6 +1164,27 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [x] **51.6** Confirm Job Details popup: Display the job’s **total_invoice_amount** and also show that value **divided by 1.15** with an explicit **"exc gst"** label after both values (e.g. "X inc gst" and "Y exc gst").
 - [ ] **51.7** Confirm Job Details popup: Further refine UI (spacing, alignment, typography, responsive behaviour) as needed.
+
+---
+
+## 52. Quote modal and ServiceM8 UI enhancements
+
+*Context: Enhance quote modal and ServiceM8 UX without affecting existing functionality. Ensure all changes are non-breaking (e.g. loaders match existing add-to-job button behaviour; explanations only additive).*
+
+**Quote modal – labour and header row**
+
+- [x] **52.1** Add a **warning** when the user clicks Add to Job (or opens the Add to Job flow) if **no labour** is included on the quote (e.g. no labour row or zero labour hours). Display a clear warning so the user can add labour before sending to ServiceM8.
+- [x] **52.2** Header row **qty** inline editing (Metres? / length field): change increment from **0.001** to **0.5** for increase/decrease (e.g. spinner, arrow keys, or stepper) so adjustments are practical; 0.001 is impractically small.
+
+**Confirm Job overlay – loaders and tick**
+
+- [x] **52.3** **Add to Job #...** button (in Confirm Job Details overlay): when clicked, show the **white spinning load wheel** and then the **centralised tick emoji** when done — same UI as the original Add to Job button in the quote footer (implemented before the popup existed).
+- [x] **52.4** **Create New Job Instead** button (in Confirm Job Details overlay): when clicked, show the **blue spinning load wheel** and then the **centralised tick emoji** when done — same style as used for the original add-to-job button before the popup.
+
+**ServiceM8 connection and greyed-out state**
+
+- [x] **52.5** When the user is **not signed into ServiceM8**, display a **warning symbol** to the left of the **download (Export)** icon in the canvas view toolbar (top left area). Visible only when ServiceM8 is not connected.
+- [x] **52.6** When the **Add to Job** section (Job # input and Add to Job button) is **greyed out**, display **small red text** explaining why: e.g. "Not signed in to ServiceM8" or "Complete manual entries (Metres?) first" / "Missing materials" as appropriate. Ensures users understand why the section is disabled.
 
 ---
 

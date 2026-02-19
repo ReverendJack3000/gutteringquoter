@@ -57,6 +57,7 @@ class SaveDiagramRequest(BaseModel):
     data: dict[str, Any] = Field(..., description="Canvas state: elements, blueprintTransform, groups")
     blueprintImageBase64: Optional[str] = Field(None, description="PNG image as base64 data URL or raw base64")
     thumbnailBase64: Optional[str] = Field(None, description="Thumbnail PNG as base64")
+    servicem8JobId: Optional[str] = Field(None, max_length=32, description="ServiceM8 job number to stamp on the saved project")
 
 
 class UpdateDiagramRequest(BaseModel):
@@ -64,6 +65,7 @@ class UpdateDiagramRequest(BaseModel):
     data: Optional[dict[str, Any]] = Field(None)
     blueprintImageBase64: Optional[str] = None
     thumbnailBase64: Optional[str] = None
+    servicem8JobId: Optional[str] = Field(None, max_length=32)
 
 
 class AddToJobElement(BaseModel):
@@ -352,6 +354,7 @@ def api_create_diagram(body: SaveDiagramRequest, user_id: Any = Depends(get_curr
             body.data,
             blueprint_bytes=blueprint_bytes,
             thumbnail_bytes=thumbnail_bytes,
+            servicem8_job_id=body.servicem8JobId,
         )
         return created
     except Exception as e:
@@ -394,6 +397,7 @@ def api_update_diagram(
         data=body.data,
         blueprint_bytes=blueprint_bytes,
         thumbnail_bytes=thumbnail_bytes,
+        servicem8_job_id=body.servicem8JobId,
     )
     if not updated:
         raise HTTPException(404, "Diagram not found")
@@ -767,7 +771,9 @@ def api_servicem8_create_new_job(
         if not ok:
             raise HTTPException(502, f"Failed to create job contact: {err or 'unknown'}")
 
-    return {"success": True, "new_job_uuid": new_job_uuid}
+    new_job = sm8.fetch_job_by_uuid(access_token, new_job_uuid)
+    generated_job_id = new_job.get("generated_job_id") if new_job else None
+    return {"success": True, "new_job_uuid": new_job_uuid, "generated_job_id": generated_job_id}
 
 
 # Serve static frontend and assets (must be after API routes)
