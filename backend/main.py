@@ -631,9 +631,10 @@ def _build_job_note_text(
         "",
         f"Total Price = ${quote_total:.2f} exc gst",
         f"- Total Time used = {_fmt_hours(labour_hours)}",
-        f"- People Req = {people_count}",
-        f"- Material Cost = ${material_cost:.2f} exc gst",
     ]
+    if people_count:
+        note_body.append(f"    - People Req = {people_count}")
+    note_body.append(f"- Material Cost = ${material_cost:.2f} exc gst")
     return "\n".join(note_body)
 
 
