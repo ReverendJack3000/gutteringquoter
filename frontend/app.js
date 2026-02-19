@@ -433,6 +433,7 @@ let hasPricingChanges = false;
 
 const MAX_UNDO_HISTORY = 50;
 let undoHistory = [];
+let redoHistory = [];
 let blueprintUndoHistory = []; // Separate stack for blueprint moves/resize/rotate so Ctrl+Z doesn't undo background when tweaking parts
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
@@ -4273,6 +4274,8 @@ async function restoreStateFromSnapshot(snapshot) {
 function pushUndoSnapshot() {
   undoHistory.push(cloneStateForUndo());
   if (undoHistory.length > MAX_UNDO_HISTORY) undoHistory.shift();
+  redoHistory.length = 0;
+  updateUndoRedoButtons?.();
 }
 
 async function undo() {
@@ -4280,11 +4283,27 @@ async function undo() {
   state.mode = null;
   state.resizeHandle = null;
   state.snapshotAtActionStart = null;
+  redoHistory.push(cloneStateForUndo());
+  if (redoHistory.length > MAX_UNDO_HISTORY) redoHistory.shift();
   const snapshot = undoHistory.pop();
   await restoreStateFromSnapshot(snapshot);
   updatePlaceholderVisibility();
   renderMeasurementDeck();
   draw();
+  updateUndoRedoButtons?.();
+}
+
+async function redo() {
+  if (redoHistory.length === 0) return;
+  state.mode = null;
+  state.resizeHandle = null;
+  state.snapshotAtActionStart = null;
+  const snapshot = redoHistory.pop();
+  await restoreStateFromSnapshot(snapshot);
+  updatePlaceholderVisibility();
+  renderMeasurementDeck();
+  draw();
+  updateUndoRedoButtons?.();
 }
 
 /** Capture full state (canvas, view, project name) before loading a saved diagram. */
@@ -5517,102 +5536,192 @@ function resizeCanvas() {
   }
 }
 
-const DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN = 'quoteApp_diagramToolbarHidden';
+const DIAGRAM_TOOLBAR_STORAGE_KEY_X = 'quoteApp_diagramToolbarX';
+const DIAGRAM_TOOLBAR_STORAGE_KEY_Y = 'quoteApp_diagramToolbarY';
+const DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION = 'quoteApp_diagramToolbarOrientation';
+const DIAGRAM_TOOLBAR_EDGE_THRESHOLD = 0.2; // left 20% / right 80% of wrap width → vertical
+
+/** 54.33: Cleanup from previous initDiagramToolbarDrag run (listeners + ResizeObserver). Run before re-init to avoid duplicates. */
+let diagramToolbarDragCleanup = null;
+
+function getDiagramToolbarWrap() {
+  const toolbar = document.getElementById('diagramFloatingToolbar');
+  return toolbar ? toolbar.closest('.blueprint-wrap') : null;
+}
+
+function applyDiagramToolbarPosition(toolbar, x, y, orientation) {
+  if (!toolbar) return;
+  toolbar.style.left = x + 'px';
+  toolbar.style.top = y + 'px';
+  toolbar.style.transform = 'none';
+  toolbar.setAttribute('data-orientation', orientation || 'horizontal');
+}
+
+function clampDiagramToolbarToWrap(toolbar, wrap) {
+  if (!toolbar || !wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const toolRect = toolbar.getBoundingClientRect();
+  const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
+  const tw = toolRect.width;
+  const th = toolRect.height;
+  const ww = wrapRect.width;
+  const wh = wrapRect.height;
+  const pad = 8;
+  let left = parseFloat(toolbar.style.left) || 0;
+  let top = parseFloat(toolbar.style.top) || 0;
+  left = Math.max(pad, Math.min(ww - (isVertical ? th : tw) - pad, left));
+  top = Math.max(pad, Math.min(wh - (isVertical ? tw : th) - pad, top));
+  toolbar.style.left = left + 'px';
+  toolbar.style.top = top + 'px';
+}
 
 function initDiagramToolbarDrag() {
   const toolbar = document.getElementById('diagramFloatingToolbar');
   const dragHandle = document.getElementById('diagramToolbarDragHandle');
-  if (!toolbar || !dragHandle) return;
-  
-  // Only enable drag on mobile
-  if (layoutState.viewportMode !== 'mobile') {
-    dragHandle.style.display = 'none';
-    toolbar.classList.remove('diagram-toolbar-hidden');
-    return;
+  const wrap = getDiagramToolbarWrap();
+  if (!toolbar || !dragHandle || !wrap) return;
+
+  if (typeof diagramToolbarDragCleanup === 'function') {
+    diagramToolbarDragCleanup();
+    diagramToolbarDragCleanup = null;
   }
-  
+
+  const orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || 'horizontal';
+  let x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
+  let y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
+  const wrapRect = wrap.getBoundingClientRect();
+  const toolRect = toolbar.getBoundingClientRect();
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    x = (wrapRect.width - toolRect.width) / 2;
+    y = 12;
+  }
+  applyDiagramToolbarPosition(toolbar, x, y, orient);
+  toolbar.classList.remove('diagram-toolbar-hidden');
+  dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
+  dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
 
-  let hidden = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN) === 'true';
-  
-  function applyState() {
-    toolbar.classList.toggle('diagram-toolbar-hidden', hidden);
-    dragHandle.setAttribute('aria-label', hidden ? 'Drag down to show toolbar' : 'Drag up to hide toolbar');
-    dragHandle.title = hidden ? 'Drag down to show toolbar' : 'Drag up to hide toolbar';
-  }
-
-  applyState();
-
+  let dragStartX = 0;
   let dragStartY = 0;
-  let dragStartTime = 0;
-  let isDragging = false;
-  let hasMoved = false;
+  let toolbarStartLeft = 0;
+  let toolbarStartTop = 0;
+  let dragPointerId = null;
 
-  function handleDragStart(e) {
-    if (e.button !== 0 && e.type !== 'touchstart') return;
+  function updateOrientationFromPosition() {
+    const wr = wrap.getBoundingClientRect();
+    const tr = toolbar.getBoundingClientRect();
+    const centerX = tr.left - wr.left + tr.width / 2;
+    const thresholdLeft = wr.width * DIAGRAM_TOOLBAR_EDGE_THRESHOLD;
+    const thresholdRight = wr.width * (1 - DIAGRAM_TOOLBAR_EDGE_THRESHOLD);
+    if (centerX <= thresholdLeft) {
+      toolbar.setAttribute('data-orientation', 'vertical');
+      toolbar.style.left = '12px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, '12');
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'vertical');
+    } else if (centerX >= thresholdRight) {
+      toolbar.setAttribute('data-orientation', 'vertical');
+      const tw = toolbar.getBoundingClientRect().width;
+      const newLeft = wr.width - tw - 12;
+      toolbar.style.left = newLeft + 'px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(newLeft));
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'vertical');
+    } else {
+      toolbar.setAttribute('data-orientation', 'horizontal');
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
+    }
+  }
+
+  function onPointerDown(e) {
+    if (e.button !== 0 && e.pointerType !== 'touch') return;
     e.preventDefault();
     e.stopPropagation();
-    isDragging = true;
-    hasMoved = false;
-    dragStartY = e.touches ? e.touches[0].clientY : e.clientY;
-    dragStartTime = Date.now();
+    dragPointerId = e.pointerId;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    toolbarStartLeft = parseFloat(toolbar.style.left) || 0;
+    toolbarStartTop = parseFloat(toolbar.style.top) || 0;
+    toolbar.style.transition = 'none';
     dragHandle.style.cursor = 'grabbing';
+    try {
+      toolbar.setPointerCapture(e.pointerId);
+    } catch (_) {}
   }
 
-  function handleDragMove(e) {
-    if (!isDragging) return;
+  function onPointerMove(e) {
+    if (dragPointerId == null || e.pointerId !== dragPointerId) return;
     e.preventDefault();
-    e.stopPropagation();
-    const currentY = e.touches ? e.touches[0].clientY : e.clientY;
-    const deltaY = dragStartY - currentY;
-    const threshold = 30;
-    
-    if (Math.abs(deltaY) > 5) hasMoved = true;
-    
-    if (deltaY > threshold && !hidden) {
-      hidden = true;
-      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'true');
-      applyState();
-      isDragging = false;
-    } else if (deltaY < -threshold && hidden) {
-      hidden = false;
-      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'false');
-      applyState();
-      isDragging = false;
-    }
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    const wrapRect = wrap.getBoundingClientRect();
+    const toolRect = toolbar.getBoundingClientRect();
+    const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
+    const tw = isVertical ? toolRect.height : toolRect.width;
+    const th = isVertical ? toolRect.width : toolRect.height;
+    let newLeft = toolbarStartLeft + dx;
+    let newTop = toolbarStartTop + dy;
+    newLeft = Math.max(8, Math.min(wrapRect.width - tw - 8, newLeft));
+    newTop = Math.max(8, Math.min(wrapRect.height - th - 8, newTop));
+    toolbar.style.left = newLeft + 'px';
+    toolbar.style.top = newTop + 'px';
   }
 
-  function handleDragEnd(e) {
-    if (!isDragging) return;
-    const currentY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
-    const deltaY = dragStartY - currentY;
-    const dragDuration = Date.now() - dragStartTime;
-    isDragging = false;
+  function onPointerUp(e) {
+    if (e.pointerId !== dragPointerId) return;
+    dragPointerId = null;
+    try {
+      toolbar.releasePointerCapture(e.pointerId);
+      dragHandle.releasePointerCapture(e.pointerId);
+    } catch (_) {}
+    toolbar.style.transition = '';
     dragHandle.style.cursor = '';
-    
-    if (hasMoved && dragDuration > 0) {
-      const velocity = Math.abs(deltaY) / dragDuration;
-      const flickThreshold = 50;
-      const velocityThreshold = 0.3;
-      
-      if (deltaY > flickThreshold || (deltaY > 20 && velocity > velocityThreshold)) {
-        hidden = true;
-        localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'true');
-        applyState();
-      } else if (deltaY < -flickThreshold || (deltaY < -20 && velocity > velocityThreshold)) {
-        hidden = false;
-        localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_HIDDEN, 'false');
-        applyState();
-      }
+    clampDiagramToolbarToWrap(toolbar, wrap);
+    updateOrientationFromPosition();
+    const finalLeft = parseFloat(toolbar.style.left) || 0;
+    const finalTop = parseFloat(toolbar.style.top) || 0;
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(finalLeft)));
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(finalTop)));
+  }
+
+  function onPointerCancel(e) {
+    if (e.pointerId === dragPointerId) {
+      dragPointerId = null;
+      try {
+        toolbar.releasePointerCapture(e.pointerId);
+        dragHandle.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+      toolbar.style.transition = '';
+      dragHandle.style.cursor = '';
+      applyDiagramToolbarPosition(toolbar, parseFloat(toolbar.style.left) || 0, parseFloat(toolbar.style.top) || 0, toolbar.getAttribute('data-orientation') || 'horizontal');
     }
   }
 
-  dragHandle.addEventListener('touchstart', handleDragStart, { passive: false });
-  dragHandle.addEventListener('touchmove', handleDragMove, { passive: false });
-  dragHandle.addEventListener('touchend', handleDragEnd, { passive: false });
-  dragHandle.addEventListener('mousedown', handleDragStart);
-  document.addEventListener('mousemove', handleDragMove);
-  document.addEventListener('mouseup', handleDragEnd);
+  const toolbarPointerDownHandler = (e) => {
+    if (e.target === dragHandle || dragHandle.contains(e.target)) return;
+    if ((e.target instanceof Element) && (e.target.closest('button, label, input') || e.target.closest('.toolbar-pill-btn'))) return;
+    onPointerDown(e);
+  };
+
+  dragHandle.addEventListener('pointerdown', onPointerDown, { capture: true });
+  toolbar.addEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+  document.addEventListener('pointermove', onPointerMove, { capture: true });
+  document.addEventListener('pointerup', onPointerUp, { capture: true });
+  document.addEventListener('pointercancel', onPointerCancel, { capture: true });
+
+  const ro = new ResizeObserver(() => {
+    if (dragPointerId != null) return;
+    clampDiagramToolbarToWrap(toolbar, getDiagramToolbarWrap());
+    updateOrientationFromPosition();
+  });
+  ro.observe(wrap);
+
+  diagramToolbarDragCleanup = () => {
+    document.removeEventListener('pointermove', onPointerMove, { capture: true });
+    document.removeEventListener('pointerup', onPointerUp, { capture: true });
+    document.removeEventListener('pointercancel', onPointerCancel, { capture: true });
+    ro.disconnect();
+    dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
+    toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+  };
 }
 
 function initCanvas() {
@@ -6151,7 +6260,11 @@ function initCanvas() {
     }
     if (!inInput && e.key === 'z' && cmd) {
       e.preventDefault();
-      undo();
+      if (e.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
     }
     // Delete/Backspace: remove all selected elements from the canvas (Task 28.3). Never remove or alter the blueprint.
     // Works for single selection, marquee multi-select, and any element type (gutter, downpipe, bracket, etc.).
@@ -6989,6 +7102,7 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
   setSelection([]);
   state.selectedBlueprint = false;
   undoHistory.length = 0;
+  redoHistory.length = 0;
   updatePlaceholderVisibility();
   renderMeasurementDeck();
   draw();
@@ -8512,7 +8626,9 @@ function initDiagrams() {
 }
 
 const GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_globalToolbarCollapsed';
-const GLOBAL_TOOLBAR_STORAGE_KEY_POSITION = 'quoteApp_globalToolbarPosition';
+
+/** 54.33: Undo/Redo aria-hidden MutationObserver; disconnect on re-init or future teardown. */
+let globalToolbarUndoRedoAriaObserver = null;
 
 function applyGlobalToolbarPadding() {
   const wrap = document.getElementById('globalToolbarWrap');
@@ -8526,20 +8642,17 @@ function initGlobalToolbar() {
   const wrap = document.getElementById('globalToolbarWrap');
   const toolbar = document.getElementById('globalToolbar');
   const collapseBtn = document.getElementById('toolbarCollapseBtn');
-  const dragHandle = document.getElementById('toolbarDragHandle');
-  if (!wrap || !toolbar || !collapseBtn || !dragHandle) return;
+  if (!wrap || !toolbar || !collapseBtn) return;
 
   let collapsed = localStorage.getItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
-  let position = localStorage.getItem(GLOBAL_TOOLBAR_STORAGE_KEY_POSITION) || 'top';
-  if (position !== 'top' && position !== 'bottom') position = 'top';
 
   function applyState() {
     toolbar.classList.toggle('toolbar--collapsed', collapsed);
-    wrap.classList.toggle('global-toolbar-wrap--bottom', position === 'bottom');
+    wrap.classList.remove('global-toolbar-wrap--bottom');
     const viewCanvas = document.getElementById('view-canvas');
     if (viewCanvas) {
-      viewCanvas.classList.remove('view-canvas--toolbar-top', 'view-canvas--toolbar-bottom');
-      viewCanvas.classList.add(position === 'top' ? 'view-canvas--toolbar-top' : 'view-canvas--toolbar-bottom');
+      viewCanvas.classList.remove('view-canvas--toolbar-bottom');
+      viewCanvas.classList.add('view-canvas--toolbar-top');
     }
     collapseBtn.setAttribute('aria-expanded', !collapsed);
     collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
@@ -8557,55 +8670,31 @@ function initGlobalToolbar() {
     applyState();
   });
 
-  let dragStartY = 0;
-  let dragStartWrapTop = 0;
-  let dragPointerId = null;
-
-  dragHandle.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    dragPointerId = e.pointerId;
-    dragStartY = e.clientY;
-    dragStartWrapTop = wrap.getBoundingClientRect().top;
-    wrap.setPointerCapture(e.pointerId);
-    wrap.style.transition = 'none';
-  });
-
-  wrap.addEventListener('pointermove', (e) => {
-    if (dragPointerId == null || e.pointerId !== dragPointerId) return;
-    const dy = e.clientY - dragStartY;
-    const wrapHeight = wrap.offsetHeight || 56; // fallback if height not yet measured
-    let newTop = dragStartWrapTop + dy;
-    newTop = Math.max(0, Math.min(window.innerHeight - wrapHeight, newTop));
-    wrap.style.top = newTop + 'px';
-    wrap.style.bottom = 'auto';
-  });
-
-  wrap.addEventListener('pointerup', (e) => {
-    if (e.pointerId !== dragPointerId) return;
-    dragPointerId = null;
-    wrap.releasePointerCapture(e.pointerId);
-    wrap.style.transition = '';
-    const rect = wrap.getBoundingClientRect();
-    const mid = window.innerHeight / 2;
-    position = rect.top + rect.height / 2 < mid ? 'top' : 'bottom';
-    wrap.style.top = '';
-    wrap.style.bottom = '';
-    localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_POSITION, position);
-    applyState();
-  });
-  wrap.addEventListener('pointercancel', (e) => {
-    if (e.pointerId === dragPointerId) {
-      dragPointerId = null;
-      if (wrap.releasePointerCapture) {
-        try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
-      }
-      wrap.style.top = '';
-      wrap.style.bottom = '';
-      wrap.style.transition = '';
-      applyState();
+  const mobileUndoBtn = document.getElementById('mobileUndoBtn');
+  const mobileRedoBtn = document.getElementById('mobileRedoBtn');
+  const mobileUndoRedoWrap = document.querySelector('.mobile-undo-redo-wrap');
+  if (mobileUndoRedoWrap) {
+    if (globalToolbarUndoRedoAriaObserver) {
+      globalToolbarUndoRedoAriaObserver.disconnect();
+      globalToolbarUndoRedoAriaObserver = null;
     }
-  });
+    const isMobile = () => document.body?.getAttribute('data-viewport-mode') === 'mobile';
+    const setAriaHidden = () => {
+      mobileUndoRedoWrap.setAttribute('aria-hidden', isMobile() ? 'false' : 'true');
+    };
+    setAriaHidden();
+    const observer = new MutationObserver(setAriaHidden);
+    globalToolbarUndoRedoAriaObserver = observer;
+    if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ['data-viewport-mode'] });
+  }
+  function updateUndoRedoButtons() {
+    if (mobileUndoBtn) mobileUndoBtn.disabled = undoHistory.length === 0;
+    if (mobileRedoBtn) mobileRedoBtn.disabled = redoHistory.length === 0;
+  }
+  window.updateUndoRedoButtons = updateUndoRedoButtons;
+  if (mobileUndoBtn) mobileUndoBtn.addEventListener('click', () => { undo(); });
+  if (mobileRedoBtn) mobileRedoBtn.addEventListener('click', () => { redo(); });
+  updateUndoRedoButtons();
 }
 
 function initPanel() {
@@ -9132,6 +9221,7 @@ function renderProducts(products) {
         updatePlaceholderVisibility();
         renderMeasurementDeck();
         draw();
+        if (layoutState.viewportMode === 'mobile') setPanelExpanded(false);
       } catch (err) {
         console.error('Failed to load diagram image', err);
       }
@@ -9709,6 +9799,7 @@ function initModalAccessibilityFramework() {
     const SWIPE_CLOSE_THRESHOLD_PX = 50;
     let touchStartY = 0;
     let touchInHeader = false;
+    let backdropPointerDownHandler = null;
 
     function handleSheetTouchStart(e) {
       const sheet = document.getElementById('diagramsBottomSheet');
@@ -9741,7 +9832,13 @@ function initModalAccessibilityFramework() {
       },
       onOpen: () => {
         const backdrop = document.getElementById('diagramsBottomSheetBackdrop');
-        if (backdrop) backdrop.removeAttribute('hidden');
+        if (backdrop) {
+          backdrop.removeAttribute('hidden');
+          backdropPointerDownHandler = () => {
+            closeAccessibleModal(SHEET_ID);
+          };
+          backdrop.addEventListener('pointerdown', backdropPointerDownHandler);
+        }
         document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'true');
         document.getElementById('diagramsDropdownBtn')?.setAttribute('aria-expanded', 'true');
         document.body.classList.add('diagrams-bottom-sheet-open');
@@ -9753,6 +9850,10 @@ function initModalAccessibilityFramework() {
       },
       onClose: () => {
         const backdrop = document.getElementById('diagramsBottomSheetBackdrop');
+        if (backdrop && backdropPointerDownHandler) {
+          backdrop.removeEventListener('pointerdown', backdropPointerDownHandler);
+          backdropPointerDownHandler = null;
+        }
         if (backdrop) backdrop.setAttribute('hidden', '');
         document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'false');
         document.getElementById('diagramsDropdownBtn')?.setAttribute('aria-expanded', 'false');

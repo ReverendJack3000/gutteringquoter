@@ -21,7 +21,7 @@
     <div id="view-canvas" class="app-view hidden">
     <div id="globalToolbarWrap" class="global-toolbar-wrap" role="banner">
     <header class="toolbar toolbar-floating" id="globalToolbar">
-      <button type="button" class="toolbar-drag-handle" id="toolbarDragHandle" aria-label="Drag to move toolbar" title="Drag to move toolbar"><span aria-hidden="true">⋮⋮</span></button>
+      <button type="button" class="toolbar-drag-handle visually-hidden" id="toolbarDragHandle" aria-hidden="true" tabindex="-1" title=""><span aria-hidden="true">⋮⋮</span></button>
       <button type="button" class="toolbar-collapse-btn" id="toolbarCollapseBtn" aria-label="Collapse toolbar" aria-expanded="true" title="Collapse toolbar"><span aria-hidden="true">−</span></button>
       <div class="toolbar-left">
         <div class="toolbar-breadcrumbs-wrap">
@@ -45,6 +45,14 @@
       <div class="toolbar-center"></div>
 
       <div class="toolbar-right">
+        <div class="mobile-undo-redo-wrap" aria-hidden="true">
+          <button type="button" class="toolbar-icon-btn mobile-undo-btn" id="mobileUndoBtn" title="Undo" aria-label="Undo" disabled>
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h10a5 5 0 0 1 5 5v2M3 10l4-4M3 10l4 4"/></svg>
+          </button>
+          <button type="button" class="toolbar-icon-btn mobile-redo-btn" id="mobileRedoBtn" title="Redo" aria-label="Redo" disabled>
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10H11a5 5 0 0 0-5 5v2M21 10l-4-4M21 10l-4 4"/></svg>
+          </button>
+        </div>
         <div class="toolbar-actions-secondary toolbar-servicem8-warning-wrap">
           <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="" aria-label="ServiceM8 not connected" hidden aria-hidden="true">⚠</span>
           <div id="servicem8WarningPopover" class="servicem8-warning-popover" role="tooltip" aria-live="polite" hidden>
@@ -131,17 +139,15 @@
       <div class="blueprint-wrap" id="blueprintWrap" title="Drop a photo or drag products onto the whiteboard">
         <input type="file" id="fileInput" accept="image/*,application/pdf" hidden />
         <div class="diagram-floating-toolbar" id="diagramFloatingToolbar" role="toolbar" aria-label="Diagram tools">
-          <button type="button" class="diagram-toolbar-drag-handle" id="diagramToolbarDragHandle" aria-label="Drag to hide toolbar" title="Drag up to hide toolbar">
+          <button type="button" class="diagram-toolbar-drag-handle" id="diagramToolbarDragHandle" aria-label="Drag to move toolbar" title="Drag to move toolbar">
             <span aria-hidden="true"></span>
           </button>
           <label class="toolbar-pill-btn toggle-label toggle-label-compact" title="Technical drawing (blueprint view)">
             <input type="checkbox" id="technicalDrawingToggle" checked />
-            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="5" r="2" />
-              <path d="m9.47 12.43-3-4.43" />
-              <path d="m14.53 12.43 3-4.43" />
-              <path d="m16 16-4-4-4 4" />
-              <path d="m12 21v-9" />
+            <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+              <path d="M2 2l7.586 7.586"/>
             </svg>
           </label>
           <button type="button" class="toolbar-pill-btn btn-icon" id="zoomOutBtn" title="Zoom out" aria-label="Zoom out">

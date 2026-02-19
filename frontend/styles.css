@@ -1219,7 +1219,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   -webkit-user-select: none;
 }
 
-/* Floating diagram toolbar (Canva/Freeform style) – overlays blueprint, contains upload/zoom/transparency etc. */
+/* Floating diagram toolbar (Canva/Freeform style) – draggable, edge-snaps to vertical at L/R edges */
 .diagram-floating-toolbar {
   position: absolute;
   top: 12px;
@@ -1238,6 +1238,11 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
+  transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease;
+}
+.diagram-floating-toolbar[data-orientation="vertical"] {
+  flex-direction: column;
+  border-radius: 999px;
 }
 .diagram-floating-toolbar .toolbar-pill-btn,
 .diagram-floating-toolbar .upload-zone {
@@ -1656,12 +1661,16 @@ body[data-viewport-mode="mobile"] .toolbar {
   flex-wrap: wrap; /* 54.11: wrap at 200% zoom / narrow width */
 }
 
-/* Mobile: force Projects / Untitled header visible (override collapsed state and any hiding). */
+/* Mobile: force Projects / Untitled header visible and strictly top-left (override collapsed state and any hiding). */
 body[data-viewport-mode="mobile"] .toolbar-left,
 body[data-viewport-mode="mobile"] .toolbar-breadcrumbs-wrap,
 body[data-viewport-mode="mobile"] .toolbar-breadcrumbs {
   display: flex !important;
   visibility: visible !important;
+  justify-content: flex-start;
+}
+body[data-viewport-mode="mobile"] .toolbar-center {
+  display: none;
 }
 body[data-viewport-mode="mobile"] .toolbar-message {
   max-width: min(320px, 100%); /* 54.11: don't overflow when zoomed */
@@ -1900,13 +1909,8 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
-  position: absolute !important;
-  top: 16px !important;
-  bottom: auto !important;
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
-  margin: 16px auto;
+  position: absolute;
+  margin: 0;
   max-width: calc(100% - 32px);
   width: auto;
   display: flex !important;
@@ -1924,7 +1928,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   backdrop-filter: blur(20px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden {
@@ -1933,29 +1937,54 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
+/* 54.35: 44×44 px touch target (Apple HIG); visible pill via ::before so hit area meets minimum. */
 .diagram-toolbar-drag-handle {
-  display: none;
-}
-
-body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle {
   display: block;
   position: absolute;
   bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 40px;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  border: none;
-  border-radius: 2px;
-  cursor: grab;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: grab;
   touch-action: none;
   z-index: 1;
+  background: transparent;
+}
+.diagram-toolbar-drag-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  margin-top: -2px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 2px;
+}
+.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle {
+  bottom: auto;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle::before {
+  width: 4px;
+  height: 40px;
+  margin-left: -2px;
+  margin-top: -20px;
 }
 
 .diagram-toolbar-drag-handle:active {
   cursor: grabbing;
+}
+.diagram-toolbar-drag-handle:active::before {
   background: rgba(0, 0, 0, 0.35);
 }
 
@@ -2140,6 +2169,27 @@ body[data-viewport-mode="mobile"] .diagrams-bottom-sheet .diagram-item-delete:fo
 
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet .diagram-item-delete svg {
   stroke: currentColor;
+}
+
+/* Mobile-only Undo/Redo in header (44px touch targets) */
+.mobile-undo-redo-wrap {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .mobile-undo-redo-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+body[data-viewport-mode="mobile"] .mobile-undo-btn,
+body[data-viewport-mode="mobile"] .mobile-redo-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+}
+body[data-viewport-mode="mobile"] .mobile-undo-btn:disabled,
+body[data-viewport-mode="mobile"] .mobile-redo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Mobile: 44px minimum touch targets (WCAG 2.5.5) */
