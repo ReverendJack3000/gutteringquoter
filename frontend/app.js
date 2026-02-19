@@ -7854,6 +7854,8 @@ function updatePanelToggleAccessibility(isExpanded) {
 function setPanelExpanded(expanded, options = {}) {
   const panel = document.getElementById('panel');
   const resizer = document.getElementById('resizer');
+  const panelClose = document.getElementById('panelClose');
+  const panelCollapsed = document.getElementById('panelCollapsed');
   if (!panel) return;
 
   const isExpanded = !!expanded;
@@ -7865,14 +7867,25 @@ function setPanelExpanded(expanded, options = {}) {
 
   if (isMobileMode) {
     panel.style.width = '';
-  } else if (isExpanded) {
-    if (typeof options.width === 'number' && Number.isFinite(options.width)) {
-      panel.style.width = `${options.width}px`;
+    if (isExpanded) {
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
     } else {
-      panel.style.width = DEFAULT_PANEL_WIDTH + 'px';
+      panel.removeAttribute('role');
+      panel.removeAttribute('aria-modal');
     }
   } else {
-    panel.style.width = '48px';
+    panel.removeAttribute('role');
+    panel.removeAttribute('aria-modal');
+    if (isExpanded) {
+      if (typeof options.width === 'number' && Number.isFinite(options.width)) {
+        panel.style.width = `${options.width}px`;
+      } else {
+        panel.style.width = DEFAULT_PANEL_WIDTH + 'px';
+      }
+    } else {
+      panel.style.width = '48px';
+    }
   }
 
   if (resizer) {
@@ -7880,6 +7893,15 @@ function setPanelExpanded(expanded, options = {}) {
   }
 
   updatePanelToggleAccessibility(isExpanded);
+
+  if (isMobileMode) {
+    const announcer = document.getElementById('appAnnouncer');
+    if (announcer) announcer.textContent = isExpanded ? 'Products panel opened.' : 'Products panel closed.';
+    requestAnimationFrame(() => {
+      if (isExpanded && panelClose) panelClose.focus();
+      else if (!isExpanded && panelCollapsed) panelCollapsed.focus();
+    });
+  }
 
   if (options.resizeCanvas !== false) {
     resizeCanvas();

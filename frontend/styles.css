@@ -34,6 +34,11 @@ body {
 .skip-link:focus {
   transform: translateY(0);
 }
+@media (prefers-reduced-motion: reduce) {
+  .skip-link {
+    transition: none;
+  }
+}
 
 :focus-visible {
   outline: 3px solid #0b68ff;
@@ -1323,6 +1328,11 @@ body[data-viewport-mode="mobile"] .panel {
   transform: translateX(100%);
   transition: transform 0.2s ease;
 }
+@media (prefers-reduced-motion: reduce) {
+  body[data-viewport-mode="mobile"] .panel {
+    transition: none;
+  }
+}
 
 body[data-viewport-mode="mobile"] .panel.expanded {
   transform: translateX(0);
@@ -1343,9 +1353,9 @@ body[data-viewport-mode="mobile"] .panel.collapsed .panel-content {
 
 body[data-viewport-mode="mobile"] .panel-collapsed {
   position: absolute;
-  left: -42px;
+  left: -48px;
   top: 50%;
-  width: 42px;
+  width: 48px;
   height: 96px;
   transform: translateY(-50%);
   border: 1px solid #d8d8d8;
@@ -1383,6 +1393,12 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   padding: 8px 10px;
   overflow-x: auto;
 }
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .upload-zone,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .blueprint-transparency-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
 
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
   max-width: 92%;
@@ -1402,10 +1418,24 @@ body[data-viewport-mode="mobile"] .measurement-deck {
   max-height: 30vh;
 }
 
+/* Mobile: 44px minimum touch targets (WCAG 2.5.5) */
 body[data-viewport-mode="mobile"] .toolbar-icon-btn,
 body[data-viewport-mode="mobile"] .btn-save-diagram,
 body[data-viewport-mode="mobile"] .panel-close {
-  min-height: 40px;
+  min-height: 44px;
+  min-width: 44px;
+}
+body[data-viewport-mode="mobile"] .panel-close {
+  padding: 10px;
+  margin: -10px 0 0 -10px;
+}
+body[data-viewport-mode="mobile"] .product-thumb {
+  min-height: 44px;
+}
+body[data-viewport-mode="mobile"] .panel-collapsed {
+  width: 48px;
+  min-width: 48px;
+  min-height: 48px;
 }
 
 .panel-header {
