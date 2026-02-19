@@ -8667,6 +8667,19 @@ function initPanel() {
 
   if (!layoutState.resizeListenerBound && typeof window !== 'undefined') {
     window.addEventListener('resize', handleViewportResize, { passive: true });
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        if (layoutState.forcedMode) return;
+        const nextMode = detectViewportMode();
+        if (nextMode !== layoutState.viewportMode) {
+          applyViewportMode(nextMode, { announce: true });
+        } else {
+          /* Re-apply attribute in case DOM was reset or for consistency. */
+          if (document.body) document.body.setAttribute('data-viewport-mode', nextMode);
+          if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', nextMode);
+        }
+      }, 100);
+    }, { passive: true });
     layoutState.resizeListenerBound = true;
   }
 }
@@ -9925,6 +9938,10 @@ function switchView(viewId, options = {}) {
 }
 
 function init() {
+  /* Apply viewport mode immediately so body[data-viewport-mode="mobile"] CSS applies on first paint (fixes mobile device layout). */
+  layoutState.forcedMode = getForcedViewportModeFromUrl();
+  applyViewportMode(detectViewportMode(), { announce: false });
+
   try {
     initCanvas();
   } catch (e) {

@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile layout not applying on device (Saved diagrams at top, Projects header hidden, toolbar at bottom) – 2026-02
+
+- **Symptom:** On a real phone, the mobile UI doesn’t match the design: plain “Saved diagrams” at the top, “Projects / Untitled” header missing, main action toolbar not floating at the top of the canvas.
+- **Cause:** (1) `body[data-viewport-mode="mobile"]` was applied only after `initPanel()` ran, so the first paint could happen before the attribute was set. (2) Desktop dropdowns (#projectHistoryDropdown, #diagramsDropdown) could appear on mobile. (3) When the global toolbar was collapsed, `.toolbar-left` was hidden for all viewports. (4) Diagram floating toolbar position could be overridden.
+- **Fix:** (1) In `init()`, call `applyViewportMode(detectViewportMode())` at the very start so the viewport attribute is set before other inits. Add an `orientationchange` listener to re-apply. (2) In CSS, force-hide the desktop diagram dropdowns on mobile: `body[data-viewport-mode="mobile"] #projectHistoryDropdown, #diagramsDropdown { display: none !important; }`. (3) Force-show Projects header on mobile: `body[data-viewport-mode="mobile"] .toolbar-left, .toolbar-breadcrumbs-wrap, .toolbar-breadcrumbs { display: flex !important; }`. (4) Pin the diagram floating toolbar to the top on mobile with `top: 16px !important; bottom: auto !important;`.
+
+---
+
 ## Invite / auth emails send users to localhost:3000 – 2026-02
 
 - **Symptom:** When inviting other users (or using magic link / email confirmation), the link in the email sends them to `http://localhost:3000` instead of the production app.
