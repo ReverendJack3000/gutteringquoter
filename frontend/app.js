@@ -10043,6 +10043,13 @@ function switchView(viewId, options = {}) {
     rememberViewTransition(fromViewId, viewId, triggerForHistory);
   }
 
+  if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
+    if (typeof diagramToolbarDragCleanup === 'function') {
+      diagramToolbarDragCleanup();
+    }
+    diagramToolbarDragCleanup = null;
+  }
+
   document.querySelectorAll('.app-view').forEach((el) => {
     el.classList.add('hidden');
   });
@@ -10052,6 +10059,7 @@ function switchView(viewId, options = {}) {
     if (viewId === 'view-canvas') {
       resizeCanvas();
       draw();
+      initDiagramToolbarDrag();
     } else if (viewId === 'view-products') {
       renderProductLibrary();
     }
