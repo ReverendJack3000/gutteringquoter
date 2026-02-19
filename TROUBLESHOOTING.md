@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ServiceM8 attachment upload returns 200 but PNG not visible on job – 2026-02
+
+- **Symptom:** `POST /api/servicem8/upload-job-attachment` returns 200 OK and logs show success, but the PNG does not appear in the ServiceM8 job (Job Diary or Attachments).
+- **Cause:** ServiceM8 creates new attachments as **inactive** (hidden) by default. The upload succeeds but the record is marked inactive so it does not show in the UI.
+- **Fix:** In `backend/app/servicem8.py`, in `upload_job_attachment()`, add `"active": "1"` to the multipart form `data` dict sent to `POST /api_1.0/attachment.json`. Also ensure the file part uses explicit MIME type: `(attachment_name, image_bytes, "image/png")`. After deploy, check Railway logs for `ServiceM8 upload job attachment response:` to confirm the API returns `"active": 1`. If it still returns `"active": 0`, check payload structure or ServiceM8 docs for attachment metadata.
+
+---
+
 ## Quote: Downpipe section hierarchy and mixed screw label – 2026-02
 
 - **Symptom:** Downpipe section showed screws first, then downpipes/clips in a flat order; no metres input or incomplete state like Gutter System; mixed quote showed "(brackets & clips)" without "Screws" and screws nested under gutter.

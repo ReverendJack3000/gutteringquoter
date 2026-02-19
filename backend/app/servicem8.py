@@ -454,12 +454,18 @@ def upload_job_attachment(
         "related_object_uuid": job_uuid,
         "attachment_name": attachment_name,
         "file_type": file_type,
+        "active": "1",
     }
     files = {"file": (attachment_name, image_bytes, "image/png")}
     try:
         with httpx.Client() as client:
             resp = client.post(url, data=data, files=files, headers=headers)
         resp.raise_for_status()
+        try:
+            body = resp.json()
+            logger.info("ServiceM8 upload job attachment response: %s", body)
+        except Exception:
+            pass
         return True, None
     except httpx.HTTPStatusError as e:
         body = e.response.text
