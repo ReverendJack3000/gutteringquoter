@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- 54.11: No maximum-scale or user-scalable=no – pinch-zoom allowed for accessibility -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#71C43C" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -444,7 +445,7 @@
       <div class="crop-toolbar">
         <label class="crop-aspect-label">
           <span>Aspect ratio:</span>
-          <select id="cropAspectRatio">
+          <select id="cropAspectRatio" aria-label="Crop aspect ratio">
             <option value="free">Free</option>
             <option value="1:1">1:1</option>
             <option value="4:3">4:3</option>

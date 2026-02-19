@@ -453,6 +453,8 @@ function showMessage(text, type = 'error') {
   el.textContent = text;
   el.className = 'toolbar-message ' + (type || 'error');
   el.removeAttribute('hidden');
+  /* 54.14: Announce errors/messages to screen readers (visible + announced on mobile) */
+  if (typeof announceCanvas === 'function') announceCanvas(text);
   messageTimeoutId = setTimeout(() => {
     el.setAttribute('hidden', '');
     messageTimeoutId = null;
@@ -3347,8 +3349,17 @@ function getElementsToMove() {
 }
 
 function setSelection(ids) {
-  state.selectedIds = ids && ids.length ? ids : [];
+  const next = ids && ids.length ? ids : [];
+  const prev = state.selectedIds;
+  const changed =
+    prev.length !== next.length || next.some((id, i) => id !== prev[i]);
+  state.selectedIds = next;
   state.selectedId = state.selectedIds[0] || null;
+  if (changed && typeof announceCanvas === 'function') {
+    if (next.length === 0) announceCanvas('Selection cleared.');
+    else if (next.length === 1) announceCanvas('Element selected.');
+    else announceCanvas(`${next.length} elements selected.`);
+  }
 }
 
 function getElementsInMarquee(start, current, windowMode) {
@@ -5783,6 +5794,7 @@ function initCanvas() {
       }
       state.elements.push(el);
       setSelection([el.id]);
+      if (typeof announceCanvas === 'function') announceCanvas('Product added to canvas.');
       updatePlaceholderVisibility();
       renderMeasurementDeck();
     } catch (err) {
@@ -5884,6 +5896,7 @@ async function processFileAsBlueprint(file) {
   updatePlaceholderVisibility();
   const formData = new FormData();
   formData.append('file', file);
+  if (typeof setLoadingState === 'function') setLoadingState(true, 'Loading. Uploading blueprint.');
   try {
     const res = await fetch(
       `/api/process-blueprint?technical_drawing=${state.technicalDrawing}`,
@@ -5912,15 +5925,19 @@ async function processFileAsBlueprint(file) {
       URL.revokeObjectURL(url);
       updatePlaceholderVisibility();
       draw(); // Trigger full view re-fit to new blueprint
+      if (typeof announceCanvas === 'function') announceCanvas('Blueprint uploaded.');
+      if (typeof setLoadingState === 'function') setLoadingState(false);
     };
     img.onerror = () => {
       updatePlaceholderVisibility();
       showMessage('Failed to display the processed image.');
+      if (typeof setLoadingState === 'function') setLoadingState(false);
     };
     img.src = url;
   } catch (err) {
     updatePlaceholderVisibility();
     showMessage('Upload failed: ' + (err.message || String(err)));
+    if (typeof setLoadingState === 'function') setLoadingState(false);
   }
 }
 
@@ -5950,9 +5967,11 @@ function initUpload() {
     }
     if (isPdf) {
       try {
+        if (typeof setLoadingState === 'function') setLoadingState(true, 'Loading. Converting PDF.');
         showMessage('Converting PDF…', 'info');
         const pngFile = await convertPdfFirstPageToPng(file);
         clearMessage();
+        if (typeof setLoadingState === 'function') setLoadingState(false);
         showCropModal(pngFile);
       } catch (err) {
         const msg = err?.message || String(err);
@@ -5962,6 +5981,7 @@ function initUpload() {
             ? 'The PDF appears to be corrupt or invalid.'
             : 'Could not convert PDF: ' + msg;
         showMessage(userMsg);
+        if (typeof setLoadingState === 'function') setLoadingState(false);
       }
     } else {
       showCropModal(file);
@@ -5998,9 +6018,11 @@ function initUpload() {
     }
     if (file.type === ACCEPTED_PDF_TYPE) {
       try {
+        if (typeof setLoadingState === 'function') setLoadingState(true, 'Loading. Converting PDF.');
         showMessage('Converting PDF…', 'info');
         const pngFile = await convertPdfFirstPageToPng(file);
         clearMessage();
+        if (typeof setLoadingState === 'function') setLoadingState(false);
         showCropModal(pngFile);
       } catch (err) {
         const msg = err?.message || String(err);
@@ -6010,6 +6032,7 @@ function initUpload() {
             ? 'The PDF appears to be corrupt or invalid.'
             : 'Could not convert PDF: ' + msg;
         showMessage(userMsg);
+        if (typeof setLoadingState === 'function') setLoadingState(false);
       }
     } else {
       showCropModal(file);
@@ -7796,6 +7819,27 @@ function initPanel() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && layoutState.viewportMode === 'mobile' && layoutState.panelExpanded) {
       setPanelExpanded(false);
+      return;
+    }
+    /* 54.13: Focus trap when products panel is open on mobile */
+    if (e.key !== 'Tab' || layoutState.viewportMode !== 'mobile' || !layoutState.panelExpanded) return;
+    const panelEl = document.getElementById('panel');
+    if (!panelEl || !panelEl.contains(document.activeElement)) return;
+    const focusable = Array.from(
+      panelEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => el.offsetParent != null && !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
+    if (focusable.length === 0) return;
+    const i = focusable.indexOf(document.activeElement);
+    if (e.shiftKey) {
+      if (i <= 0) {
+        e.preventDefault();
+        focusable[focusable.length - 1].focus();
+      }
+    } else {
+      if (i === -1 || i >= focusable.length - 1) {
+        e.preventDefault();
+        focusable[0].focus();
+      }
     }
   });
 
@@ -7824,6 +7868,23 @@ function detectViewportMode() {
   const isNarrowViewport = window.matchMedia(`(max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`).matches;
   const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
   return isNarrowViewport || isCoarsePointer ? 'mobile' : 'desktop';
+}
+
+/** 54.7: Announce to screen reader (live region). Use for canvas state changes. */
+function announceCanvas(message) {
+  const announcer = document.getElementById('appAnnouncer');
+  if (!announcer) return;
+  announcer.textContent = '';
+  window.setTimeout(() => {
+    announcer.textContent = message;
+  }, 30);
+}
+
+/** 54.15: Set loading state for screen readers (aria-busy + optional announcement). */
+function setLoadingState(busy, announcement) {
+  const app = document.querySelector('.app');
+  if (app) app.setAttribute('aria-busy', busy ? 'true' : 'false');
+  if (typeof announcement === 'string' && typeof announceCanvas === 'function') announceCanvas(announcement);
 }
 
 function announceViewportMode(mode) {
@@ -7909,6 +7970,15 @@ function setPanelExpanded(expanded, options = {}) {
   }
 }
 
+function updatePlaceholderStepsForViewport(mode) {
+  const steps = document.querySelector('.canvas-placeholder .placeholder-steps');
+  if (!steps) return;
+  steps.textContent =
+    mode === 'mobile'
+      ? 'Tap the Products bar below and drag products here — move, resize, and rotate like a Canva board'
+      : 'Open the panel (→) and drag products here — move, resize, and rotate like a Canva board';
+}
+
 function applyViewportMode(mode, options = {}) {
   const normalizedMode = mode === 'mobile' ? 'mobile' : 'desktop';
   const previousMode = layoutState.viewportMode;
@@ -7919,6 +7989,7 @@ function applyViewportMode(mode, options = {}) {
   if (typeof document !== 'undefined') {
     if (document.body) document.body.setAttribute('data-viewport-mode', normalizedMode);
     if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
+    updatePlaceholderStepsForViewport(normalizedMode);
   }
 
   if (modeChanged) {
@@ -8171,6 +8242,7 @@ function renderProducts(products) {
         }
         state.elements.push(el);
         setSelection([el.id]);
+        if (typeof announceCanvas === 'function') announceCanvas('Product added to canvas.');
         updatePlaceholderVisibility();
         renderMeasurementDeck();
         draw();
@@ -8178,7 +8250,7 @@ function renderProducts(products) {
         console.error('Failed to load diagram image', err);
       }
     });
-    
+
     grid.appendChild(thumb);
   });
 }

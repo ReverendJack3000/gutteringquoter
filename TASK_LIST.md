@@ -36,6 +36,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
+| **54** | — | **Mobile app (54.1–54.15): all accessibility laundry list complete** |
 ---
 
 ## Locked decisions
@@ -1201,6 +1202,49 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 ---
 
+## 54. Mobile app
+
+*Context: Same URL serves desktop and mobile; layout is adaptive via `data-viewport-mode`. Use this section to distinguish desktop-only, mobile-only, and universal changes.*
+
+**Desktop-only (unchanged by mobile work)**
+
+- Layout: left 2/3 blueprint, right 1/3 resizable panel; resizer drag; panel collapse = narrow strip with chevron.
+- No change to existing desktop behaviour when viewport is wide or pointer is fine.
+
+**Mobile-only (narrow viewport / coarse pointer)**
+
+- Products panel: slide-out drawer from the right; overlay; close by button or tap outside or Escape.
+- Toolbar and diagram toolbar: compact; touch targets increased (44px minimum).
+- Focus management: opening panel focuses close button; closing focuses open tab; live region announces.
+- Panel exposed as `role="dialog"` `aria-modal="true"` when expanded on mobile.
+
+**Universal (both)**
+
+- Skip link, app announcer, aria-labels, focus-visible styles, reduced-motion preferences where applied.
+
+**Completed**
+
+- [x] **54.1** Adaptive layout: mobile = slide-out products panel from right; desktop = resizable side panel.
+- [x] **54.2** Mobile touch targets 44px minimum (toolbar, panel toggles, product thumbs, diagram toolbar).
+- [x] **54.3** Focus management and live region when panel opens/closes on mobile.
+- [x] **54.4** Panel as dialog (aria-modal) when expanded on mobile; reduced motion for panel and skip link.
+
+**Accessibility improvements (laundry list)**
+
+- [x] **54.5** **Move parts panel to bottom of screen on mobile** (instead of right slide-out): bottom sheet or bottom drawer so blueprint stays full-width and products are in a lower tray; improves one-handed use and thumb reach.
+- [x] **54.6** Ensure all interactive elements have visible focus indicators (focus-visible) on mobile.
+- [x] **54.7** Screen reader: announce canvas state changes (e.g. "Element selected", "Blueprint uploaded") via live region where useful.
+- [x] **54.8** Colour contrast: verify all mobile UI text and controls meet WCAG AA (4.5:1 text, 3:1 large text and UI components).
+- [x] **54.9** Form labels: ensure every form control has an associated visible or screen-reader-only label on mobile.
+- [x] **54.10** Touch target spacing: maintain adequate spacing between adjacent 44px targets to reduce mis-taps.
+- [x] **54.11** Zoom: ensure viewport allows pinch-zoom (no user-scalable=no); test that layout doesn't break at 200% zoom on mobile.
+- [x] **54.12** Orientation: test and fix layout in both portrait and landscape on small phones.
+- [x] **54.13** Modal and overlay focus trap: when products panel (or other modal) is open on mobile, trap focus inside until closed and restore focus on close (partially done; verify and extend).
+- [x] **54.14** Error messages: ensure API/validation errors are announced (e.g. role="alert" or live region) and visible on mobile.
+- [x] **54.15** Loading states: provide accessible loading indicators (aria-busy, aria-live, or visible text) for uploads and API calls on mobile.
+
+---
+
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope).
 
-*Last updated: Feb 2026. Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
+*Last updated: Feb 2026. Section 54: Mobile app (desktop vs mobile vs universal); accessibility laundry list includes moving parts panel to bottom on mobile. Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
