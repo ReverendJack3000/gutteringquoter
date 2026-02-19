@@ -6508,6 +6508,10 @@ function initAuth() {
       authState.user = data.user ?? null;
       setAuthUI();
       switchView('view-canvas');
+      await checkServiceM8Status();
+      if (window.servicem8Connected === false) {
+        await startServiceM8Connect();
+      }
     } catch (err) {
       if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign in failed'; }
     }
@@ -6697,6 +6701,37 @@ async function checkServiceM8Status() {
 }
 
 /**
+ * Start ServiceM8 OAuth connect flow (fetch authorize URL and redirect).
+ * Returns true if redirect was initiated, false otherwise.
+ */
+async function startServiceM8Connect() {
+  if (!authState.token) return false;
+  try {
+    const resp = await fetch('/api/servicem8/oauth/authorize', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${authState.token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to start ServiceM8 connection');
+    }
+    const data = await resp.json();
+    if (data.url) {
+      window.location.href = data.url;
+      return true;
+    }
+    throw new Error('No URL returned');
+  } catch (e) {
+    console.error('Connect ServiceM8 failed:', e);
+    showMessage(e.message || 'Could not connect to ServiceM8. Please try again.', 'error');
+    return false;
+  }
+}
+
+/**
  * Initialize ServiceM8 menu item click handler.
  */
 function initServiceM8Menu() {
@@ -6705,7 +6740,7 @@ function initServiceM8Menu() {
 
   menuItem.addEventListener('click', async () => {
     if (!authState.token) {
-      showToolbarMessage('Please sign in first', 'error');
+      showMessage('Please sign in first', 'error');
       return;
     }
 
@@ -6738,29 +6773,7 @@ function initServiceM8Menu() {
         showToolbarMessage('Failed to disconnect ServiceM8', 'error');
       }
     } else {
-      // Connect: fetch authorize URL with Bearer token (browser nav would not send it)
-      try {
-        const resp = await fetch('/api/servicem8/oauth/authorize', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${authState.token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.detail || 'Failed to start ServiceM8 connection');
-        }
-        const data = await resp.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error('No URL returned');
-        }
-      } catch (e) {
-        console.error('Connect ServiceM8 failed:', e);
-        showToolbarMessage(e.message || 'Could not connect to ServiceM8. Please try again.', 'error');
-      }
+      await startServiceM8Connect();
     }
   });
 }

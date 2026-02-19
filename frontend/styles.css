@@ -1496,6 +1496,14 @@ body {
   max-width: 400px;
 }
 
+.view-login-logo {
+  display: block;
+  max-width: 240px;
+  height: auto;
+  margin: 0 auto 20px;
+  object-fit: contain;
+}
+
 /* Product Management page (#view-products) */
 .products-view-container {
   padding: 24px 40px;
