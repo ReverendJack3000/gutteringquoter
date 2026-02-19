@@ -8,11 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/mobile-canvas-page-toolbars
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [ ] 54.36–54.40 (Mobile canvas page size, zoom limits, diagram/global toolbars no-scroll)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
@@ -41,7 +38,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.16–54.20 | (Complete) Mobile pan, pinch zoom, parts formatting, movable toolbars |
 | 54 | 54.21–54.25 | (Complete) Mobile: Projects header + iOS bottom sheet for diagram menu (Apple HIG) |
-| **54** | **54.36–54.40** | **Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll** |
+| 54 | 54.36–54.40 | (Complete) Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll |
 ---
 
 ## Locked decisions
