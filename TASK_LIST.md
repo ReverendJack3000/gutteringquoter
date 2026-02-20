@@ -8,12 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/freeform-toolbar-morphing
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [ ] 54.54 Diagram toolbar: Apple Freeform–style container morphing
-  - [ ] 54.55 Diagram toolbar: CSS-only icon morph and layout refinement
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
@@ -46,7 +42,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.41–54.45 | (Complete) Diagram toolbar: Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions) |
 | 54 | 54.46–54.48 | (Complete) Diagram toolbar: collapsed = circular "+" only; no scroll in toolbars; mobile orientation = desktop |
 | 54 | 54.49–54.53 | (Mobile-only) Diagram toolbar refinements: "+" visibility, no disappear, tap-to-expand, QA |
-| 54 | 54.54–54.55 | Diagram toolbar: Apple Freeform–style container morphing, CSS-only icon, layout refinement |
 ---
 
 ## Locked decisions
