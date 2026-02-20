@@ -1249,12 +1249,16 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-floating-toolbar[data-orientation="vertical"] {
   flex-direction: column;
 }
-/* Collapsed: container shrinks to circle via flow (tools-wrap collapses, only toggle button remains) */
+/* Collapsed: container is a circle slightly larger than the 44px collapse button */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
-  min-width: 44px;
-  min-height: 44px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  max-width: 48px;
+  max-height: 48px;
   border-radius: 50%;
 }
 /* Drag handle: animatable hide (not display:none) so container morphs smoothly */
@@ -1830,6 +1834,39 @@ body[data-viewport-mode="mobile"] #diagramsDropdown {
   visibility: hidden !important;
 }
 
+/* 54.74: Mobile spacing tokens and primary/secondary hierarchy (no desktop or build changes) */
+body[data-viewport-mode="mobile"] {
+  --mobile-space-sm: 8px;
+  --mobile-space-md: 12px;
+  --mobile-space-lg: 16px;
+  --mobile-space-xl: 24px;
+}
+body[data-viewport-mode="mobile"] .toolbar {
+  gap: var(--mobile-space-md);
+}
+body[data-viewport-mode="mobile"] .toolbar-right,
+body[data-viewport-mode="mobile"] .toolbar-actions-secondary {
+  gap: var(--mobile-space-md);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-title {
+  padding: 0 var(--mobile-space-lg) var(--mobile-space-md);
+}
+body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-list-wrap {
+  padding: 0 var(--mobile-space-lg);
+}
+body[data-viewport-mode="mobile"] .diagrams-bottom-sheet .diagram-item {
+  padding: var(--mobile-space-md) 52px var(--mobile-space-md) var(--mobile-space-lg);
+}
+/* Primary actions (Save, Generate Quote) – keep prominent; secondary icons use default styling */
+body[data-viewport-mode="mobile"] .btn-save-diagram {
+  font-weight: 600;
+}
+body[data-viewport-mode="mobile"] #generateQuoteBtn {
+  font-weight: 600;
+}
+
 /* 54.40: No horizontal scroll; wrap only; flex children can shrink so all tools visible */
 body[data-viewport-mode="mobile"] .global-toolbar-wrap,
 body[data-viewport-mode="mobile"] .toolbar {
@@ -1837,7 +1874,7 @@ body[data-viewport-mode="mobile"] .toolbar {
 }
 body[data-viewport-mode="mobile"] .toolbar {
   padding: clamp(0.5rem, 1.2vw, 0.75rem) clamp(0.625rem, 1.4vw, 0.875rem);
-  gap: 0.5rem;
+  gap: var(--mobile-space-md);
   flex-wrap: wrap; /* 54.11: wrap at 200% zoom / narrow width */
 }
 body[data-viewport-mode="mobile"] .toolbar-left,
@@ -1858,10 +1895,6 @@ body[data-viewport-mode="mobile"] .toolbar-center {
 }
 body[data-viewport-mode="mobile"] .toolbar-message {
   max-width: min(320px, 100%); /* 54.11: don't overflow when zoomed */
-}
-
-body[data-viewport-mode="mobile"] .toolbar-right {
-  gap: 0.5rem; /* 54.10: spacing between touch targets */
 }
 
 body[data-viewport-mode="mobile"] .toolbar-breadcrumbs {
@@ -2096,6 +2129,7 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
  * 54.56–54.60: Always-thin edge-only – add new rules after this block (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md). Do not remove existing rules. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
+  z-index: 160; /* Keep toolbar interactive above fixed global header in mobile layouts. */
   margin: 0;
   max-width: calc(100% - 32px);
   max-height: calc(100% - 24px);
@@ -2120,16 +2154,20 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
               left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-tools-wrap {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   overflow: hidden;
 }
 
-/* Mobile collapsed: container morphs to circle via flow */
+/* Mobile collapsed: circle slightly larger than the 44px collapse button */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
-  min-width: 44px;
-  min-height: 44px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  max-width: 48px;
+  max-height: 48px;
   border-radius: 50%;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
@@ -2146,17 +2184,60 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   height: 16px;
 }
 
-/* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
+/* 54.57: Horizontal mobile toolbar should be thin and dense, while keeping 44px targets. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
   flex-direction: row;
-  flex-wrap: wrap;
-  max-width: calc(100vw - 32px);
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  max-width: calc(100vw - 16px);
+}
+/* Collapsed + horizontal (top/bottom): restore circle styling; horizontal rule must not override padding/gap. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed[data-orientation="horizontal"] {
+  padding: 0;
+  gap: 0;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
   flex-direction: row;
-  flex-wrap: wrap;
-  max-width: calc(100vw - 100px);
-  overflow: hidden;
+  flex-wrap: nowrap;
+  gap: var(--mobile-space-sm);
+  max-width: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap::-webkit-scrollbar {
+  display: none;
+}
+/* 54.56: Vertical mobile toolbar stays a single slim column. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+/* 44px strict target policy in horizontal mode as well. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .toolbar-pill-btn,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .upload-zone,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .blueprint-transparency-btn,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-drag-handle,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-collapse-btn {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+/* Controlled fallback on narrow portrait widths: wrap instead of shrinking below 44px. */
+@media (max-width: 430px) {
+  body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
+    flex-wrap: wrap;
+    max-width: calc(100vw - 16px);
+  }
+  body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
 }
 
 /* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
@@ -2218,10 +2299,25 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar .blueprint-transpare
   scroll-snap-align: start;
 }
 
+/* 54.72: Placeholder – 44px tap target for icon area (Camera/instruction entry point) */
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
   max-width: 92%;
   min-height: 7.5rem;
   padding: 1.5rem 1.25rem;
+}
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon {
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon svg {
+  width: 36px;
+  height: 36px;
 }
 
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-title {
@@ -2279,18 +2375,32 @@ body[data-viewport-mode="mobile"] .diagrams-bottom-sheet:not([hidden]) {
   padding-bottom: env(safe-area-inset-bottom, 20px);
 }
 
+/* 54.72: Bottom sheet drag handle – 44px touch target (visual pill stays 4px, hit area 44px) */
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-drag-handle {
   flex-shrink: 0;
   width: 36px;
+  min-height: 44px;
   height: 4px;
   margin: 12px auto 8px;
+  padding: 20px 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-radius: 2px;
+}
+body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-drag-handle::before {
+  content: "";
+  width: 36px;
+  height: 4px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 2px;
 }
 
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-title {
   margin: 0;
-  padding: 0 20px 12px;
+  padding: 0 var(--mobile-space-lg) var(--mobile-space-md);
   font-size: 1rem;
   font-weight: 600;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
@@ -2337,7 +2447,7 @@ body[data-viewport-mode="mobile"] .diagrams-bottom-sheet .diagram-item-wrap:last
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet .diagram-item {
   font-size: 16px;
   font-weight: 400;
-  padding: 12px 52px 12px 16px;
+  padding: var(--mobile-space-md) 52px var(--mobile-space-md) var(--mobile-space-lg);
   min-height: 44px;
 }
 
@@ -2711,6 +2821,74 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   height: auto;
   margin: 0 auto 20px;
   object-fit: contain;
+}
+
+/* 54.70: Mobile login – safe area and 44px touch targets (desktop unchanged) */
+body[data-viewport-mode="mobile"] #view-login {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+body[data-viewport-mode="mobile"] .view-login-inner {
+  min-width: 280px;
+  max-width: min(400px, calc(100vw - 32px));
+  padding: 24px 16px;
+  margin: 0 16px;
+  box-sizing: border-box;
+}
+body[data-viewport-mode="mobile"] .auth-form input[type="email"],
+body[data-viewport-mode="mobile"] .auth-form input[type="password"] {
+  min-height: 44px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+body[data-viewport-mode="mobile"] .auth-actions .btn {
+  min-height: 44px;
+  padding: 12px 20px;
+  box-sizing: border-box;
+}
+body[data-viewport-mode="mobile"] .auth-actions {
+  gap: 12px;
+  margin-top: 20px;
+}
+body[data-viewport-mode="mobile"] .auth-forgot-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+body[data-viewport-mode="mobile"] .auth-passkey-btn {
+  min-height: 44px;
+  padding: 12px 20px;
+  box-sizing: border-box;
+}
+
+/* 54.71: Mobile login – typography and spacing (Dynamic Type / 200% zoom; desktop unchanged) */
+body[data-viewport-mode="mobile"] #view-login .auth-modal-title {
+  font-size: clamp(1rem, 1.05rem + 0.5vw, 1.25rem);
+}
+body[data-viewport-mode="mobile"] #view-login .auth-modal-desc {
+  font-size: clamp(0.875rem, 0.95rem + 0.3vw, 1rem);
+}
+body[data-viewport-mode="mobile"] .auth-form label {
+  font-size: clamp(0.875rem, 0.95rem + 0.2vw, 1rem);
+  margin: 14px 0 6px;
+}
+body[data-viewport-mode="mobile"] .auth-form label:first-of-type {
+  margin-top: 0;
+}
+body[data-viewport-mode="mobile"] .auth-form input[type="email"],
+body[data-viewport-mode="mobile"] .auth-form input[type="password"] {
+  font-size: clamp(1rem, 1.05rem + 0.2vw, 1.0625rem);
+}
+body[data-viewport-mode="mobile"] .auth-actions .btn {
+  font-size: clamp(0.9375rem, 0.98rem + 0.2vw, 1rem);
+}
+body[data-viewport-mode="mobile"] .auth-forgot-wrap {
+  margin-top: 16px;
+}
+body[data-viewport-mode="mobile"] .auth-forgot-link {
+  font-size: clamp(0.875rem, 0.93rem + 0.2vw, 0.9375rem);
 }
 
 /* Product Management page (#view-products) */

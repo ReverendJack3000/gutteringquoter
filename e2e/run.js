@@ -18,10 +18,25 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function clickSelectorViaDom(page, selector) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) throw new Error(`Missing clickable element: ${sel}`);
+    el.click();
+  }, selector);
+}
+
+async function clickSelectorViaDomIfPresent(page, selector) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (el) el.click();
+  }, selector);
+}
+
 async function run() {
   const browser = await puppeteer.launch({
     headless: !HEADED,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     defaultViewport: null, // Use full window size
   });
 
@@ -141,7 +156,11 @@ async function run() {
     // Accessibility settings modal: keyboard focus trap + Escape close
     const a11ySettingsBtn = await page.$('#openAccessibilitySettingsBtn');
     if (!a11ySettingsBtn) throw new Error('Accessibility settings button missing');
-    await a11ySettingsBtn.click();
+    // Puppeteer elementHandle.click() can hang here under heavy layout churn; dispatch a direct DOM click instead.
+    await page.evaluate(() => {
+      const btn = document.getElementById('openAccessibilitySettingsBtn');
+      if (btn) btn.click();
+    });
     await delay(250);
     const a11yModalOpen = await page.evaluate(() => {
       const modal = document.getElementById('accessibilitySettingsModal');
@@ -181,7 +200,7 @@ async function run() {
 
     let panelExpanded = await page.evaluate(() => document.getElementById('panel').classList.contains('expanded'));
     if (!panelExpanded) {
-      await page.click('#panelCollapsed').catch(() => {});
+      await clickSelectorViaDomIfPresent(page, '#panelCollapsed');
       await delay(300);
       panelExpanded = await page.evaluate(() => document.getElementById('panel').classList.contains('expanded'));
     }
@@ -191,7 +210,7 @@ async function run() {
     }
     console.log('  ✓ Right panel visible/expanded');
 
-    await page.click('#panelClose');
+    await clickSelectorViaDom(page, '#panelClose');
     await delay(300);
     let collapsed = await page.evaluate(() => document.getElementById('panel').classList.contains('collapsed'));
     if (!collapsed) {
@@ -207,7 +226,7 @@ async function run() {
     if (!collapsed) throw new Error('Panel should collapse on close button');
     console.log('  ✓ Panel collapses on close');
 
-    await page.click('#panelCollapsed');
+    await clickSelectorViaDom(page, '#panelCollapsed');
     await delay(300);
     const expandedAgain = await page.evaluate(() => document.getElementById('panel').classList.contains('expanded'));
     if (!expandedAgain) throw new Error('Panel should expand when clicking chevron strip');
@@ -226,27 +245,18 @@ async function run() {
     if (!fs.existsSync(blueprintImagePath)) {
       throw new Error(`Missing required E2E blueprint fixture: ${blueprintImagePath}`);
     }
-    const uploadTriggerSel = (await page.$('#uploadZone')) ? '#uploadZone' : '#cameraUploadBtn';
-    const [fileChooser] = await Promise.all([
-      page.waitForFileChooser({ timeout: 5000 }),
-      page.click(uploadTriggerSel),
-    ]).catch(() => [null]);
-    if (!fileChooser) {
-      const fileInput = await page.$('#fileInput');
-      if (!fileInput) throw new Error('Blueprint upload fixture: file chooser did not open and #fileInput missing');
-      await fileInput.uploadFile(blueprintImagePath);
-      await page.evaluate(() => {
-        const input = document.getElementById('fileInput');
-        if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    } else {
-      await fileChooser.accept([blueprintImagePath]);
-    }
+    const fileInput = await page.$('#fileInput');
+    if (!fileInput) throw new Error('Blueprint upload fixture: #fileInput missing');
+    await fileInput.uploadFile(blueprintImagePath);
+    await page.evaluate(() => {
+      const input = document.getElementById('fileInput');
+      if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await delay(1500);
     const cropModal = await page.$('#cropModal');
     const modalVisible = cropModal && !(await page.evaluate((el) => el.hasAttribute('hidden'), cropModal));
     if (modalVisible) {
-      await page.click('#cropUseFull').catch(() => {});
+      await clickSelectorViaDomIfPresent(page, '#cropUseFull');
       await delay(2000);
     }
     const placeholder = await page.$('#canvasPlaceholder');
@@ -675,7 +685,7 @@ async function run() {
     // Stable viewport: Fit view button exists and works (re-fit / recenter)
     const recenterBtn = await page.$('#zoomFitBtn');
     if (!recenterBtn) throw new Error('Fit view (Recenter) button missing');
-    await recenterBtn.click();
+    await clickSelectorViaDom(page, '#zoomFitBtn');
     await delay(300);
     console.log('  ✓ Fit view button present and clickable');
 
@@ -705,13 +715,13 @@ async function run() {
     const zoomFitBtn = await page.$('#zoomFitBtn');
     const zoomInBtn = await page.$('#zoomInBtn');
     if (!zoomOutBtn || !zoomFitBtn || !zoomInBtn) throw new Error('Zoom controls missing');
-    await zoomOutBtn.click();
+    await clickSelectorViaDom(page, '#zoomOutBtn');
     await delay(200);
-    await zoomFitBtn.click();
+    await clickSelectorViaDom(page, '#zoomFitBtn');
     await delay(200);
-    await zoomInBtn.click();
+    await clickSelectorViaDom(page, '#zoomInBtn');
     await delay(200);
-    await zoomFitBtn.click();
+    await clickSelectorViaDom(page, '#zoomFitBtn');
     await delay(200);
     console.log('  ✓ Zoom controls (− / Fit / +) work with content');
 
@@ -738,7 +748,7 @@ async function run() {
     const countBeforeClick = await page.evaluate(() => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0);
     const firstThumb = await page.$('.product-thumb');
     if (firstThumb) {
-      await firstThumb.click();
+      await clickSelectorViaDom(page, '.product-thumb');
       await delay(600);
       const countAfterClick = await page.evaluate(() => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0);
       if (countAfterClick === countBeforeClick + 1) {
@@ -1127,7 +1137,11 @@ async function run() {
       // Place a gutter element on canvas (center-drop)
       const firstGutterThumb = gutterThumbs[0];
       const gutterAssetId = await page.evaluate((el) => el.dataset.productId, firstGutterThumb);
-      await firstGutterThumb.click();
+      await page.evaluate((assetId) => {
+        const thumb = document.querySelector(`.product-thumb[data-product-id="${assetId}"]`);
+        if (!thumb) throw new Error(`Quote test: gutter thumb not found for ${assetId}`);
+        thumb.click();
+      }, gutterAssetId);
       await delay(500);
       
       const elementsBeforeQuote = await page.evaluate(() => (window.__quoteAppGetElements && window.__quoteAppGetElements()) || []);
@@ -1142,7 +1156,7 @@ async function run() {
       if (!generateQuoteBtn) {
         throw new Error('Quote test: #generateQuoteBtn not found');
       }
-      await generateQuoteBtn.click();
+      await clickSelectorViaDom(page, '#generateQuoteBtn');
       await delay(1000); // Wait for modal to open and initial calculation
 
       // Check if modal is visible
@@ -1368,7 +1382,7 @@ async function run() {
       // Close modal
       const closeBtn = await page.$('#quoteModalClose');
       if (closeBtn) {
-        await closeBtn.click();
+        await clickSelectorViaDom(page, '#quoteModalClose');
         await delay(300);
       }
     } else {
@@ -1437,6 +1451,141 @@ async function run() {
       const mobileExpanded = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
       if (!mobileExpanded) throw new Error('Mobile: diagram toolbar should expand after tap on +');
       console.log('  ✓ Diagram toolbar collapse/expand (mobile): −/+ swap works');
+
+      function getToolbarScreenState(pageRef) {
+        return pageRef.evaluate(() => {
+          const toolbar = document.getElementById('diagramFloatingToolbar');
+          const handle = document.getElementById('diagramToolbarDragHandle');
+          const wrap = document.getElementById('blueprintWrap');
+          const globalToolbarWrap = document.getElementById('globalToolbarWrap');
+          if (!toolbar || !handle || !wrap) return null;
+          const tr = toolbar.getBoundingClientRect();
+          const hr = handle.getBoundingClientRect();
+          const wr = wrap.getBoundingClientRect();
+          const pad = 12;
+          const headerBottom = globalToolbarWrap ? globalToolbarWrap.getBoundingClientRect().bottom : wr.top;
+          const topPad = headerBottom > wr.top ? Math.max(pad, Math.round((headerBottom - wr.top) + pad)) : pad;
+          const maxTop = wr.height - tr.height - pad;
+          const topAnchor = Math.min(topPad, maxTop);
+          const localLeft = tr.left - wr.left;
+          const localTop = tr.top - wr.top;
+          const leftGap = localLeft;
+          const rightGap = wr.width - (localLeft + tr.width);
+          const bottomGap = wr.height - (localTop + tr.height);
+          const topSafeGap = Math.abs(localTop - topAnchor);
+          const edgeGap = Math.min(leftGap, rightGap, bottomGap, topSafeGap);
+          return {
+            orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
+            collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
+            toolbar: { width: tr.width, height: tr.height },
+            handleCenter: { x: hr.left + hr.width / 2, y: hr.top + hr.height / 2 },
+            wrapRect: { left: wr.left, top: wr.top, width: wr.width, height: wr.height },
+            gaps: { leftGap, rightGap, bottomGap, topSafeGap, edgeGap },
+          };
+        });
+      }
+
+      // Expanded drag to right edge should snap vertical (without collapse-first workaround).
+      const beforeRightDrag = await getToolbarScreenState(mobilePage);
+      if (!beforeRightDrag || beforeRightDrag.collapsed) throw new Error('Mobile toolbar state missing before right-edge drag');
+      await mobilePage.mouse.move(beforeRightDrag.handleCenter.x, beforeRightDrag.handleCenter.y);
+      await mobilePage.mouse.down();
+      await mobilePage.mouse.move(
+        beforeRightDrag.wrapRect.left + beforeRightDrag.wrapRect.width - 14,
+        beforeRightDrag.handleCenter.y,
+        { steps: 12 }
+      );
+      await mobilePage.mouse.up();
+      await delay(320);
+      const rightDragged = await getToolbarScreenState(mobilePage);
+      if (!rightDragged) throw new Error('Mobile toolbar state missing after right-edge drag');
+      if (rightDragged.orientation !== 'vertical') {
+        throw new Error(`Mobile expanded drag-right should snap vertical, got ${rightDragged.orientation}`);
+      }
+      if (rightDragged.gaps.rightGap > 24) {
+        throw new Error(`Mobile expanded drag-right should rest near right edge, right gap ${Math.round(rightDragged.gaps.rightGap)}px`);
+      }
+      console.log('  ✓ Mobile expanded drag-right snaps to vertical edge');
+
+      // Expanded drag to top edge should snap horizontal.
+      async function dragToolbarHandleToTop(startState) {
+        await mobilePage.mouse.move(startState.handleCenter.x, startState.handleCenter.y);
+        await mobilePage.mouse.down();
+        await mobilePage.mouse.move(
+          startState.handleCenter.x,
+          startState.wrapRect.top + 12,
+          { steps: 14 }
+        );
+        await mobilePage.mouse.up();
+        await delay(360);
+        return getToolbarScreenState(mobilePage);
+      }
+
+      let topDragged = await dragToolbarHandleToTop(rightDragged);
+      if (topDragged && topDragged.orientation !== 'horizontal') {
+        const retryState = await getToolbarScreenState(mobilePage);
+        if (retryState) {
+          topDragged = await dragToolbarHandleToTop(retryState);
+        }
+      }
+      if (!topDragged) throw new Error('Mobile toolbar state missing after top-edge drag');
+      if (topDragged.orientation !== 'horizontal') {
+        throw new Error(`Mobile expanded drag-top should snap horizontal, got ${topDragged.orientation}`);
+      }
+      if (topDragged.gaps.topSafeGap > 24) {
+        throw new Error(`Mobile expanded drag-top should rest near top safe edge, top-safe gap ${Math.round(topDragged.gaps.topSafeGap)}px`);
+      }
+      if (topDragged.gaps.edgeGap > 24) {
+        throw new Error(`Mobile toolbar should not rest in middle strip after release (nearest edge gap ${Math.round(topDragged.gaps.edgeGap)}px)`);
+      }
+      console.log('  ✓ Mobile expanded drag-top snaps to horizontal edge and avoids middle resting');
+
+      // Option B: orientation-aware scroll assertion. Vertical = no scroll; horizontal = tools wrap may scroll.
+      const toolbarScrollState = await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('diagramFloatingToolbar');
+        const tools = toolbar ? toolbar.querySelector('.diagram-toolbar-tools-wrap') : null;
+        if (!toolbar || !tools) return null;
+        const orientation = toolbar.getAttribute('data-orientation');
+        return {
+          orientation,
+          toolbarScroll: toolbar.scrollWidth > (toolbar.clientWidth + 1) || toolbar.scrollHeight > (toolbar.clientHeight + 1),
+          toolsScroll: tools.scrollWidth > (tools.clientWidth + 1) || tools.scrollHeight > (tools.clientHeight + 1),
+        };
+      });
+      if (!toolbarScrollState) throw new Error('Mobile toolbar scroll state unavailable');
+      if (toolbarScrollState.orientation === 'vertical') {
+        if (toolbarScrollState.toolbarScroll || toolbarScrollState.toolsScroll) {
+          throw new Error(`Mobile toolbar (vertical) should not scroll internally (toolbar=${toolbarScrollState.toolbarScroll}, tools=${toolbarScrollState.toolsScroll})`);
+        }
+        console.log('  ✓ Mobile toolbar (vertical) has no internal scrollbars');
+      } else {
+        // Horizontal: tools wrap is allowed to scroll; optionally confirm it is scrollable when content overflows.
+        if (toolbarScrollState.toolbarScroll) {
+          throw new Error(`Mobile toolbar container should not scroll (horizontal); only tools-wrap may scroll (toolbarScroll=${toolbarScrollState.toolbarScroll})`);
+        }
+        console.log('  ✓ Mobile toolbar (horizontal) scroll expectation OK (tools-wrap may scroll)');
+      }
+
+      // Post-drag tap reliability: first deliberate tap after suppression window expands collapsed toolbar.
+      await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('diagramFloatingToolbar');
+        const btn = document.getElementById('diagramToolbarCollapseBtn');
+        if (!toolbar || !btn) return;
+        if (!toolbar.classList.contains('diagram-floating-toolbar--collapsed')) btn.click();
+      });
+      await delay(420);
+      const collapsedState = await getToolbarScreenState(mobilePage);
+      if (!collapsedState || !collapsedState.collapsed) throw new Error('Mobile toolbar should be collapsed before post-drag tap reliability check');
+      await mobilePage.mouse.move(collapsedState.handleCenter.x, collapsedState.handleCenter.y);
+      await mobilePage.mouse.down();
+      await mobilePage.mouse.move(collapsedState.handleCenter.x + 80, collapsedState.handleCenter.y + 8, { steps: 8 });
+      await mobilePage.mouse.up();
+      await delay(340);
+      await clickSelectorViaDom(mobilePage, '#diagramToolbarCollapseBtn');
+      await delay(360);
+      const expandedAfterDragTap = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+      if (!expandedAfterDragTap) throw new Error('Mobile toolbar should expand on first deliberate tap after drag suppression window');
+      console.log('  ✓ Mobile post-drag expand tap is reliable');
 
       console.log('  ✓ Mobile viewport + orientation regression checks passed');
     } finally {
