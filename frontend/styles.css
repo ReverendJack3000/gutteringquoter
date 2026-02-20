@@ -1245,7 +1245,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   flex-direction: column;
   border-radius: 999px;
 }
-/* 54.46: Collapsed = circular "+" only (no extra padding/ring) */
+/* 54.46: Collapsed = circular "+" only (no extra padding/ring); single centered button. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
@@ -1254,6 +1254,8 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   width: 44px;
   height: 44px;
   border-radius: 50%;
+  justify-content: center;
+  align-items: center;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
   display: none;
@@ -1283,10 +1285,12 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   max-height: 60vh;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-tools-wrap {
+  position: absolute;
   max-width: 0;
   max-height: 0;
   opacity: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 .diagram-toolbar-collapse-btn {
   flex-shrink: 0;
@@ -1313,9 +1317,21 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   outline: 2px solid #18a0fb;
   outline-offset: 2px;
 }
-/* When collapsed, the + button is the drag target. */
+/* When collapsed, the + button is the drag target; ensure + is always visible and clickable. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
   cursor: grab;
+  width: 44px;
+  height: 44px;
+  color: #333;
+  background: rgba(0, 0, 0, 0.06);
+}
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn span {
+  display: block;
+  font-size: 22px;
+  line-height: 44px;
+  font-weight: 400;
+  visibility: visible;
+  pointer-events: none;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
   cursor: grabbing;
@@ -2038,13 +2054,25 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
-/* 54.46: Mobile collapsed = same 44×44 circle, no extra padding */
+/* 54.46: Mobile collapsed = same 44×44 circle, no extra padding; ensure + visible and tappable */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   width: 44px;
   height: 44px;
   min-width: 44px;
   min-height: 44px;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
+  color: #333;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn span {
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+  visibility: visible;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
