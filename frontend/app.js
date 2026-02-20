@@ -5644,7 +5644,7 @@ function initDiagramToolbarDrag() {
   let dragPointerId = null;
   let didDragThisSession = false;
 
-  /* Zone logic: toolbar center (in wrap coords). Top/bottom 20% → horizontal; left/right 20% (else) → vertical; else horizontal. */
+  /* Zone logic (54.41, 54.48): same for desktop and mobile – top/bottom 20% → horizontal; left/right 20% → vertical; else horizontal. */
   function updateOrientationFromPosition() {
     const wr = wrap.getBoundingClientRect();
     const tr = toolbar.getBoundingClientRect();

@@ -8,8 +8,13 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/diagram-toolbar-collapsed-no-scroll
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 54.46 Diagram toolbar: Minimized = circular "+" only
+  - [x] 54.47 Diagram toolbar + global toolbar: No scroll
+  - [x] 54.48 Diagram toolbar: Mobile orientation = desktop
 
 **Uncompleted tasks (by section):**
 
@@ -40,6 +45,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.21–54.25 | (Complete) Mobile: Projects header + iOS bottom sheet for diagram menu (Apple HIG) |
 | 54 | 54.36–54.40 | (Complete) Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll |
 | 54 | 54.41–54.45 | (Complete) Diagram toolbar: Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions) |
+| 54 | 54.46–54.48 | (Complete) Diagram toolbar: collapsed = circular "+" only; no scroll in toolbars; mobile orientation = desktop |
 ---
 
 ## Locked decisions
@@ -1294,6 +1300,12 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **54.44** **Diagram toolbar: Smooth transitions.** Ensure orientation change (vertical ↔ horizontal) and collapse ↔ expand use CSS transitions (0.2–0.25s); respect reduced-motion preference. Animate collapsed state with max-width, max-height, opacity, or CSS Grid—not width/height—to avoid repaints and frame drops.
 - [x] **54.45** **Diagram toolbar: Regression and a11y.** Verify no desktop or mobile regression; 44px targets and no horizontal scroll on mobile; focus order and screen reader labels for new collapse button; ResizeObserver and teardown (54.33) unchanged. Ensure .diagram-floating-toolbar z-index is high enough so it never slips behind other interactive elements or panels when dragged.
 
+**Diagram toolbar: collapsed circular "+", no scroll, mobile = desktop orientation (plan: docs/plans/2026-02-20-diagram-toolbar-freeform-collapsed-no-scroll.md)**
+
+- [x] **54.46** **Diagram toolbar: Minimized = circular "+" only.** When collapsed, diagram toolbar is exactly a 44×44 circular expand button with no extra padding/ring (CSS: padding 0, size 44×44; mobile override for collapsed).
+- [x] **54.47** **Diagram toolbar + global toolbar: No scroll.** Diagram toolbar (desktop and mobile, vertical and horizontal) and global toolbar never show scrollbars; use flex-wrap so all tools visible without scrolling (overflow hidden + wrap).
+- [x] **54.48** **Diagram toolbar: Mobile orientation = desktop.** Confirm mobile uses same horizontal/vertical-by-position logic as desktop (verification only; no forced vertical on mobile).
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
@@ -1317,4 +1329,4 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope). Section 55 complete (55.1–55.10).
 
-*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.40 complete). 54.41–54.45 added: diagram toolbar Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions; plan: docs/plans/2026-02-20-global-toolbar-freeform-behavior-design.md). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
+*Last updated: Feb 2026. Section 54: Mobile app (54.1–54.45 complete). 54.46–54.48 added: diagram toolbar collapsed = circular "+" only, no scroll in toolbars, mobile orientation = desktop (plan: docs/plans/2026-02-20-diagram-toolbar-freeform-collapsed-no-scroll.md). Section 55 complete: mobile-native accessibility hardening follow-up (55.1–55.10). Section 49: Add to Job flow in place; jobmaterial POST returns 400 "displayed_amount incorrect" (49.24 to fix). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*

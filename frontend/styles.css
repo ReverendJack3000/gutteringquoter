@@ -1245,11 +1245,14 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   flex-direction: column;
   border-radius: 999px;
 }
-/* Collapsed: shrink to single circular FAB around + button; hide drag handle */
+/* 54.46: Collapsed = circular "+" only (no extra padding/ring) */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
-  padding: 8px;
+  padding: 0;
   gap: 0;
-  min-width: 0;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
@@ -1268,6 +1271,10 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   overflow: hidden;
   opacity: 1;
   transition: max-width 0.25s ease, max-height 0.25s ease, opacity 0.2s ease;
+}
+/* 54.47: Horizontal – wrap so no scroll */
+.diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
+  flex-wrap: wrap;
 }
 .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
   flex-direction: column;
@@ -1996,7 +2003,7 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
   scroll-snap-align: start;
 }
 
-/* 54.38: Vertical stack on mobile so all tools visible without horizontal scroll */
+/* 54.38 / 54.47: Vertical stack on mobile; no scroll (wrap instead) */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
   margin: 0;
@@ -2010,8 +2017,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   gap: 0.5rem; /* 54.10: spacing between touch targets */
   padding: 0.5rem 0.75rem 0.625rem;
   overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: hidden;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.75);
   -webkit-backdrop-filter: blur(20px);
@@ -2020,6 +2026,11 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   border: 1px solid rgba(0, 0, 0, 0.06);
   transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
 }
+/* 54.47: Mobile tools wrap (no scroll in toolbar) */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-tools-wrap {
+  flex-wrap: wrap;
+  overflow: hidden;
+}
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden {
   transform: translateX(-50%) translateY(calc(-100% - 1rem));
@@ -2027,19 +2038,26 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
-/* 54.45: When horizontal on mobile, single row with scroll if needed (no wrap) */
+/* 54.46: Mobile collapsed = same 44×44 circle, no extra padding */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   max-width: calc(100vw - 32px);
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   max-width: calc(100vw - 100px);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  overflow: hidden;
 }
 
 /* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
