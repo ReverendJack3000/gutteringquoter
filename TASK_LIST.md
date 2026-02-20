@@ -8,13 +8,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/diagram-toolbar-collapsed-no-scroll
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 54.46 Diagram toolbar: Minimized = circular "+" only
-  - [x] 54.47 Diagram toolbar + global toolbar: No scroll
-  - [x] 54.48 Diagram toolbar: Mobile orientation = desktop
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
