@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ES module fails to run: window hooks missing, modals/buttons don’t work – 2026-02
+
+- **Symptom:** After switching `app.js` to `type="module"`, the app loads but `window.__quoteAppSwitchView` (and other E2E hooks) is undefined; accessibility modal doesn’t open; canvas view doesn’t switch. Console: `Identifier 'X' has already been declared` (or similar).
+- **Cause:** In ES modules, duplicate top-level declarations (e.g. two `function isGutterElement(...)`) are a parse/execution error. The module body never finishes, so code at the bottom (e.g. `window.__quoteAppSwitchView = ...`) never runs.
+- **Fix:** Find and remove or rename the duplicate declaration. Example: two `function isGutterElement` in `app.js` (one taking `assetId`, one taking `element`) – rename the first to `isGutterByAssetId` (or delete if unused). Re-run E2E to confirm.
+
+---
+
 ## Railway build: "failed to list workers" / docker.sock connection error – 2026-02
 
 - **Symptom:** Build fails immediately with `ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"` or `... server preface: EOF` (region e.g. us-east4).
