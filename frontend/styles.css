@@ -1339,12 +1339,19 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
   display: none;
 }
+/* Refined + icon when minimised: always visible, bold stroke, explicit size and color */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
-  display: block;
-  width: 20px;
-  height: 20px;
+  display: block !important;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   flex-shrink: 0;
   pointer-events: none;
+  stroke: #333;
+  stroke-width: 2.5;
+  opacity: 1;
+  visibility: visible;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
   cursor: grabbing;
@@ -2080,9 +2087,12 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   overflow: hidden;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
-  display: block;
-  width: 20px;
-  height: 20px;
+  display: block !important;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  stroke: #333;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
