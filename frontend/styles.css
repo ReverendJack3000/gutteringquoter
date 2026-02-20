@@ -11,6 +11,10 @@
   --font-size-small: clamp(0.75rem, 0.2vw + 0.68rem, 0.875rem);
   --font-size-label: clamp(0.8125rem, 0.2vw + 0.75rem, 0.9375rem);
   --font-size-title: clamp(1rem, 0.4vw + 0.92rem, 1.125rem);
+  /* Diagram toolbar: matches DIAGRAM_TOOLBAR_CLAMP_PAD (8px) in app.js; single source for pill padding/gap */
+  --diagram-toolbar-pad: 8px;
+  --diagram-toolbar-gap: 8px;
+  --diagram-toolbar-morph: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
@@ -1219,7 +1223,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   -webkit-user-select: none;
 }
 
-/* 54.54–54.55: Floating diagram toolbar – Apple Freeform style with container-first morphing */
+/* 54.54–54.55: Floating diagram toolbar – Apple Freeform style; intrinsic sizing, pill shape */
 .diagram-floating-toolbar {
   position: absolute;
   top: 12px;
@@ -1230,24 +1234,32 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: var(--diagram-toolbar-gap);
+  padding: var(--diagram-toolbar-pad);
+  width: min-content;
+  height: fit-content;
   min-height: 44px;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 999px;
+  border-radius: 9999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
   overflow: hidden;
-  transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              gap 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+  transition: padding var(--diagram-toolbar-morph),
+              gap var(--diagram-toolbar-morph),
+              border-radius var(--diagram-toolbar-morph),
+              width var(--diagram-toolbar-morph),
+              height var(--diagram-toolbar-morph),
+              box-shadow var(--diagram-toolbar-morph),
               left 0.2s ease, top 0.2s ease, transform 0.2s ease;
 }
 .diagram-floating-toolbar[data-orientation="vertical"] {
   flex-direction: column;
+}
+/* Eliminate vertical top-gap: first tool (Pen/technical drawing) has no top margin */
+.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap > *:first-child {
+  margin-top: 0;
 }
 /* Collapsed: container shrinks to circle via flow (tools-wrap collapses, only toggle button remains) */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
@@ -1257,7 +1269,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   min-height: 44px;
   border-radius: 50%;
 }
-/* Drag handle: animatable hide (not display:none) so container morphs smoothly */
+/* Drag handle: animatable hide so container morphs smoothly (no stray dot on collapse) */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
   max-width: 0;
   max-height: 0;
@@ -1269,7 +1281,6 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   overflow: hidden;
   pointer-events: none;
 }
-/* Expanded: explicit size so transition from 0 → 44px works (no transition to max-width:none) */
 .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) .diagram-toolbar-drag-handle {
   max-width: 44px;
   max-height: 44px;
@@ -1290,14 +1301,17 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   max-width: 90vw;
   overflow: hidden;
   opacity: 1;
-  transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: max-width var(--diagram-toolbar-morph),
+              max-height var(--diagram-toolbar-morph),
+              opacity var(--diagram-toolbar-morph),
+              padding var(--diagram-toolbar-morph),
+              margin var(--diagram-toolbar-morph);
 }
 .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
-  flex-wrap: wrap;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  white-space: nowrap;
 }
 .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
   flex-direction: column;
@@ -1379,8 +1393,8 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   position: absolute;
   background: currentColor;
   border-radius: 1px;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--diagram-toolbar-morph),
+              opacity var(--diagram-toolbar-morph);
 }
 /* Horizontal bar (always visible – the minus) */
 .toggle-icon::before {
@@ -2092,19 +2106,20 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
   scroll-snap-align: start;
 }
 
-/* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing */
+/* 54.38 / 54.47 / 54.54: Vertical stack on mobile; intrinsic sizing; no scroll */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
   margin: 0;
   max-width: calc(100% - 32px);
   max-height: calc(100% - 24px);
-  width: auto;
+  width: min-content;
+  height: fit-content;
   display: flex !important;
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem 0.625rem;
+  gap: var(--diagram-toolbar-gap);
+  padding: var(--diagram-toolbar-pad);
   overflow: hidden;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.75);
@@ -2112,14 +2127,15 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   backdrop-filter: blur(20px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              gap 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
+  transition: padding var(--diagram-toolbar-morph),
+              gap var(--diagram-toolbar-morph),
+              border-radius var(--diagram-toolbar-morph),
+              width var(--diagram-toolbar-morph),
+              height var(--diagram-toolbar-morph),
+              box-shadow var(--diagram-toolbar-morph),
+              left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity var(--diagram-toolbar-morph);
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-tools-wrap {
-  flex-wrap: wrap;
   overflow: hidden;
 }
 
@@ -2145,17 +2161,29 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   height: 16px;
 }
 
-/* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
+/* 54.45 / 54.47: Horizontal on mobile = single-row pill; tighter gap/padding if needed so container doesn't bubble */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   max-width: calc(100vw - 32px);
+  gap: 6px;
+  padding: 6px 8px;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
   flex-direction: row;
-  flex-wrap: wrap;
-  max-width: calc(100vw - 100px);
+  flex-wrap: nowrap;
+  align-items: center;
+  white-space: nowrap;
+  gap: 6px;
   overflow: hidden;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .toolbar-pill-btn,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .upload-zone,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .blueprint-transparency-btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px;
 }
 
 /* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
@@ -2175,13 +2203,13 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
   touch-action: none;
   background: transparent;
   overflow: hidden;
-  transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              min-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: max-width var(--diagram-toolbar-morph),
+              max-height var(--diagram-toolbar-morph),
+              min-width var(--diagram-toolbar-morph),
+              min-height var(--diagram-toolbar-morph),
+              opacity var(--diagram-toolbar-morph),
+              padding var(--diagram-toolbar-morph),
+              margin var(--diagram-toolbar-morph);
 }
 .diagram-toolbar-drag-handle::before {
   content: "";
