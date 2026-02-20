@@ -1305,10 +1305,12 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Mobile-only diagram toolbar refinements** *(desktop behaviour unchanged)*
 
 - [ ] **54.49** **Mobile: Collapsed "+" icon always visible.** Verify on real device that the expand control is never a blank white circle; SVG stroke explicit (#333), button background and opacity/visibility set for mobile collapsed; document in TROUBLESHOOTING if still hit-and-miss.
-- [ ] **54.50** **Mobile: Toolbar never disappears after collapse.** Verify clamp runs after collapsed layout (double rAF), wrap dimension guard prevents off-screen position; toolbar remains on-screen after collapse and on resize.
+- [x] **54.50** **Mobile: Toolbar never disappears after collapse.** Verify clamp runs after collapsed layout (double rAF), wrap dimension guard (fallback position when ww/wh < 20) prevents off-screen position; run clamp once at init so toolbar stays on-screen after load/resize. Plan: docs/plans/2026-02-20-mobile-diagram-toolbar-disappearing-fix.md.
 - [ ] **54.51** **Mobile: Tap-to-expand reliability.** Ensure tap on collapsed "+" consistently expands (no accidental drag); hit target 44×44; consider touch-action or small movement threshold so tap vs drag is unambiguous.
 - [ ] **54.52** **Mobile: Orientation and no-scroll QA.** Manual check: drag to top/bottom → horizontal, to left/right → vertical; no scrollbars inside toolbar in any orientation; tools wrap correctly.
 - [ ] **54.53** **Mobile: Diagram toolbar regression coverage.** Add manual or E2E checklist for mobile: open app (toolbar expanded), collapse to "+", expand, drag to two zones, confirm no disappear and no scroll.
+- [x] **54.56** **Remove deprecated diagram-toolbar-hidden (swipe-away) UX.** Remove mobile-only `.diagram-floating-toolbar.diagram-toolbar-hidden` rule from styles.css and `toolbar.classList.remove('diagram-toolbar-hidden')` from app.js (class is never added; dead code path). Plan: docs/plans/2026-02-20-mobile-diagram-toolbar-disappearing-fix.md.
+- [x] **54.57** **Mobile: Inspect scroll so diagram toolbar at top stays visible.** Confirm workspace/view-canvas scroll on mobile; if toolbar at top can sit above visible area, add layout or clamp mitigation and document in TROUBLESHOOTING.md. Done: toolbar is inside .blueprint-wrap (overflow: hidden); no scroll mitigation needed; documented in TROUBLESHOOTING.
 
 **Diagram toolbar: Apple Freeform–style morphing and CSS-only icon** *(desktop + mobile)*
 

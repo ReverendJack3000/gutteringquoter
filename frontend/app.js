@@ -5560,6 +5560,8 @@ const DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_diagramToolbarCollapsed'
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD = 0.2; // left 20% / right 80% of wrap width → vertical
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_TOP = 0.2;   // top 20% of wrap height → horizontal
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_BOTTOM = 0.8; // bottom 20% (Y >= 80%) → horizontal
+const DIAGRAM_TOOLBAR_CLAMP_PAD = 8;
+const DIAGRAM_TOOLBAR_WRAP_MIN_SIZE = 20; // below this, wrap is treated as not laid out (54.50)
 
 /** 54.33: Cleanup from previous initDiagramToolbarDrag run (listeners + ResizeObserver). Run before re-init to avoid duplicates. */
 let diagramToolbarDragCleanup = null;
@@ -5583,12 +5585,15 @@ function clampDiagramToolbarToWrap(toolbar, wrap) {
   const toolRect = toolbar.getBoundingClientRect();
   const ww = wrapRect.width;
   const wh = wrapRect.height;
-  /* Avoid moving toolbar off-screen when wrap has no size (e.g. mobile layout not yet ready). */
-  if (ww < 20 || wh < 20) return;
+  const pad = DIAGRAM_TOOLBAR_CLAMP_PAD;
+  if (ww < DIAGRAM_TOOLBAR_WRAP_MIN_SIZE || wh < DIAGRAM_TOOLBAR_WRAP_MIN_SIZE) {
+    toolbar.style.left = pad + 'px';
+    toolbar.style.top = pad + 'px';
+    return;
+  }
   const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
   const tw = toolRect.width;
   const th = toolRect.height;
-  const pad = 8;
   let left = parseFloat(toolbar.style.left) || 0;
   let top = parseFloat(toolbar.style.top) || 0;
   left = Math.max(pad, Math.min(ww - (isVertical ? th : tw) - pad, left));
@@ -5623,7 +5628,6 @@ function initDiagramToolbarDrag() {
     }
   }
   applyDiagramToolbarPosition(toolbar, x, y, orient);
-  toolbar.classList.remove('diagram-toolbar-hidden');
   dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
@@ -5638,6 +5642,10 @@ function initDiagramToolbarDrag() {
     collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
     collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
   }
+  /* 54.50: Clamp after layout (double rAF) so collapsed/expanded dimensions and wrap are stable. */
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => clampDiagramToolbarToWrap(toolbar, wrap));
+  });
 
   let dragStartX = 0;
   let dragStartY = 0;
@@ -5724,8 +5732,9 @@ function initDiagramToolbarDrag() {
     const th = isVertical ? toolRect.width : toolRect.height;
     let newLeft = toolbarStartLeft + dx;
     let newTop = toolbarStartTop + dy;
-    newLeft = Math.max(8, Math.min(wrapRect.width - tw - 8, newLeft));
-    newTop = Math.max(8, Math.min(wrapRect.height - th - 8, newTop));
+    const pad = DIAGRAM_TOOLBAR_CLAMP_PAD;
+    newLeft = Math.max(pad, Math.min(wrapRect.width - tw - pad, newLeft));
+    newTop = Math.max(pad, Math.min(wrapRect.height - th - pad, newTop));
     toolbar.style.left = newLeft + 'px';
     toolbar.style.top = newTop + 'px';
   }

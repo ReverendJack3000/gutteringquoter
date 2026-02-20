@@ -28,6 +28,8 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 **Follow-up (mobile "+" blank / toolbar disappears):** SVG plus uses explicit `stroke="#333"` in HTML; mobile collapsed button gets `background: rgba(0,0,0,0.08)`, `color: #333`, and plus SVG gets `opacity: 1`, `visibility: visible`, `stroke-width: 2.5`. Double rAF in `onCollapseClick` before clamp; `clampDiagramToolbarToWrap` returns early when wrap width or height &lt; 20. See TASK_LIST 54.49–54.53 for verification tasks.
 
+**Follow-up (toolbar disappears at top – 54.50, 54.56, 54.57):** (1) **Dead “swipe away” removed:** The class `diagram-toolbar-hidden` was never added by any code; only removed in init. Removed the mobile-only CSS rule and the `classList.remove` so no leftover state can hide the toolbar. (2) **Clamp hardening:** When wrap dimensions are &lt; 20px (e.g. layout not ready), `clampDiagramToolbarToWrap` now sets a fallback position (`left`/`top` = 8px) instead of returning, so the toolbar appears once layout is ready. Init calls `clampDiagramToolbarToWrap(toolbar, wrap)` once after applying position and collapsed state so the toolbar is never off-screen on load. (3) **Scroll inspection:** The diagram toolbar lives inside `.blueprint-wrap` (`overflow: hidden`); `body` has `overflow: hidden`. No scrolling ancestor would move the toolbar out of view; “disappear at top” was from the deprecated class or clamp skip. No scroll mitigation needed.
+
 ---
 
 ## Invite / auth emails send users to localhost:3000 – 2026-02

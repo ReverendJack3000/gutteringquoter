@@ -2123,12 +2123,6 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-too
   overflow: hidden;
 }
 
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden {
-  transform: translateX(-50%) translateY(calc(-100% - 1rem));
-  opacity: 0;
-  pointer-events: none;
-}
-
 /* Mobile collapsed: container morphs to circle via flow */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
