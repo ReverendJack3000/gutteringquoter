@@ -41,6 +41,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.36–54.40 | (Complete) Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll |
 | 54 | 54.41–54.45 | (Complete) Diagram toolbar: Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions) |
 | 54 | 54.46–54.48 | (Complete) Diagram toolbar: collapsed = circular "+" only; no scroll in toolbars; mobile orientation = desktop |
+| 54 | 54.49–54.53 | (Mobile-only) Diagram toolbar refinements: "+" visibility, no disappear, tap-to-expand, QA |
 ---
 
 ## Locked decisions
@@ -1300,6 +1301,14 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [x] **54.46** **Diagram toolbar: Minimized = circular "+" only.** When collapsed, diagram toolbar is exactly a 44×44 circular expand button with no extra padding/ring (CSS: padding 0, size 44×44; mobile override for collapsed).
 - [x] **54.47** **Diagram toolbar + global toolbar: No scroll.** Diagram toolbar (desktop and mobile, vertical and horizontal) and global toolbar never show scrollbars; use flex-wrap so all tools visible without scrolling (overflow hidden + wrap).
 - [x] **54.48** **Diagram toolbar: Mobile orientation = desktop.** Confirm mobile uses same horizontal/vertical-by-position logic as desktop (verification only; no forced vertical on mobile).
+
+**Mobile-only diagram toolbar refinements** *(desktop behaviour unchanged)*
+
+- [ ] **54.49** **Mobile: Collapsed "+" icon always visible.** Verify on real device that the expand control is never a blank white circle; SVG stroke explicit (#333), button background and opacity/visibility set for mobile collapsed; document in TROUBLESHOOTING if still hit-and-miss.
+- [ ] **54.50** **Mobile: Toolbar never disappears after collapse.** Verify clamp runs after collapsed layout (double rAF), wrap dimension guard prevents off-screen position; toolbar remains on-screen after collapse and on resize.
+- [ ] **54.51** **Mobile: Tap-to-expand reliability.** Ensure tap on collapsed "+" consistently expands (no accidental drag); hit target 44×44; consider touch-action or small movement threshold so tap vs drag is unambiguous.
+- [ ] **54.52** **Mobile: Orientation and no-scroll QA.** Manual check: drag to top/bottom → horizontal, to left/right → vertical; no scrollbars inside toolbar in any orientation; tools wrap correctly.
+- [ ] **54.53** **Mobile: Diagram toolbar regression coverage.** Add manual or E2E checklist for mobile: open app (toolbar expanded), collapse to "+", expand, drag to two zones, confirm no disappear and no scroll.
 
 ---
 

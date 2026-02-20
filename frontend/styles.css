@@ -2086,13 +2086,23 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   align-items: center;
   overflow: hidden;
 }
+/* Mobile collapsed: explicit button background and icon visibility so "+" is never blank (iOS currentColor/stacking). */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
+  background: rgba(0, 0, 0, 0.08);
+  color: #333;
+}
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block !important;
   width: 24px;
   height: 24px;
   min-width: 24px;
   min-height: 24px;
+  flex-shrink: 0;
+  pointer-events: none;
   stroke: #333;
+  stroke-width: 2.5;
+  opacity: 1;
+  visibility: visible;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */

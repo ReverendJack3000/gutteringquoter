@@ -5581,11 +5581,13 @@ function clampDiagramToolbarToWrap(toolbar, wrap) {
   if (!toolbar || !wrap) return;
   const wrapRect = wrap.getBoundingClientRect();
   const toolRect = toolbar.getBoundingClientRect();
+  const ww = wrapRect.width;
+  const wh = wrapRect.height;
+  /* Avoid moving toolbar off-screen when wrap has no size (e.g. mobile layout not yet ready). */
+  if (ww < 20 || wh < 20) return;
   const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
   const tw = toolRect.width;
   const th = toolRect.height;
-  const ww = wrapRect.width;
-  const wh = wrapRect.height;
   const pad = 8;
   let left = parseFloat(toolbar.style.left) || 0;
   let top = parseFloat(toolbar.style.top) || 0;
@@ -5776,9 +5778,11 @@ function initDiagramToolbarDrag() {
       const span = collapseBtn.querySelector('.diagram-toolbar-collapse-btn-expand');
       if (span) span.textContent = '−';
     }
-    /* Keep collapsed pill on-screen (no jumping off or requiring scroll). */
+    /* Keep collapsed pill on-screen (no jumping off or requiring scroll). On mobile, use two frames so collapsed 44×44 layout is applied before clamp. */
     requestAnimationFrame(() => {
-      clampDiagramToolbarToWrap(toolbar, wrap);
+      requestAnimationFrame(() => {
+        clampDiagramToolbarToWrap(toolbar, wrap);
+      });
     });
   }
 
