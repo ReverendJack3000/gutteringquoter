@@ -5627,7 +5627,9 @@ function initDiagramToolbarDrag() {
   dragHandle.style.display = 'block';
 
   const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
-  const collapsed = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
+  /* Default to expanded (fully visible); on mobile always start expanded so app opens with toolbar visible. */
+  let collapsed = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
+  if (layoutState.viewportMode === 'mobile') collapsed = false;
   if (collapseBtn) {
     toolbar.classList.toggle('diagram-floating-toolbar--collapsed', collapsed);
     collapseBtn.setAttribute('aria-expanded', !collapsed);
@@ -5689,7 +5691,11 @@ function initDiagramToolbarDrag() {
 
   function onPointerDown(e) {
     if (e.button !== 0 && e.pointerType !== 'touch') return;
-    e.preventDefault();
+    /* When collapsed, tap on + must fire click to expand; only preventDefault if we're not on the expand button. */
+    const isTapOnExpandBtn = collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target)) && toolbar.classList.contains('diagram-floating-toolbar--collapsed');
+    if (!isTapOnExpandBtn) {
+      e.preventDefault();
+    }
     e.stopPropagation();
     dragPointerId = e.pointerId;
     didDragThisSession = false;
