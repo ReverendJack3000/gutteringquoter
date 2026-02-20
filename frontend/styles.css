@@ -2092,7 +2092,8 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
   scroll-snap-align: start;
 }
 
-/* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing */
+/* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing.
+ * 54.56–54.60: Always-thin edge-only – add new rules after this block (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md). Do not remove existing rules. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
   margin: 0;

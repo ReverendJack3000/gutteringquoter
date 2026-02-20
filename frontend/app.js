@@ -5560,6 +5560,7 @@ const DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_diagramToolbarCollapsed'
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD = 0.2; // left 20% / right 80% of wrap width → vertical
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_TOP = 0.2;   // top 20% of wrap height → horizontal
 const DIAGRAM_TOOLBAR_EDGE_THRESHOLD_BOTTOM = 0.8; // bottom 20% (Y >= 80%) → horizontal
+/* 54.56–54.60: Mobile always-thin edge-only – see docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md. Add mobile-only snap-to-edge; do not remove current desktop or orientation behaviour. */
 
 /** 54.33: Cleanup from previous initDiagramToolbarDrag run (listeners + ResizeObserver). Run before re-init to avoid duplicates. */
 let diagramToolbarDragCleanup = null;
