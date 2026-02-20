@@ -5644,7 +5644,20 @@ function initDiagramToolbarDrag() {
   }
   /* 54.50: Clamp after layout (double rAF) so collapsed/expanded dimensions and wrap are stable. */
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => clampDiagramToolbarToWrap(toolbar, wrap));
+    requestAnimationFrame(() => {
+      clampDiagramToolbarToWrap(toolbar, wrap);
+      /* If expanded but toolbar has zero size (intrinsic sizing edge case), force expanded and re-clamp. */
+      if (!toolbar.classList.contains('diagram-floating-toolbar--collapsed') && (toolbar.clientWidth < 40 || toolbar.clientHeight < 40)) {
+        toolbar.classList.remove('diagram-floating-toolbar--collapsed');
+        if (collapseBtn) {
+          collapseBtn.setAttribute('aria-expanded', 'true');
+          collapseBtn.setAttribute('aria-label', 'Collapse toolbar');
+          collapseBtn.title = 'Collapse toolbar';
+        }
+        localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED, 'false');
+        requestAnimationFrame(() => clampDiagramToolbarToWrap(toolbar, wrap));
+      }
+    });
   });
 
   let dragStartX = 0;

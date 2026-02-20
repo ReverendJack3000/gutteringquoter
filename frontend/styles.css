@@ -1257,6 +1257,10 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-floating-toolbar[data-orientation="vertical"] {
   flex-direction: column;
 }
+/* Expanded: ensure pill never collapses to zero size (intrinsic sizing edge case) */
+.diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) {
+  min-width: 100px;
+}
 /* Eliminate vertical top-gap: first tool (Pen/technical drawing) has no top margin */
 .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap > *:first-child {
   margin-top: 0;

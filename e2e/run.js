@@ -132,6 +132,44 @@ async function run() {
     }
     console.log('  ✓ App shell and canvas present');
 
+    // Diagram toolbar opens expanded and visible by default (no saved collapsed state)
+    await page.evaluate(() => {
+      localStorage.removeItem('quoteApp_diagramToolbarCollapsed');
+      localStorage.removeItem('quoteApp_diagramToolbarX');
+      localStorage.removeItem('quoteApp_diagramToolbarY');
+      localStorage.removeItem('quoteApp_diagramToolbarOrientation');
+    });
+    await page.reload({ waitUntil: 'networkidle2' });
+    await page.waitForSelector('.app', { timeout: 5000 });
+    await page.waitForSelector('#canvas', { timeout: 5000 });
+    await delay(800);
+    const canvasVisibleAgain = await page.evaluate(() => {
+      const v = document.getElementById('view-canvas');
+      return v && !v.classList.contains('hidden');
+    });
+    if (!canvasVisibleAgain) {
+      await page.evaluate(() => {
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      });
+      await delay(800);
+    }
+    await delay(600);
+    const toolbarOpenByDefault = await page.evaluate(() => {
+      const el = document.getElementById('diagramFloatingToolbar');
+      if (!el) return { ok: false, reason: 'toolbar missing' };
+      const collapsed = el.classList.contains('diagram-floating-toolbar--collapsed');
+      const rect = el.getBoundingClientRect();
+      const visible = rect.width >= 40 && rect.height >= 40;
+      return { ok: !collapsed && visible, collapsed, width: rect.width, height: rect.height };
+    });
+    if (!toolbarOpenByDefault.ok) {
+      throw new Error(
+        `Diagram toolbar should be expanded and visible by default (no localStorage). ` +
+        `Got collapsed=${toolbarOpenByDefault.collapsed}, width=${toolbarOpenByDefault.width}, height=${toolbarOpenByDefault.height}`
+      );
+    }
+    console.log('  ✓ Diagram toolbar opens expanded and visible by default');
+
     // Toolbar
     const uploadZone = await page.$('#uploadZone') || await page.$('#cameraUploadBtn');
     const exportBtn = await page.$('#exportBtn');
