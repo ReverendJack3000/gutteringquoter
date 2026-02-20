@@ -26,7 +26,7 @@ const state = {
   selectedIds: [], // multi-select; selectedId === selectedIds[0]
   groups: [], // { id: string, elementIds: string[] }
   dragOffset: { x: 0, y: 0 },
-  mode: null, // 'move' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan' | 'pinch'
+  mode: null, // 'move' | 'move-primed' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan' | 'pinch' | 'element-transform'
   resizeHandle: null,
   products: [],
   profileFilter: '', // '' | 'storm_cloud' | 'classic' | 'other'
@@ -73,6 +73,12 @@ const state = {
   pinchStartViewZoom: 1,
   pinchStartViewPanX: 0,
   pinchStartViewPanY: 0,
+  // 54.61: Mobile selected-element two-finger transform state
+  elementTransformPointerIds: null, // [pointerIdA, pointerIdB]
+  elementTransformStart: null, // { centerX, centerY, midX, midY, distance, angle, width, height, rotation }
+  // 54.62: Mobile tap-first move gating (avoid accidental drags on tap)
+  movePrimeStartClientX: 0,
+  movePrimeStartClientY: 0,
   colorPaletteOpen: false, // toggled by floating toolbar colour button; when true, show #colorPalettePopover below toolbar
   transparencyPopoverOpen: false, // toggled by #blueprintTransparencyBtn; only way to open transparency slider
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
@@ -321,6 +327,8 @@ const MIN_VIEW_ZOOM = 0.15;
 const MAX_VIEW_ZOOM = 4;
 /** 54.37: On mobile, zoom-out is clamped to 1 (full page) so the view never goes smaller than fit. */
 const MIN_VIEW_ZOOM_MOBILE = 1;
+/** 54.62: Mobile one-finger move starts only after crossing this threshold (tap remains select-only). */
+const MOBILE_MOVE_START_THRESHOLD_PX = 8;
 const ZOOM_WHEEL_FACTOR = 0.92;
 const ZOOM_BUTTON_FACTOR = 1.25;
 const VIEW_PAD = 48; // max padding from content edge to viewport when panning (canvas not limitless)
@@ -3637,6 +3645,120 @@ function getElementsToMove() {
   return Array.from(ids);
 }
 
+/** 54.61: Return the currently selected, unlocked element eligible for mobile two-finger transform. */
+function getSelectedElementForMobileTransform() {
+  if (layoutState.viewportMode !== 'mobile') return null;
+  if (state.selectedBlueprint) return null;
+  if (!state.selectedId || !state.selectedIds || state.selectedIds.length !== 1) return null;
+  const el = state.elements.find((x) => x.id === state.selectedId);
+  if (!el || el.locked) return null;
+  return el;
+}
+
+/** Clear transient mobile pointer gesture state (move-prime + two-finger element transform). */
+function clearMobilePointerGestureState() {
+  state.elementTransformPointerIds = null;
+  state.elementTransformStart = null;
+  state.movePrimeStartClientX = 0;
+  state.movePrimeStartClientY = 0;
+}
+
+/**
+ * 54.61: Begin two-finger selected-element transform on mobile.
+ * Returns true when transform mode starts successfully.
+ */
+function beginMobileElementTransformFromActivePointers() {
+  const selected = getSelectedElementForMobileTransform();
+  if (!selected) return false;
+  const ptrIds = Object.keys(state.activePointers);
+  if (ptrIds.length !== 2) return false;
+  const idA = ptrIds[0];
+  const idB = ptrIds[1];
+  const p1 = state.activePointers[idA];
+  const p2 = state.activePointers[idB];
+  if (!p1 || !p2) return false;
+  const midClientX = (p1.clientX + p2.clientX) / 2;
+  const midClientY = (p1.clientY + p2.clientY) / 2;
+  const midCanvas = clientToCanvas(midClientX, midClientY);
+  const distance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
+  if (!midCanvas || distance <= 5) return false;
+
+  if (!state.snapshotAtActionStart) {
+    state.snapshotAtActionStart = cloneStateForUndo();
+  }
+
+  // Cancel pending one-finger drag preview so two-finger transform starts from committed values.
+  state.previewDragX = null;
+  state.previewDragY = null;
+  state.dragMoveIds = [];
+  state.dragRelativeOffsets = [];
+  state.dragGhostX = null;
+  state.dragGhostY = null;
+  state.marqueeStart = null;
+  state.marqueeCurrent = null;
+
+  state.mode = 'element-transform';
+  state.elementTransformPointerIds = [idA, idB];
+  state.elementTransformStart = {
+    centerX: selected.x + selected.width / 2,
+    centerY: selected.y + selected.height / 2,
+    midX: midCanvas.x,
+    midY: midCanvas.y,
+    distance,
+    angle: Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX),
+    width: selected.width,
+    height: selected.height,
+    rotation: selected.rotation || 0,
+  };
+  return true;
+}
+
+/** 54.61: Apply two-finger transform (translate + uniform resize + rotate) to selected element on mobile. */
+function applyMobileElementTransformFromActivePointers() {
+  if (state.mode !== 'element-transform') return false;
+  const ids = state.elementTransformPointerIds;
+  const start = state.elementTransformStart;
+  if (!ids || ids.length !== 2 || !start) return false;
+  const p1 = state.activePointers[ids[0]];
+  const p2 = state.activePointers[ids[1]];
+  const selected = getSelectedElementForMobileTransform();
+  if (!p1 || !p2 || !selected) return false;
+
+  const currentDistance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
+  if (!(currentDistance > 0) || !(start.distance > 0)) return false;
+
+  const midClientX = (p1.clientX + p2.clientX) / 2;
+  const midClientY = (p1.clientY + p2.clientY) / 2;
+  const midCanvas = clientToCanvas(midClientX, midClientY);
+  if (!midCanvas) return false;
+
+  const currentAngle = Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX);
+  const scaleFactor = currentDistance / start.distance;
+  const nextW = Math.max(MIN_ELEMENT_DIMENSION_PX, start.width * scaleFactor);
+  const nextH = Math.max(MIN_ELEMENT_DIMENSION_PX, start.height * scaleFactor);
+  const deltaRotationDeg = ((currentAngle - start.angle) * 180) / Math.PI;
+  let nextRotation = normalizeAngleDeg(start.rotation + deltaRotationDeg);
+  nextRotation = constrainGutterRotation(nextRotation, selected).degrees;
+
+  const nextCenterX = start.centerX + (midCanvas.x - start.midX);
+  const nextCenterY = start.centerY + (midCanvas.y - start.midY);
+
+  selected.width = nextW;
+  selected.height = nextH;
+  selected.x = nextCenterX - nextW / 2;
+  selected.y = nextCenterY - nextH / 2;
+  selected.rotation = nextRotation;
+
+  if (selected.tintedCanvas && (selected.tintedCanvasWidth !== nextW || selected.tintedCanvasHeight !== nextH)) {
+    selected.tintedCanvas = null;
+    selected.tintedCanvasColor = null;
+    selected.tintedCanvasWidth = null;
+    selected.tintedCanvasHeight = null;
+    selected._tintedCanvasFailureKey = undefined;
+  }
+  return true;
+}
+
 function setSelection(ids) {
   const next = ids && ids.length ? ids : [];
   const prev = state.selectedIds;
@@ -5578,6 +5700,17 @@ function applyDiagramToolbarPosition(toolbar, x, y, orientation) {
   toolbar.setAttribute('data-orientation', orientation || 'horizontal');
 }
 
+/** 54.64: Mobile-only top safe offset so diagram toolbar never tucks under the global header/notch. */
+function getDiagramToolbarTopPad(wrapRect, basePad) {
+  if (layoutState.viewportMode !== 'mobile') return basePad;
+  const globalToolbarWrap = document.getElementById('globalToolbarWrap');
+  if (!globalToolbarWrap || !wrapRect) return basePad;
+  const headerBottom = globalToolbarWrap.getBoundingClientRect().bottom;
+  const overlap = headerBottom - wrapRect.top;
+  if (overlap <= 0) return basePad;
+  return Math.max(basePad, Math.round(overlap + basePad));
+}
+
 function clampDiagramToolbarToWrap(toolbar, wrap) {
   if (!toolbar || !wrap) return;
   const wrapRect = wrap.getBoundingClientRect();
@@ -5585,10 +5718,11 @@ function clampDiagramToolbarToWrap(toolbar, wrap) {
   const ww = wrapRect.width;
   const wh = wrapRect.height;
   const pad = 8;
+  const topPad = getDiagramToolbarTopPad(wrapRect, pad);
   /* When wrap has no size (e.g. mobile layout not yet ready), put toolbar at safe position so it doesn't stay off-screen. */
   if (ww < 20 || wh < 20) {
     toolbar.style.left = pad + 'px';
-    toolbar.style.top = pad + 'px';
+    toolbar.style.top = topPad + 'px';
     return;
   }
   const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
@@ -5596,8 +5730,10 @@ function clampDiagramToolbarToWrap(toolbar, wrap) {
   const th = toolRect.height;
   let left = parseFloat(toolbar.style.left) || 0;
   let top = parseFloat(toolbar.style.top) || 0;
+  const maxTop = wh - (isVertical ? tw : th) - pad;
+  const minTop = Math.min(topPad, maxTop);
   left = Math.max(pad, Math.min(ww - (isVertical ? th : tw) - pad, left));
-  top = Math.max(pad, Math.min(wh - (isVertical ? tw : th) - pad, top));
+  top = Math.max(minTop, Math.min(maxTop, top));
   toolbar.style.left = left + 'px';
   toolbar.style.top = top + 'px';
 }
@@ -5621,13 +5757,16 @@ function initDiagramToolbarDrag() {
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     if (layoutState.viewportMode === 'mobile') {
       x = 12;
-      y = 12;
+      y = getDiagramToolbarTopPad(wrapRect, 12);
     } else {
       x = (wrapRect.width - toolRect.width) / 2;
       y = 12;
     }
   }
   applyDiagramToolbarPosition(toolbar, x, y, orient);
+  if (layoutState.viewportMode === 'mobile') {
+    clampDiagramToolbarToWrap(toolbar, wrap);
+  }
   dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
@@ -5657,6 +5796,7 @@ function initDiagramToolbarDrag() {
     const centerX = tr.left - wr.left + tr.width / 2;
     const centerY = tr.top - wr.top + tr.height / 2;
     const pad = 12;
+    const topPad = getDiagramToolbarTopPad(wr, pad);
     /* Top 20% and bottom 20% of wrap height → horizontal; left/right 20% (middle strip) → vertical. */
     const topZone = wr.height * DIAGRAM_TOOLBAR_EDGE_THRESHOLD_TOP;           /* Y <= this = top 20% */
     const bottomZone = wr.height * DIAGRAM_TOOLBAR_EDGE_THRESHOLD_BOTTOM;   /* Y >= this = bottom 20% */
@@ -5665,8 +5805,10 @@ function initDiagramToolbarDrag() {
 
     if (centerY <= topZone) {
       toolbar.setAttribute('data-orientation', 'horizontal');
-      toolbar.style.top = pad + 'px';
-      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(pad));
+      const maxTop = wr.height - toolbar.getBoundingClientRect().height - pad;
+      const topSnap = Math.max(pad, Math.min(topPad, maxTop));
+      toolbar.style.top = topSnap + 'px';
+      localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(topSnap)));
       localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
     } else if (centerY >= bottomZone) {
       toolbar.setAttribute('data-orientation', 'horizontal');
@@ -5715,21 +5857,26 @@ function initDiagramToolbarDrag() {
     } catch (_) {}
   }
 
+  /* Movement threshold (px²): above this counts as drag so tap-to-expand still fires. 5px was too low (mobile wobble). */
+  const DRAG_THRESHOLD_PX_SQ = 100; // ~10px
   function onPointerMove(e) {
     if (dragPointerId == null || e.pointerId !== dragPointerId) return;
     e.preventDefault();
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    if (dx * dx + dy * dy > 25) didDragThisSession = true;
+    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) didDragThisSession = true;
     const wrapRect = wrap.getBoundingClientRect();
     const toolRect = toolbar.getBoundingClientRect();
     const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
     const tw = isVertical ? toolRect.height : toolRect.width;
     const th = isVertical ? toolRect.width : toolRect.height;
+    const topPad = getDiagramToolbarTopPad(wrapRect, 8);
+    const maxTop = wrapRect.height - th - 8;
+    const minTop = Math.min(topPad, maxTop);
     let newLeft = toolbarStartLeft + dx;
     let newTop = toolbarStartTop + dy;
     newLeft = Math.max(8, Math.min(wrapRect.width - tw - 8, newLeft));
-    newTop = Math.max(8, Math.min(wrapRect.height - th - 8, newTop));
+    newTop = Math.max(minTop, Math.min(maxTop, newTop));
     toolbar.style.left = newLeft + 'px';
     toolbar.style.top = newTop + 'px';
   }
@@ -5848,10 +5995,14 @@ function initCanvas() {
     canvas.setPointerCapture(e.pointerId);
     const rect = getCanvasRect();
     if (!rect) return;
-    // 54.17: Track active pointers for pinch zoom; enter pinch when second finger touches
+    // 54.17 / 54.61: Track active pointers for pinch zoom or selected-element two-finger transform.
     state.activePointers[e.pointerId] = { clientX: e.clientX, clientY: e.clientY };
     const ptrIds = Object.keys(state.activePointers);
     if (ptrIds.length === 2 && (state.blueprintImage || state.elements.length)) {
+      // 54.61: On mobile, selected single element gets Freeform-style two-finger transform.
+      if (beginMobileElementTransformFromActivePointers()) {
+        return;
+      }
       const p1 = state.activePointers[ptrIds[0]];
       const p2 = state.activePointers[ptrIds[1]];
       const cx = (p1.clientX + p2.clientX) / 2;
@@ -5859,6 +6010,7 @@ function initCanvas() {
       const dist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY);
       const display = clientToCanvasDisplay(cx, cy);
       if (display && dist > 5) {
+        clearMobilePointerGestureState();
         state.mode = 'pinch';
         state.pinchStartDistance = dist;
         state.pinchStartCenter = { x: cx, y: cy };
@@ -5957,13 +6109,31 @@ function initCanvas() {
         }
         return;
       }
-      state.snapshotAtActionStart = cloneStateForUndo();
-      if (!state.selectedIds.includes(hit.element.id)) {
+      const wasAlreadySelected = state.selectedIds.includes(hit.element.id);
+      const isMobileTapMovePath = layoutState.viewportMode === 'mobile' && !e.altKey;
+      const shouldSelectOnlyOnMobile = isMobileTapMovePath && !wasAlreadySelected;
+      const shouldPrimeMobileMove = isMobileTapMovePath && wasAlreadySelected;
+      if (!shouldPrimeMobileMove && !shouldSelectOnlyOnMobile) {
+        state.snapshotAtActionStart = cloneStateForUndo();
+      }
+      if (!wasAlreadySelected) {
         setSelection([hit.element.id]);
       } else {
         setSelection([hit.element.id].concat(state.selectedIds.filter((id) => id !== hit.element.id)));
       }
       if (hit.element.sequenceId && state.selectedIds.length === 1) scrollToMeasurementCardAndFocus(hit.element.id);
+      if (shouldSelectOnlyOnMobile) {
+        // 54.62: First tap on an unselected element only selects. One-finger move requires explicit prior selection.
+        state.mode = null;
+        state.dragGhostX = null;
+        state.dragGhostY = null;
+        state.previewDragX = null;
+        state.previewDragY = null;
+        state.dragMoveIds = [];
+        state.dragRelativeOffsets = [];
+        clearMobilePointerGestureState();
+        return;
+      }
       if (e.altKey) {
         const el = hit.element;
         pushUndoSnapshot();
@@ -6007,8 +6177,21 @@ function initCanvas() {
         state.dragGhostX = null;
         state.dragGhostY = null;
       }
-      state.mode = 'move';
+
       const primary = state.elements.find((x) => x.id === state.selectedId);
+      if (shouldPrimeMobileMove) {
+        // 54.62: Mobile tap-first move gating. One finger selects first; drag starts only after threshold in pointermove.
+        state.mode = 'move-primed';
+        state.movePrimeStartClientX = e.clientX;
+        state.movePrimeStartClientY = e.clientY;
+        state.previewDragX = null;
+        state.previewDragY = null;
+        state.dragMoveIds = [];
+        state.dragRelativeOffsets = [];
+        return;
+      }
+
+      state.mode = 'move';
       if (primary) {
         state.dragOffset.x = canvasPos.x - primary.x;
         state.dragOffset.y = canvasPos.y - primary.y;
@@ -6051,6 +6234,16 @@ function initCanvas() {
   canvas.addEventListener('pointermove', (e) => {
     state.activePointers[e.pointerId] = { clientX: e.clientX, clientY: e.clientY };
     const canvasPos = clientToCanvas(e.clientX, e.clientY);
+    if (state.mode === 'element-transform') {
+      const ptrIds = state.elementTransformPointerIds;
+      if (ptrIds && ptrIds.length === 2 && state.activePointers[ptrIds[0]] && state.activePointers[ptrIds[1]]) {
+        e.preventDefault();
+        if (applyMobileElementTransformFromActivePointers()) {
+          draw();
+        }
+      }
+      return;
+    }
     // 54.17: Pinch zoom – update view from two-finger distance and center
     if (state.mode === 'pinch') {
       const ptrIds = Object.keys(state.activePointers);
@@ -6109,6 +6302,35 @@ function initCanvas() {
     if (state.mode === 'marquee') {
       state.marqueeCurrent = { x: canvasPos.x, y: canvasPos.y };
       return;
+    }
+    if (state.mode === 'move-primed') {
+      const dx = e.clientX - state.movePrimeStartClientX;
+      const dy = e.clientY - state.movePrimeStartClientY;
+      if (dx * dx + dy * dy < MOBILE_MOVE_START_THRESHOLD_PX * MOBILE_MOVE_START_THRESHOLD_PX) {
+        return;
+      }
+      const primary = state.elements.find((x) => x.id === state.selectedId);
+      if (!primary || primary.locked) {
+        state.mode = null;
+        clearMobilePointerGestureState();
+        return;
+      }
+      if (!state.snapshotAtActionStart) {
+        state.snapshotAtActionStart = cloneStateForUndo();
+      }
+      state.mode = 'move';
+      state.dragOffset.x = canvasPos.x - primary.x;
+      state.dragOffset.y = canvasPos.y - primary.y;
+      state.dragMoveIds = getElementsToMove();
+      state.dragRelativeOffsets = state.dragMoveIds
+        .filter((id) => id !== state.selectedId)
+        .map((id) => {
+          const o = state.elements.find((x) => x.id === id);
+          return o ? { id, dx: o.x - primary.x, dy: o.y - primary.y } : null;
+        })
+        .filter(Boolean);
+      state.previewDragX = primary.x;
+      state.previewDragY = primary.y;
     }
     if (state.mode === 'pan') {
       state.viewPanX += e.clientX - state.dragOffset.x;
@@ -6187,11 +6409,25 @@ function initCanvas() {
       try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
     }
     delete state.activePointers[e.pointerId];
+    const endingElementTransform = state.mode === 'element-transform' && Object.keys(state.activePointers).length < 2;
     if (state.mode === 'pinch' && Object.keys(state.activePointers).length < 2) {
       // 54.17: Clean up pinch state when exiting pinch mode
       state.mode = null;
       state.pinchStartDistance = 0;
       state.pinchStartCenter = null;
+      clearMobilePointerGestureState();
+    }
+    if (endingElementTransform) {
+      // Keep state.mode until undo snapshot decision below, then clear in common cleanup.
+      state.elementTransformPointerIds = null;
+      state.elementTransformStart = null;
+    }
+    if (state.mode === 'move-primed') {
+      // 54.62: Tap-only selection should not commit a drag interaction.
+      state.dragMoveIds = [];
+      state.dragRelativeOffsets = [];
+      state.previewDragX = null;
+      state.previewDragY = null;
     }
     if (state.mode === 'resize' && state.selectedId && state.resizeHandle) {
       if (state.resizeRAFId != null) {
@@ -6260,6 +6496,7 @@ function initCanvas() {
     state.marqueeCurrent = null;
     state.activeGuides = [];
     state.hoveredHandleId = null;
+    clearMobilePointerGestureState();
     // Stable viewport: do not call scheduleBboxRecalcDebounce() for resize/move/rotate.
     // baseScale and baseOffset remain static; re-fit only on new blueprint or "Recenter View".
     state.mode = null;
@@ -6274,6 +6511,7 @@ function initCanvas() {
       state.mode = null;
       state.pinchStartDistance = 0;
       state.pinchStartCenter = null;
+      clearMobilePointerGestureState();
     }
     state.hoveredId = null;
     state.hoveredHandleId = null;
@@ -6291,6 +6529,7 @@ function initCanvas() {
       state.resizeRAFId = null;
     }
     state.pendingResizeCanvasPos = null;
+    clearMobilePointerGestureState();
     if (state.mode === 'pan') state.mode = null;
     else { state.mode = null; state.resizeHandle = null; }
   });
@@ -6305,6 +6544,7 @@ function initCanvas() {
       state.mode = null;
       state.pinchStartDistance = 0;
       state.pinchStartCenter = null;
+      clearMobilePointerGestureState();
     }
     cancelBboxRecalcDebounce();
     if (state.resizeRAFId != null) {
@@ -6321,6 +6561,7 @@ function initCanvas() {
     state.previewDragY = null;
     state.dragMoveIds = [];
     state.dragRelativeOffsets = [];
+    clearMobilePointerGestureState();
   });
 
   canvas.addEventListener('wheel', (e) => {
@@ -8769,7 +9010,40 @@ function initGlobalToolbar() {
 
   applyState();
 
-  collapseBtn.addEventListener('click', () => {
+  /* Track pointer on collapse button so we can expand on pointerup when click is delayed/suppressed (e.g. mobile). */
+  const GLOBAL_TOOLBAR_EXPAND_MOVE_PX_SQ = 100; // ~10px
+  let collapsePointerId = null;
+  let collapsePointerStartX = 0;
+  let collapsePointerStartY = 0;
+  let expandedViaPointer = false;
+
+  collapseBtn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 && e.pointerType !== 'touch') return;
+    collapsePointerId = e.pointerId;
+    collapsePointerStartX = e.clientX;
+    collapsePointerStartY = e.clientY;
+    expandedViaPointer = false;
+  }, { passive: true });
+
+  collapseBtn.addEventListener('pointerup', (e) => {
+    if (collapsePointerId == null || e.pointerId !== collapsePointerId) return;
+    collapsePointerId = null;
+    if (!collapsed) return;
+    const dx = e.clientX - collapsePointerStartX;
+    const dy = e.clientY - collapsePointerStartY;
+    if (dx * dx + dy * dy <= GLOBAL_TOOLBAR_EXPAND_MOVE_PX_SQ) {
+      expandedViaPointer = true;
+      collapsed = false;
+      localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, 'false');
+      applyState();
+    }
+  }, { passive: true });
+
+  collapseBtn.addEventListener('click', (e) => {
+    if (expandedViaPointer) {
+      expandedViaPointer = false;
+      return; // already expanded from pointerup; avoid double-toggle
+    }
     collapsed = !collapsed;
     localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, String(collapsed));
     applyState();
@@ -9001,8 +9275,18 @@ function updatePlaceholderStepsForViewport(mode) {
   if (!steps) return;
   steps.textContent =
     mode === 'mobile'
-      ? 'Tap the Products bar below and drag products here — move, resize, and rotate like a Canva board'
+      ? 'Tap Products below to place parts, then move, resize, and rotate the selected part.'
       : 'Open the panel (→) and drag products here — move, resize, and rotate like a Canva board';
+}
+
+/** 54.63: Mobile copy should be tap-first; keep desktop drag language unchanged. */
+function updatePanelTipForViewport(mode) {
+  const tip = document.getElementById('panelTip');
+  if (!tip) return;
+  tip.textContent =
+    mode === 'mobile'
+      ? 'Tap items to place them on the canvas, then adjust the selected part.'
+      : 'Drag items onto the blueprint to add them.';
 }
 
 function applyViewportMode(mode, options = {}) {
@@ -9016,6 +9300,18 @@ function applyViewportMode(mode, options = {}) {
     if (document.body) document.body.setAttribute('data-viewport-mode', normalizedMode);
     if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
     updatePlaceholderStepsForViewport(normalizedMode);
+    updatePanelTipForViewport(normalizedMode);
+    /* 54.67: Mobile header theme-color blue (#54B3D9); desktop stays green (#71C43C) */
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    const themeColorValue = normalizedMode === 'mobile' ? '#54B3D9' : '#71C43C';
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', themeColorValue);
+    } else if (document.head) {
+      const meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      meta.content = themeColorValue;
+      document.head.appendChild(meta);
+    }
   }
 
   if (modeChanged) {

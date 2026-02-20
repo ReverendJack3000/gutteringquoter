@@ -41,7 +41,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.36–54.40 | (Complete) Mobile: canvas page size, fit/zoom, diagram + global toolbars no-scroll |
 | 54 | 54.41–54.45 | (Complete) Diagram toolbar: Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions) |
 | 54 | 54.46–54.48 | (Complete) Diagram toolbar: collapsed = circular "+" only; no scroll in toolbars; mobile orientation = desktop |
-| 54 | 54.49–54.53, 54.50.1, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60) |
+| 54 | 54.49–54.53, 54.50.1, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60). Note: pill bar cannot be dragged horizontally when expanded; does not detect edges to reformat horizontal/vertical. |
+| 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
+| 54 | 54.67–54.69 | Mobile header green → blue: 54.67 done (#54B3D9); verify (54.68); optional manifest (54.69) |
 ---
 
 ## Locked decisions
@@ -1319,11 +1321,29 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 **Mobile: diagram toolbar always thin, edge-only** *(additive; do not remove current behaviour)*  
 *Plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md*
 
+*Note (current behaviour): The pill bar cannot be dragged horizontally when expanded, and it does not detect edges to reformat to horizontal/vertical.*
+
 - [ ] **54.56** **Mobile: Thin vertical pill – single column.** Ensure `body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap` uses `flex-wrap: nowrap` so the toolbar stays a single column (slim pill) on left/right. Do not remove existing vertical layout or desktop rules.
 - [ ] **54.57** **Mobile: Thin horizontal pill – single row + compact size.** For `data-orientation="horizontal"` on mobile: set `flex-wrap: nowrap` on toolbar and tools-wrap; add compact touch targets (e.g. 40px) and smaller icons (e.g. 18px) so all tools fit in one row; optionally add `body.a11y-large-controls` override to keep 44px (and allow two-row wrap). Reduce padding/gap for thin pill. Do not remove existing horizontal or desktop behaviour.
 - [ ] **54.58** **Mobile: Snap toolbar to nearest edge.** In app.js, add mobile-only snap-to-edge logic: on pointer up, init, and ResizeObserver, compute nearest edge (top/bottom/left/right) from toolbar center and 20% thresholds; set position centered on that edge; set orientation (horizontal for top/bottom, vertical for left/right); persist X, Y, orientation. Gate all new logic with `layoutState.viewportMode === 'mobile'`; desktop keeps current free placement and existing `updateOrientationFromPosition` behaviour.
 - [ ] **54.59** **Mobile: No middle placement.** When on mobile, ensure the toolbar never remains in the “middle” strip after drag or on load: run snap-to-edge so it always lands on one of the four edges. Desktop unchanged.
 - [ ] **54.60** **Mobile: Always-thin QA and regression.** Manual check: toolbar only on edges (top/bottom/left/right); vertical = slim single column, horizontal = thin single row; collapse/expand and all tools unchanged; desktop free placement and layout unchanged. Document a11y tradeoff if compact horizontal uses &lt;44px.
+
+**Mobile Freeform interaction parity (reference implementation plan)**  
+*Reference: 2026-02-20 mobile UI investigation (code + viewport audit). Additive planning items only; desktop behaviour unchanged unless explicitly stated.*
+
+- [x] **54.61** **Selected-element two-finger transform (mobile).** When an element is selected on mobile, support two-finger gesture to resize + rotate the selected element directly (Freeform-style). Keep existing viewport pinch-zoom/pan when no element is selected.
+- [x] **54.62** **Tap-first move gating (mobile).** Require explicit selection before one-finger move; add small movement threshold so tap-to-select does not accidentally start drag. Empty-space drag should continue to pan the canvas.
+- [x] **54.63** **Tap-first copy and labels (mobile).** Replace drag-centric mobile helper text/announcements with tap-first guidance (e.g., “Tap Products to place, then manipulate selected parts”). Keep desktop copy unchanged.
+- [x] **54.64** **Diagram toolbar safe-area and header-occlusion hardening (mobile).** Ensure floating diagram toolbar never renders clipped under the top header/notch; clamp with safe top offset, preserve z-index ordering, and keep collapse/expand fully visible.
+- [ ] **54.65** **Gesture arbitration and reliability QA (mobile).** Verify no conflicts between element gestures, canvas pan, and viewport pinch; include edge cases for quick taps, slight finger drift, and two-finger transitions.
+- [x] **54.66** **Regression coverage for mobile interaction parity.** Add manual/E2E checklist for: select→transform with two fingers, tap-first move gating, panel tap-to-add auto-close, toolbar visibility near top edge, and 200% zoom/orientation checks. Checklist: `docs/QA-CHECKLIST-2026-02-20-mobile-freeform-interaction-parity.md`.
+
+**Mobile: header (theme) colour green → blue** *(plan: docs/plans/2026-02-20-mobile-header-green-to-blue.md)*
+
+- [x] **54.67** **Mobile: theme-color blue.** In `applyViewportMode`, update `<meta name="theme-color">`: when `normalizedMode === 'mobile'` set content to `#54B3D9`, when desktop set to `#71C43C`. Create meta if missing. Ensure no desktop behaviour or layout change.
+- [ ] **54.68** **Mobile: verify header blue and desktop unchanged.** Manual check: mobile viewport → blue chrome; desktop viewport → green chrome; resize/orientation and `?viewport=` switch correctly; Railway deploy unchanged.
+- [ ] **54.69** **(Optional) Manifest theme_color blue.** Change `manifest.webmanifest` `theme_color` to `#007aff` and document that desktop PWA will also show blue chrome (only if product wants PWA-on-mobile chrome blue).
 
 ---
 
@@ -1348,4 +1368,4 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 **MVP status:** All tasks in sections 1–8 are complete. Section 9 items are deferred. Sections 10–12 are complete. Section 13.1–13.3 complete; 13.4–13.5 optional. Section 14 complete. Section 15.1–15.4 and 15.7–15.14 complete; 15.5–15.6 optional. Section 16 complete. Section 17 complete (drill-through with Alt, blueprint lock, lock picture to background). Section 18 complete (18.9–18.11: rotated handle hit test, rotation-aware cursors, rotate handle accessibility). Section 19 complete (blueprint disappearance fix). Section 20 added (anchor-based resize). Section 21 complete (transparency slider via dedicated checkerboard button at blueprint top-left; works when locked; slider blue, number input fixed; E2E tests). Section 22 in progress: 22.1–22.4, 22.5–22.14, 22.16–22.19 complete; 22.15, 22.20–22.24 remaining. Quote modal has Add item to add lines manually. Section 23 complete (CSV product import). Section 25 complete (all Marley diagram SVGs uploaded; downpipe joiner mapping fixed). Section 24 complete (profile filter dropdown implemented). Section 26 added (billing logic: manual guttering distance, dropper 4 screws, saddle/adjustable clip 2 screws). Section 27 complete (Digital Takeoff / Measurement Deck – badges, panel, two-way highlight, quote length→quantity). Section 28 added (Delete element only; badge double-click length entry). Section 29 complete (manual pop-up UI: metres, gutter/downpipe labels, red/green states). Section 30 complete (expand blueprint image types: clipboard paste, HEIC, PDF frontend conversion; BMP/TIFF/AVIF/GIF out of scope). Section 55 complete (55.1–55.10).
 
-*Last updated: Feb 2026. Section 54: 54.46–54.48 complete; 54.49–54.53 + 54.50.1 mobile refinements; 54.56–54.60 always thin edge-only (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md). Section 55 complete. Section 49: jobmaterial POST 400 (49.24). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
+*Last updated: Feb 2026. Section 54: 54.46–54.48 complete; 54.49–54.53 + 54.50.1 mobile refinements; 54.56–54.60 always thin edge-only (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md); 54.61–54.64 implemented; 54.66 checklist added (`docs/QA-CHECKLIST-2026-02-20-mobile-freeform-interaction-parity.md`); 54.65 pending manual gesture-arbitration QA. Section 55 complete. Section 49: jobmaterial POST 400 (49.24). Section 48: Railway deployment. See TROUBLESHOOTING.md for displayed_amount error.*
