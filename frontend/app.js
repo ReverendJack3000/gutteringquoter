@@ -5637,8 +5637,6 @@ function initDiagramToolbarDrag() {
     collapseBtn.setAttribute('aria-expanded', !collapsed);
     collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
     collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
-    const collapseSpan = collapseBtn.querySelector('.diagram-toolbar-collapse-btn-expand');
-    if (collapseSpan) collapseSpan.textContent = '−';
   }
 
   let dragStartX = 0;
@@ -5775,8 +5773,6 @@ function initDiagramToolbarDrag() {
       collapseBtn.setAttribute('aria-expanded', !collapsed);
       collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
       collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
-      const span = collapseBtn.querySelector('.diagram-toolbar-collapse-btn-expand');
-      if (span) span.textContent = '−';
     }
     /* Keep collapsed pill on-screen (no jumping off or requiring scroll). On mobile, use two frames so collapsed 44×44 layout is applied before clamp. */
     requestAnimationFrame(() => {

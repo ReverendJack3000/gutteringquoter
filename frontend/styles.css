@@ -1219,13 +1219,13 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   -webkit-user-select: none;
 }
 
-/* Floating diagram toolbar (Canva/Freeform style) – draggable, edge-snaps vertical L/R, horizontal top/bottom (54.41–54.45) */
+/* 54.54–54.55: Floating diagram toolbar – Apple Freeform style with container-first morphing */
 .diagram-floating-toolbar {
   position: absolute;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 56; /* 54.45: above selection toolbar (55) and inspector so it never slips behind when dragged */
+  z-index: 56;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1239,31 +1239,38 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease;
+  overflow: hidden;
+  transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              gap 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.2s ease, top 0.2s ease, transform 0.2s ease;
 }
 .diagram-floating-toolbar[data-orientation="vertical"] {
   flex-direction: column;
-  border-radius: 999px;
 }
-/* 54.46: Collapsed = circular "+" only; no scroll, no overflow, icon always visible. */
+/* Collapsed: container shrinks to circle via flow (tools-wrap collapses, only toggle button remains) */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
   min-width: 44px;
   min-height: 44px;
-  width: 44px;
-  height: 44px;
   border-radius: 50%;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  flex-direction: row;
 }
+/* Drag handle: animatable hide (not display:none) so container morphs smoothly */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
-  display: none;
+  max-width: 0;
+  max-height: 0;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-/* 54.43–54.44: Collapsible state – animate with max-width/opacity to avoid jank (not width/height) */
+/* Tools wrap */
 .diagram-toolbar-tools-wrap {
   display: flex;
   align-items: center;
@@ -1274,9 +1281,12 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   max-width: 90vw;
   overflow: hidden;
   opacity: 1;
-  transition: max-width 0.25s ease, max-height 0.25s ease, opacity 0.2s ease;
+  transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* 54.47: Horizontal – wrap so no scroll */
 .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
   flex-wrap: wrap;
 }
@@ -1286,37 +1296,27 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   max-width: none;
   max-height: 60vh;
 }
+/* Collapsed: tools stay in flow but shrink to 0 so container morphs naturally.
+   Use width/flex-basis (not just max-width) because max-width transition from 90vw→0 can stall in some engines. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-tools-wrap {
-  position: absolute;
+  width: 0;
   max-width: 0;
   max-height: 0;
+  min-width: 0;
+  flex: 0 0 0px;
   opacity: 0;
   pointer-events: none;
   overflow: hidden;
+  padding: 0;
+  margin: 0;
+  gap: 0;
 }
-/* Expand state: show minus (span), hide plus SVG. Both icons stacked in same position so swap has no layout shift. */
-.diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
-  display: none;
-}
-.diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
-  width: 24px;
-  height: 24px;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
+
+/* Collapse / expand toggle button – grid centering for perfect circle (54.55) */
 .diagram-toolbar-collapse-btn {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   min-width: 44px;
   min-height: 44px;
   padding: 0;
@@ -1327,6 +1327,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   color: #666;
   cursor: pointer;
   position: relative;
+  order: 99;
 }
 .diagram-toolbar-collapse-btn:hover {
   background: rgba(0, 0, 0, 0.06);
@@ -1336,53 +1337,69 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   outline: 2px solid #18a0fb;
   outline-offset: 2px;
 }
-/* Collapsed: show SVG plus only (always visible, no text/font issues); no transition on icon. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
   cursor: grab;
-  width: 44px;
-  height: 44px;
   color: #333;
   background: rgba(0, 0, 0, 0.08);
-  position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
-}
-.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
-  display: none;
-}
-/* Refined + icon when minimised: same position as minus (stacked), intrinsic size, bold stroke. */
-.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
-  display: block !important;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  flex-shrink: 0;
-  pointer-events: none;
-  stroke: #333;
-  stroke-width: 2.5;
-  opacity: 1;
-  visibility: visible;
-  margin: 0;
+  order: 0;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
   cursor: grabbing;
 }
+
+/* CSS-only Plus ↔ Minus icon morph (54.55) */
+.toggle-icon {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: block;
+  pointer-events: none;
+}
+.toggle-icon::before,
+.toggle-icon::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+  border-radius: 1px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Horizontal bar (always visible – the minus) */
+.toggle-icon::before {
+  top: 9px;
+  left: 2px;
+  width: 16px;
+  height: 2px;
+}
+/* Vertical bar (makes the plus; hidden when expanded, shown when collapsed) */
+.toggle-icon::after {
+  left: 9px;
+  top: 2px;
+  width: 2px;
+  height: 16px;
+  transform: rotate(90deg);
+  opacity: 0;
+}
+/* Collapsed state: show plus (vertical bar appears) */
+.diagram-floating-toolbar--collapsed .toggle-icon::after {
+  transform: rotate(0deg);
+  opacity: 1;
+}
 @media (prefers-reduced-motion: reduce) {
   .diagram-floating-toolbar,
-  .diagram-toolbar-tools-wrap {
+  .diagram-toolbar-tools-wrap,
+  .diagram-toolbar-drag-handle,
+  .toggle-icon::before,
+  .toggle-icon::after {
     transition-duration: 0.05s;
   }
 }
 body.a11y-force-motion .diagram-floating-toolbar,
-body.a11y-force-motion .diagram-toolbar-tools-wrap {
+body.a11y-force-motion .diagram-toolbar-tools-wrap,
+body.a11y-force-motion .diagram-toolbar-drag-handle,
+body.a11y-force-motion .toggle-icon::before,
+body.a11y-force-motion .toggle-icon::after {
   transition: none;
 }
 .diagram-floating-toolbar .toolbar-pill-btn,
@@ -2058,7 +2075,7 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
   scroll-snap-align: start;
 }
 
-/* 54.38 / 54.47: Vertical stack on mobile; no scroll (wrap instead) */
+/* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
   margin: 0;
@@ -2069,19 +2086,21 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  gap: 0.5rem; /* 54.10: spacing between touch targets */
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem 0.625rem;
-  overflow-x: hidden;
-  overflow-y: hidden;
+  overflow: hidden;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.75);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
+  transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              gap 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
 }
-/* 54.47: Mobile tools wrap (no scroll in toolbar) */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-tools-wrap {
   flex-wrap: wrap;
   overflow: hidden;
@@ -2093,44 +2112,26 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
-/* 54.46: Mobile collapsed = same 44×44 circle; SVG + always visible, no scroll. */
+/* Mobile collapsed: container morphs to circle via flow */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
-  width: 44px;
-  height: 44px;
+  gap: 0;
   min-width: 44px;
   min-height: 44px;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
+  border-radius: 50%;
 }
-/* Mobile collapsed: explicit button background, centering, and icon visibility so "+" is never blank (iOS). */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
   background: rgba(0, 0, 0, 0.08);
   color: #333;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
 }
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
-  display: block !important;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  flex-shrink: 0;
-  pointer-events: none;
-  stroke: #222;
-  stroke-width: 3;
-  opacity: 1;
-  visibility: visible;
-  margin: 0;
+/* Mobile collapsed: ensure CSS-only icon is visible with heavier stroke weight for small screens */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .toggle-icon::before,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .toggle-icon::after {
+  height: 2.5px;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .toggle-icon::after {
+  width: 2.5px;
+  height: 16px;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
@@ -2162,6 +2163,14 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
   cursor: grab;
   touch-action: none;
   background: transparent;
+  overflow: hidden;
+  transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .diagram-toolbar-drag-handle::before {
   content: "";

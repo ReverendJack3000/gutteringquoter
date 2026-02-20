@@ -8,8 +8,12 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/freeform-toolbar-morphing
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [ ] 54.54 Diagram toolbar: Apple Freeform–style container morphing
+  - [ ] 54.55 Diagram toolbar: CSS-only icon morph and layout refinement
 
 **Uncompleted tasks (by section):**
 
@@ -42,6 +46,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.41–54.45 | (Complete) Diagram toolbar: Freeform-style (orientation top/bottom→horizontal, free-floating, collapsible, smooth transitions) |
 | 54 | 54.46–54.48 | (Complete) Diagram toolbar: collapsed = circular "+" only; no scroll in toolbars; mobile orientation = desktop |
 | 54 | 54.49–54.53 | (Mobile-only) Diagram toolbar refinements: "+" visibility, no disappear, tap-to-expand, QA |
+| 54 | 54.54–54.55 | Diagram toolbar: Apple Freeform–style container morphing, CSS-only icon, layout refinement |
 ---
 
 ## Locked decisions
@@ -1309,6 +1314,11 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 - [ ] **54.51** **Mobile: Tap-to-expand reliability.** Ensure tap on collapsed "+" consistently expands (no accidental drag); hit target 44×44; consider touch-action or small movement threshold so tap vs drag is unambiguous.
 - [ ] **54.52** **Mobile: Orientation and no-scroll QA.** Manual check: drag to top/bottom → horizontal, to left/right → vertical; no scrollbars inside toolbar in any orientation; tools wrap correctly.
 - [ ] **54.53** **Mobile: Diagram toolbar regression coverage.** Add manual or E2E checklist for mobile: open app (toolbar expanded), collapse to "+", expand, drag to two zones, confirm no disappear and no scroll.
+
+**Diagram toolbar: Apple Freeform–style morphing and CSS-only icon** *(desktop + mobile)*
+
+- [x] **54.54** **Diagram toolbar: Container-first morphing.** Animate the parent container's width, height, and border-radius between expanded pill and collapsed circle using `transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1)`. Remove `position: absolute` from collapsed tools-wrap so content stays in flow and the container shrinks smoothly. Replace explicit `width: 44px; height: 44px` with flow-driven sizing. No ghost space or layout shift.
+- [x] **54.55** **Diagram toolbar: CSS-only Plus↔Minus icon and layout.** Replace the SVG/text collapse icons with a single `.toggle-icon` element using `::before` (horizontal bar) and `::after` (vertical bar) for a CSS-only morph. Use `display: grid; place-items: center` on the collapse button. Move collapse button to trailing edge when expanded (`order`), centered when collapsed. Ensure vertical mode = slim pill (`flex-direction: column`), horizontal mode = wide bar (`flex-direction: row`).
 
 ---
 
