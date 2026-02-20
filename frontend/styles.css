@@ -1335,11 +1335,15 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   background: rgba(0, 0, 0, 0.08);
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
   display: none;
 }
-/* Refined + icon when minimised: always visible, bold stroke, explicit size and color */
+/* Refined + icon when minimised: intrinsic size + block centering so icon never disappears or shifts (mobile WebKit). */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block !important;
   width: 24px;
@@ -1352,6 +1356,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   stroke-width: 2.5;
   opacity: 1;
   visibility: visible;
+  margin: 0;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
   cursor: grabbing;
@@ -2086,10 +2091,14 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   align-items: center;
   overflow: hidden;
 }
-/* Mobile collapsed: explicit button background and icon visibility so "+" is never blank (iOS currentColor/stacking). */
+/* Mobile collapsed: explicit button background, centering, and icon visibility so "+" is never blank (iOS). */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
   background: rgba(0, 0, 0, 0.08);
   color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block !important;
@@ -2099,10 +2108,11 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   min-height: 24px;
   flex-shrink: 0;
   pointer-events: none;
-  stroke: #333;
-  stroke-width: 2.5;
+  stroke: #222;
+  stroke-width: 3;
   opacity: 1;
   visibility: visible;
+  margin: 0;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */

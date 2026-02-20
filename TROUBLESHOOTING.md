@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Railway build: "failed to list workers" / docker.sock connection error – 2026-02
+
+- **Symptom:** Build fails immediately with `ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"` or `... server preface: EOF` (region e.g. us-east4).
+- **Cause:** Railway’s Docker-based build workers had a transient failure (Docker daemon connection closed or unavailable). This is **not** caused by your code or Dockerfile.
+- **Fix:** (1) **Redeploy** – trigger another build (Dashboard → Deployments → Redeploy, or push an empty commit). Often succeeds on retry. (2) If it persists, try a different **region** in Railway service settings if available. (3) Check [Railway status](https://status.railway.app) and report the error to Railway support if it keeps failing.
+
+---
+
 ## Mobile layout not applying on device (Saved diagrams at top, Projects header hidden, toolbar at bottom) – 2026-02
 
 - **Symptom:** On a real phone, the mobile UI doesn’t match the design: plain “Saved diagrams” at the top, “Projects / Untitled” header missing, main action toolbar not floating at the top of the canvas.
