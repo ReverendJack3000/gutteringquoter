@@ -1294,14 +1294,23 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   pointer-events: none;
   overflow: hidden;
 }
-/* Expand state: show minus (span), hide plus SVG. */
+/* Expand state: show minus (span), hide plus SVG. Both icons stacked in same position so swap has no layout shift. */
 .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: none;
 }
 .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 18px;
   line-height: 1;
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 .diagram-toolbar-collapse-btn {
   flex-shrink: 0;
@@ -1317,6 +1326,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   background: transparent;
   color: #666;
   cursor: pointer;
+  position: relative;
 }
 .diagram-toolbar-collapse-btn:hover {
   background: rgba(0, 0, 0, 0.06);
@@ -1343,13 +1353,17 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
   display: none;
 }
-/* Refined + icon when minimised: intrinsic size + block centering so icon never disappears or shifts (mobile WebKit). */
+/* Refined + icon when minimised: same position as minus (stacked), intrinsic size, bold stroke. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block !important;
   width: 24px;
   height: 24px;
   min-width: 24px;
   min-height: 24px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   flex-shrink: 0;
   pointer-events: none;
   stroke: #333;
@@ -2106,6 +2120,10 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   height: 24px;
   min-width: 24px;
   min-height: 24px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   flex-shrink: 0;
   pointer-events: none;
   stroke: #222;

@@ -133,7 +133,7 @@ async function run() {
     console.log('  ✓ App shell and canvas present');
 
     // Toolbar
-    const uploadZone = await page.$('#uploadZone');
+    const uploadZone = await page.$('#uploadZone') || await page.$('#cameraUploadBtn');
     const exportBtn = await page.$('#exportBtn');
     if (!uploadZone || !exportBtn) throw new Error('Toolbar elements missing');
     console.log('  ✓ Toolbar (upload, export) present');
@@ -226,9 +226,10 @@ async function run() {
     if (!fs.existsSync(blueprintImagePath)) {
       throw new Error(`Missing required E2E blueprint fixture: ${blueprintImagePath}`);
     }
+    const uploadTriggerSel = (await page.$('#uploadZone')) ? '#uploadZone' : '#cameraUploadBtn';
     const [fileChooser] = await Promise.all([
       page.waitForFileChooser({ timeout: 5000 }),
-      page.click('#uploadZone'),
+      page.click(uploadTriggerSel),
     ]).catch(() => [null]);
     if (!fileChooser) {
       const fileInput = await page.$('#fileInput');
@@ -713,6 +714,25 @@ async function run() {
     await zoomFitBtn.click();
     await delay(200);
     console.log('  ✓ Zoom controls (− / Fit / +) work with content');
+
+    // Diagram toolbar collapse/expand (desktop): − and + swap in same position, no layout shift
+    const diagramToolbar = await page.$('#diagramFloatingToolbar');
+    const collapseBtn = await page.$('#diagramToolbarCollapseBtn');
+    if (!diagramToolbar || !collapseBtn) throw new Error('Diagram floating toolbar or collapse button missing');
+    const wasExpanded = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+    if (!wasExpanded) {
+      await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+      await delay(400);
+    }
+    await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+    await delay(400);
+    const isCollapsed = await page.evaluate(() => document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+    if (!isCollapsed) throw new Error('Diagram toolbar should be collapsed after clicking collapse button');
+    await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+    await delay(400);
+    const isExpandedAgain = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+    if (!isExpandedAgain) throw new Error('Diagram toolbar should expand after clicking expand button');
+    console.log('  ✓ Diagram toolbar collapse/expand (desktop): −/+ swap works');
 
     // Center-drop: click product thumb (no drag) adds element at viewport center
     const countBeforeClick = await page.evaluate(() => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0);
@@ -1396,6 +1416,28 @@ async function run() {
       if (landscapeCheck.overflow > 2) {
         throw new Error(`Mobile viewport regression: landscape horizontal overflow ${landscapeCheck.overflow}px`);
       }
+
+      // Diagram toolbar collapse/expand (mobile): − and + swap in same position
+      const mobileToolbar = await mobilePage.$('#diagramFloatingToolbar');
+      const mobileCollapseBtn = await mobilePage.$('#diagramToolbarCollapseBtn');
+      if (!mobileToolbar || !mobileCollapseBtn) throw new Error('Mobile: diagram floating toolbar or collapse button missing');
+      await mobilePage.evaluate(() => {
+        const t = document.getElementById('diagramFloatingToolbar');
+        if (t && t.classList.contains('diagram-floating-toolbar--collapsed')) {
+          document.getElementById('diagramToolbarCollapseBtn').click();
+        }
+      });
+      await delay(400);
+      await mobilePage.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+      await delay(400);
+      const mobileCollapsed = await mobilePage.evaluate(() => document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+      if (!mobileCollapsed) throw new Error('Mobile: diagram toolbar should be collapsed after tap');
+      await mobilePage.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+      await delay(400);
+      const mobileExpanded = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
+      if (!mobileExpanded) throw new Error('Mobile: diagram toolbar should expand after tap on +');
+      console.log('  ✓ Diagram toolbar collapse/expand (mobile): −/+ swap works');
+
       console.log('  ✓ Mobile viewport + orientation regression checks passed');
     } finally {
       await mobilePage.close();
