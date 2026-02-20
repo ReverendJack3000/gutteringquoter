@@ -12,6 +12,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile: diagram toolbar collapsed “+” missing or jumpy; can’t re-expand – 2026-02
+
+- **Symptom:** On mobile, after minimising the diagram (canvas) toolbar, the expand control is a blank white circle, the “+” sometimes appears and sometimes doesn’t, or the pill seems to jump off-screen so the user can’t find it to re-expand. No scrolling should be needed inside the toolbar.
+- **Cause:** (1) The expand icon was a text “+” in a `<span>`, so it could disappear with font/encoding or layout (flex/overflow). (2) After collapsing, the toolbar position wasn’t re-clamped, so the 44×44 pill could end up off-screen or in a scrollable area. (3) Collapsed state had no explicit overflow or layout rules, so the single button could be clipped or mislaid.
+- **Fix:** (1) Use an **SVG plus icon** for the expand state (in `index.html`: `.diagram-toolbar-collapse-btn-plus`); when collapsed, show only the SVG and hide the minus span so the “+” is always visible and not font-dependent. (2) In `onCollapseClick()` after toggling collapsed, call `clampDiagramToolbarToWrap(toolbar, wrap)` inside `requestAnimationFrame` so the pill stays on-screen. (3) In CSS, when collapsed: `overflow: hidden` on the toolbar, `flex-direction: row` and centre the single button, give the collapse button `position: relative; z-index: 1` so it stays on top, and ensure no scroll (54.47). (4) On mobile, toolbar defaults to expanded (see `initDiagramToolbarDrag`); tap the “−” to minimise, tap the “+” circle to expand. If the “+” still doesn’t appear, check that `.diagram-toolbar-collapse-btn-plus` is `display: block` when `.diagram-floating-toolbar--collapsed` is set.
+
+---
+
 ## Invite / auth emails send users to localhost:3000 – 2026-02
 
 - **Symptom:** When inviting other users (or using magic link / email confirmation), the link in the email sends them to `http://localhost:3000` instead of the production app.

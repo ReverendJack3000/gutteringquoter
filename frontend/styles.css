@@ -1245,7 +1245,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   flex-direction: column;
   border-radius: 999px;
 }
-/* 54.46: Collapsed = circular "+" only (no extra padding/ring); single centered button. */
+/* 54.46: Collapsed = circular "+" only; no scroll, no overflow, icon always visible. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
@@ -1256,6 +1256,8 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   border-radius: 50%;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
+  flex-direction: row;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
   display: none;
@@ -1292,6 +1294,15 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   pointer-events: none;
   overflow: hidden;
 }
+/* Expand state: show minus (span), hide plus SVG. */
+.diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
+  display: none;
+}
+.diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+}
 .diagram-toolbar-collapse-btn {
   flex-shrink: 0;
   display: inline-flex;
@@ -1306,8 +1317,6 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   background: transparent;
   color: #666;
   cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
 }
 .diagram-toolbar-collapse-btn:hover {
   background: rgba(0, 0, 0, 0.06);
@@ -1317,20 +1326,24 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   outline: 2px solid #18a0fb;
   outline-offset: 2px;
 }
-/* When collapsed, the + button is the drag target; ensure + is always visible and clickable. */
+/* Collapsed: show SVG plus only (always visible, no text/font issues); no transition on icon. */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
   cursor: grab;
   width: 44px;
   height: 44px;
   color: #333;
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 1;
 }
-.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn span {
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-expand {
+  display: none;
+}
+.diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block;
-  font-size: 22px;
-  line-height: 44px;
-  font-weight: 400;
-  visibility: visible;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
   pointer-events: none;
 }
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn:active {
@@ -2054,7 +2067,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidd
   pointer-events: none;
 }
 
-/* 54.46: Mobile collapsed = same 44×44 circle, no extra padding; ensure + visible and tappable */
+/* 54.46: Mobile collapsed = same 44×44 circle; SVG + always visible, no scroll. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   width: 44px;
@@ -2064,15 +2077,12 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   flex-direction: row;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
 }
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
-  color: #333;
-}
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn span {
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn .diagram-toolbar-collapse-btn-plus {
   display: block;
-  font-size: 22px;
-  line-height: 1;
-  visibility: visible;
+  width: 20px;
+  height: 20px;
 }
 
 /* 54.45 / 54.47: When horizontal on mobile, wrap (no scroll) */
