@@ -98,7 +98,7 @@
 - [ ] **54.49** **Mobile: Collapsed "+" icon always visible.** Verify on real device that the expand control is never a blank white circle; SVG stroke explicit (#333), button background and opacity/visibility set for mobile collapsed; document in TROUBLESHOOTING if still hit-and-miss.
 - [x] **54.50** **Mobile: Toolbar never disappears after collapse or at top.** Verify clamp runs after collapsed layout (double rAF). When wrap dimensions are invalid (ww < 20 || wh < 20), apply safe fallback position or retry clamp so toolbar never stays off-screen; toolbar remains on-screen after collapse, on resize, and when in top zone. Plan: docs/plans/2026-02-20-mobile-diagram-toolbar-disappearing-fix.md.
 - [x] **54.50.1** **Mobile: Remove dead diagram-toolbar-hidden (swipe-away) code.** Remove mobile-only CSS rule `body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-toolbar-hidden` (styles.css ~2126–2130) and the redundant `toolbar.classList.remove('diagram-toolbar-hidden')` in initDiagramToolbarDrag (app.js line 5626). No add-path exists; removal prevents any future/latent hide. Plan: docs/plans/2026-02-20-mobile-diagram-toolbar-disappearing-fix.md.
-- [ ] **54.51** **Mobile: Tap-to-expand reliability.** Ensure tap on collapsed "+" consistently expands (no accidental drag); hit target 44×44; consider touch-action or small movement threshold so tap vs drag is unambiguous.
+- [x] **54.51** **Mobile: Tap-to-expand reliability.** Ensure tap on collapsed "+" consistently expands (no accidental drag); hit target 44×44; consider touch-action or small movement threshold so tap vs drag is unambiguous.
 - [ ] **54.52** **Mobile: Orientation and no-scroll QA.** Manual check: drag to top/bottom → horizontal, to left/right → vertical; no scrollbars inside toolbar in any orientation; tools wrap correctly.
 - [ ] **54.53** **Mobile: Diagram toolbar regression coverage.** Add manual or E2E checklist for mobile: open app (toolbar expanded), collapse to "+", expand, drag to two zones; confirm no disappear and no scroll; confirm toolbar at top (horizontal) stays visible.
 
@@ -212,7 +212,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 **Mobile: Auto collapse global toolbar when products opened**
 
-- [ ] **54.84.3** **Auto collapse global toolbar when products panel opened.** When the user opens the Products panel (bottom sheet) on mobile, automatically collapse the global header (#globalToolbar) to free vertical space for the canvas and products. Restore or keep expand on panel close. Mobile-only; desktop unchanged.
+- [x] **54.84.3** **Auto collapse global toolbar when products panel opened.** When the user opens the Products panel (bottom sheet) on mobile, automatically collapse the global header (#globalToolbar) to free vertical space for the canvas and products. Restore or keep expand on panel close. Mobile-only; desktop unchanged.
 
 **54.85 Mobile: product panel compact thumbs (less vertical space)**  
 *Plan: docs/plans/2026-02-21-mobile-product-panel-compact-thumbs.md. Goal: see as much as possible of the canvas image; avoid very tall product thumbs wasting vertical space. Scope: mobile-only CSS; desktop and Railway unchanged.*
@@ -285,6 +285,37 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.91.3** **CSS: prevent page scroll and viewport overflow.** In `frontend/styles.css`, add `body[data-viewport-mode="mobile"].products-panel-open { overflow: hidden; }` and optionally `height: 100%; min-height: 100dvh; max-height: 100dvh;` so no white space below viewport.
 - [x] **54.91.4** **Panel-internal (if needed).** If screenshots show white inside the panel below the product strip, ensure `.panel-content` has no extra bottom gap (e.g. justify-content: flex-start, no stray margin/padding).
 - [x] **54.91.5** **Verify.** Manual mobile QA at narrow widths (e.g. 320px, 360px, 390px) with panel open; confirm no white under scroll bar; confirm desktop unchanged; run `npm test`; Railway-safe.
+
+**54.92 Mobile: Quote modal UX tidy (grid → dividers, hierarchy, labour, footer, error state)**  
+*Plan: docs/plans/2026-02-21-mobile-quote-modal-ux-tidy.md. Scope: mobile-only full-screen Quote modal; desktop quote modal and all calculation/API unchanged; Railway-safe.*
+
+- [x] **54.92.1** **Mobile quote: remove grid lines; horizontal dividers only.** Under `body[data-viewport-mode="mobile"] #quoteModal`, replace full table grid with horizontal dividers between rows only; keep thead distinct.
+- [x] **54.92.2** **Mobile quote: visual nesting for indented items.** Light background tint or vertical connector for rows with `.quote-product-indent-level-1` / `.quote-product-indent-level-2`; lighter font weight for sub-items.
+- [x] **54.92.3** **Mobile quote: line item alignment.** Left-align product name and unit price × qty subtitle; right-align total (no box); compact, consistent qty column.
+- [x] **54.92.4** **Mobile quote: Labour row distinct.** Make Labour row visually distinct (icon or bold header/separator) as service not material.
+- [x] **54.92.5** **Mobile quote: footer emphasis.** Materials subtotal stands out; Add to Job button full-width primary at bottom.
+- [x] **54.92.6** **Mobile quote: labour warning integrated.** Warning icon next to labour row when 0 hrs; footer labour message as dedicated alert box (not floating text).
+- [x] **54.92.7** **Verify desktop + regression.** Desktop quote unchanged; E2E/manual; Railway-safe.
+
+*Post-implementation:* Audit fix applied (Total column keeps horizontal divider on mobile); Add to existing job (ServiceM8) section no longer sticky—scrolls with modal content on mobile.
+
+**54.93 Mobile: Quote table – hide Total, Qty stepper, red minus / green plus (reference UI)**  
+*Plan: docs/plans/2026-02-21-mobile-quote-table-stepper-and-delete.md. Scope: mobile-only; desktop quote modal and all calculation/API unchanged; Railway-safe.*
+
+- [x] **54.93.1** **Mobile quote: hide Total column.** Under `body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table`, hide `th:nth-child(6)` and `td:nth-child(6)`; adjust column widths for Product and Qty only (e.g. ~70% / ~30%).
+- [x] **54.93.2** **Mobile quote: red minus (delete) and green plus (Add row).** In `syncMobileQuoteLineSummaries`, when mobile: prepend red circular remove button to cell 0 for editable rows; prepend green circular plus to cell 0 for empty row. Style as 44px circles (red #FF3B30 minus, green plus). In `initQuoteModal` tableBody click handler, allow remove to delete row on mobile (remove early return for `.quote-row-remove-x`). When desktop, remove cell-0 remove/plus from DOM in sync.
+- [x] **54.93.3** **Mobile quote: Qty column as stepper.** In `syncMobileQuoteLineSummaries`, when mobile, for material rows (non-labour, non-empty): replace qty cell content with stepper (minus, value, plus); wire to `setQuoteRowStoredQty` and `calculateAndDisplayQuote`; 44px touch targets. Labour rows keep tap-to-edit; empty row keeps input or optional stepper.
+- [x] **54.93.4** **Verify desktop + viewport switch + regression.** Desktop quote unchanged; viewport switch removes cell-0 controls and stepper; E2E/manual; Railway-safe.
+- [x] **54.93.5** **Mobile quote: reduce remove/add control size to 33%.** Under `body[data-viewport-mode="mobile"]`, in the first-cell rules for `.quote-row-remove-x` and `.quote-row-add-plus`, change dimensions from 44px to 15px (33% of 44) and font-size from 22px to 7px. Mobile-only; desktop unchanged. Plan: docs/plans/2026-02-21-mobile-quote-remove-add-control-size.md.
+- [ ] **54.93.6** **Mobile quote: stepper for measurable products (metres rows).** On mobile, add qty stepper for rows with `.quote-qty-metres-input` (gutter/downpipe length in metres). Use decimal step (e.g. 0.1 or 0.01); wire to `setQuoteRowStoredQty` and `calculateAndDisplayQuote`; preserve in `manualOverrides` on rebuild. **Context:** `frontend/app.js`: `syncMobileQuoteLineSummaries` ~1296, `useQtyStepper` condition 1368, `getQuoteLineQuantityMeta` 1242–1260, `commitMetresInput` 2358, manualOverrides loop 3529–3541; `frontend/styles.css`: `.quote-mobile-qty-stepper*` ~5749–5784.
+- [ ] **54.93.7** **Mobile quote: stepper for labour rows.** On mobile, add qty stepper for labour rows (hours) alongside or instead of tap-to-edit summary; step 0.5; wire to labour row model and `calculateAndDisplayQuote`; preserve in `manualOverrides` if labour qty is stored per row. **Context:** `frontend/app.js`: `syncMobileQuoteLineSummaries` ~1296, `useQtyStepper` 1368 (currently excludes labour), `getQuoteLineQuantityMeta` labour branch 1244–1246, labour editor `#labourEditorModal` / tap-to-edit; `frontend/styles.css`: `.quote-mobile-qty-stepper*` ~5749–5784.
+
+**54.94 Mobile navigation + popover smoothing (toolbar/header/panel coherence)**  
+*Scope: mobile-only interaction polish; desktop unchanged; Railway-safe.*
+
+- [x] **54.94.1** **Mobile floating selection toolbar safe-top clamp under global header.** Keep floating selection toolbar below `#globalToolbarWrap` bottom + 8px in both auto-position and user-drag paths.
+- [x] **54.94.2** **Mobile popover close coherence (color/transparency).** Close per-element color/transparency popovers on outside interactions and when opening Products panel to prevent stale overlays.
+- [x] **54.94.3** **Regression coverage for mobile navigation smoothing.** Extend E2E to cover `54.51`, `54.84.3`, `54.94.1`, and `54.94.2` with mobile interaction assertions.
 
 ---
 

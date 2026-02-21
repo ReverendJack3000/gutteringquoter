@@ -44,8 +44,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/quote-modal-mobile-ux-tidy
+- Based on: main
+- Status: Complete (54.92 + 54.93: grid→dividers, hierarchy, labour/footer/error + hide Total, stepper, red minus/green plus; ready for merge)
+- Related Tasks: 54.92 Mobile Quote modal UX tidy; 54.93 Mobile quote table stepper and delete (reference UI)
 
 **Uncompleted tasks (by section):**
 
@@ -72,15 +74,15 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-| 54 | 54.49–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
+| 54 | 54.49, 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
 | 54 | 54.78.1–54.78.6 | Mobile: vertical diagram toolbar tighter fit + overflow-y in pill; optional drag handle span removal |
 | 54 | 54.80.1–54.80.4.4, 54.80.2.9 | Diagram toolbar auto-collapse (8 triggers + products panel open 54.80.2.9) + position 4 UIs (plan: docs/plans/2026-02-21-diagram-toolbar-auto-collapse-on-element-toolbar-and-dropdowns.md) |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
 | 54 | 54.82.1–54.82.4 | (Mobile-only) Tools within global header #globalToolbar only: Projects/Untitled top-left, collapse after; chevron left of Projects; hide Export/Diagrams/Accessibility. No diagram toolbar or other toolbar changes (plan: docs/plans/2026-02-21-mobile-global-toolbar-reorder-and-declutter.md). |
-| 54 | 54.84.3 | Auto collapse global toolbar when products panel opened (mobile-only). |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
+| 54 | 54.93.6, 54.93.7 | Mobile quote: add steppers for measurable products (metres) and labour. Context: app.js syncMobileQuoteLineSummaries ~1296, useQtyStepper 1368, getQuoteLineQuantityMeta 1242–1260, manualOverrides 3529–3541; styles.css .quote-mobile-qty-stepper ~5749–5784. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 ---
 

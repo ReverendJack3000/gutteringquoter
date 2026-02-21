@@ -465,6 +465,7 @@ const layoutState = {
   forcedMode: null,
   viewportMode: 'desktop',
   panelExpanded: true,
+  panelAutoCollapsedGlobalToolbar: false,
   resizeListenerBound: false,
   resizeDebounceId: null,
 };
@@ -1198,7 +1199,7 @@ function getQuoteCellTextWithoutSummaries(row) {
   const qtyCell = row?.cells?.[1];
   if (!qtyCell) return '';
   const clone = qtyCell.cloneNode(true);
-  clone.querySelectorAll('.quote-mobile-line-qty-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary').forEach((el) => el.remove());
+  clone.querySelectorAll('.quote-mobile-line-qty-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-qty-stepper').forEach((el) => el.remove());
   return (clone.textContent || '').trim();
 }
 
@@ -1296,6 +1297,37 @@ function syncMobileQuoteLineSummaries() {
   const isMobile = isMobileQuoteViewport();
   const tableBody = document.getElementById('quoteTableBody');
   if (!tableBody) return;
+  let totalLabourHours = 0;
+  if (isMobile) {
+    getLabourRowsOrdered().forEach((r) => {
+      totalLabourHours += parseFloat(r.querySelector('.quote-labour-hours-input')?.value) || 0;
+    });
+  }
+  // 54.93.2 / 54.93.3: desktop cleanup – remove cell-0 remove/plus and restore qty cell (remove stepper)
+  if (!isMobile) {
+    Array.from(tableBody.rows).forEach((row) => {
+      const productCell = row.cells[0];
+      if (productCell) {
+        productCell.querySelector('.quote-row-remove-x')?.remove();
+        productCell.querySelector('.quote-row-add-plus')?.remove();
+      }
+      const qtyCell = row.cells[1];
+      if (qtyCell?.querySelector('.quote-mobile-qty-stepper')) {
+        const stored = getQuoteRowStoredQty(row);
+        const val = stored != null ? stored : 0;
+        qtyCell.innerHTML = '';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'quote-line-qty-input';
+        input.value = formatQuoteQtyDisplay(val);
+        input.min = '0';
+        input.step = '1';
+        input.setAttribute('aria-label', 'Quantity');
+        qtyCell.appendChild(input);
+        setQuoteRowStoredQty(row, parseFloat(String(val)) || 0);
+      }
+    });
+  }
   const rows = Array.from(tableBody.rows).filter((row) => isEditableQuoteLineRow(row));
   rows.forEach((row) => {
     ensureQuoteRowUid(row);
@@ -1303,6 +1335,19 @@ function syncMobileQuoteLineSummaries() {
     const productCell = row.cells[0];
     const qtyCell = row.cells[1];
     if (!productCell || !qtyCell) return;
+    // 54.93.2: on mobile, prepend red minus (remove) to product cell so it’s visible (Total column hidden)
+    if (isMobile) {
+      let removeInCell0 = productCell.querySelector('.quote-row-remove-x');
+      if (!removeInCell0) {
+        removeInCell0 = document.createElement('span');
+        removeInCell0.className = 'quote-row-remove-x';
+        removeInCell0.setAttribute('role', 'button');
+        removeInCell0.setAttribute('tabindex', '0');
+        removeInCell0.setAttribute('aria-label', 'Remove line');
+        removeInCell0.textContent = '−';
+        productCell.insertBefore(removeInCell0, productCell.firstChild);
+      }
+    }
     const title = getQuoteLineProductName(row);
     const qtyMeta = getQuoteLineQuantityMeta(row);
     const unitPrice = getQuoteLineUnitPrice(row);
@@ -1319,13 +1364,79 @@ function syncMobileQuoteLineSummaries() {
     }
     lineSummary.textContent = `${qtyLabel} x ${unitLabel}${row.dataset.labourRow === 'true' ? '/hr' : ''} · Tap to edit`;
 
-    let qtySummary = qtyCell.querySelector('.quote-mobile-line-qty-summary');
-    if (!qtySummary) {
-      qtySummary = document.createElement('span');
-      qtySummary.className = 'quote-mobile-line-qty-summary';
-      qtyCell.appendChild(qtySummary);
+    // 54.93.3: on mobile, material rows (non-labour, non-metres) get qty stepper; only add qty summary for labour/metres so we don’t leave a stray summary in the cell
+    const useQtyStepper = isMobile && row.dataset.labourRow !== 'true' && !row.querySelector('.quote-qty-metres-input');
+    if (!useQtyStepper) {
+      let qtySummary = qtyCell.querySelector('.quote-mobile-line-qty-summary');
+      if (!qtySummary) {
+        qtySummary = document.createElement('span');
+        qtySummary.className = 'quote-mobile-line-qty-summary';
+        qtyCell.appendChild(qtySummary);
+      }
+      qtySummary.textContent = qtyLabel;
     }
-    qtySummary.textContent = qtyLabel;
+
+    if (useQtyStepper) {
+      qtyCell.querySelector('.quote-mobile-line-qty-summary')?.remove();
+      let stepperWrap = qtyCell.querySelector('.quote-mobile-qty-stepper');
+      if (!stepperWrap) {
+        stepperWrap = document.createElement('div');
+        stepperWrap.className = 'quote-mobile-qty-stepper';
+        const minusBtn = document.createElement('button');
+        minusBtn.type = 'button';
+        minusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--minus';
+        minusBtn.setAttribute('aria-label', 'Decrease quantity');
+        minusBtn.textContent = '−';
+        const valueSpan = document.createElement('span');
+        valueSpan.className = 'quote-mobile-qty-stepper-value';
+        valueSpan.setAttribute('aria-live', 'polite');
+        const plusBtn = document.createElement('button');
+        plusBtn.type = 'button';
+        plusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--plus';
+        plusBtn.setAttribute('aria-label', 'Increase quantity');
+        plusBtn.textContent = '+';
+        stepperWrap.appendChild(minusBtn);
+        stepperWrap.appendChild(valueSpan);
+        stepperWrap.appendChild(plusBtn);
+        qtyCell.innerHTML = '';
+        qtyCell.appendChild(stepperWrap);
+        const step = 1;
+        const updateStepperValue = () => {
+          const v = getQuoteRowStoredQty(row);
+          valueSpan.textContent = v != null ? formatQuoteQtyDisplay(v) : '0';
+        };
+        const applyStep = (delta) => {
+          const current = parseFloat(getQuoteRowStoredQty(row)) || 0;
+          const next = Math.max(0, current + delta);
+          setQuoteRowStoredQty(row, next);
+          updateStepperValue();
+          calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+        };
+        minusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(-step); });
+        plusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(step); });
+      }
+      const valueSpan = stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
+      if (valueSpan) valueSpan.textContent = formatQuoteQtyDisplay(getQuoteRowStoredQty(row) ?? 0);
+    }
+
+    if (row.dataset.labourRow === 'true' && isMobile) {
+      let warnIcon = qtyCell.querySelector('.quote-labour-zero-warning-icon');
+      if (totalLabourHours <= 0) {
+        if (!warnIcon) {
+          warnIcon = document.createElement('span');
+          warnIcon.className = 'quote-labour-zero-warning-icon';
+          warnIcon.setAttribute('aria-hidden', 'true');
+          warnIcon.textContent = '\u26A0\uFE0F';
+          qtyCell.appendChild(warnIcon);
+        }
+        warnIcon.hidden = false;
+      } else if (warnIcon) {
+        warnIcon.hidden = true;
+      }
+    } else {
+      const warnIcon = qtyCell.querySelector('.quote-labour-zero-warning-icon');
+      if (warnIcon) warnIcon.hidden = true;
+    }
 
     if (isMobile) {
       row.setAttribute('tabindex', '0');
@@ -1335,6 +1446,21 @@ function syncMobileQuoteLineSummaries() {
       row.removeAttribute('aria-label');
     }
   });
+
+  // 54.93.2: empty row (Add Item/Service) – green plus in cell 0 on mobile
+  if (isMobile) {
+    const emptyRow = getEmptyRow();
+    if (emptyRow && emptyRow.cells[0]) {
+      let addPlus = emptyRow.cells[0].querySelector('.quote-row-add-plus');
+      if (!addPlus) {
+        addPlus = document.createElement('span');
+        addPlus.className = 'quote-row-add-plus';
+        addPlus.setAttribute('aria-hidden', 'true');
+        addPlus.textContent = '+';
+        emptyRow.cells[0].insertBefore(addPlus, emptyRow.cells[0].firstChild);
+      }
+    }
+  }
 
   if (!isMobile) {
     const editorModal = document.getElementById('labourEditorModal');
@@ -1809,6 +1935,24 @@ function closeQuoteProductList(combobox) {
   if (list) list.hidden = true;
 }
 
+/** Prefer exact typed match on Enter before falling back to the first filtered option. */
+function getPreferredQuoteProductOption(combobox, inputValue) {
+  const list = combobox?.querySelector('.quote-product-list');
+  if (!list) return null;
+  const options = Array.from(list.querySelectorAll('.quote-product-list-option'));
+  if (options.length === 0) return null;
+  const term = String(inputValue || '').trim().toLowerCase();
+  if (!term) return options[0];
+  const exactMatch = options.find((opt) => {
+    const name = String(opt.dataset.productName || '').trim().toLowerCase();
+    const id = String(opt.dataset.productId || '').trim().toLowerCase();
+    return name === term || id === term;
+  });
+  if (exactMatch) return exactMatch;
+  const prefixMatch = options.find((opt) => String(opt.dataset.productName || '').toLowerCase().startsWith(term));
+  return prefixMatch || options[0];
+}
+
 /** Convert empty row to a normal quote line and append a new empty row. If product already exists, merge qty into that row and keep one empty row. */
 function commitEmptyRow(tr, productId, qty) {
   const table = document.getElementById('quotePartsTable');
@@ -1816,26 +1960,15 @@ function commitEmptyRow(tr, productId, qty) {
   if (!tr || !tableBody) return;
   const product = state.products.find((p) => p.id === productId);
   const name = getQuoteProductDisplayName(productId, product?.name);
-  const isManualLengthProduct = GUTTER_PATTERN.test(productId) || (productId && String(productId).toUpperCase().startsWith('DP-'));
-  const qtyNum = isManualLengthProduct ? (parseFloat(qty) || 0) : Math.max(1, parseFloat(qty) || 1);
+  const qtyNum = Math.max(1, parseFloat(qty) || 1);
 
-  const existingRow = tableBody.querySelector(`tr[data-asset-id="${CSS.escape(productId)}"]:not([data-empty-row="true"])`);
+  const existingRow = tableBody.querySelector(`tr[data-asset-id="${CSS.escape(productId)}"]:not([data-empty-row="true"]):not([data-manual-length="true"])`);
   if (existingRow && existingRow.cells[1]) {
-    const isManualLength = GUTTER_PATTERN.test(productId) || (productId && String(productId).toUpperCase().startsWith('DP-'));
-    if (isManualLength) {
-      const lengthMm = existingRow.dataset.lengthMm != null && existingRow.dataset.lengthMm !== '' ? parseFloat(existingRow.dataset.lengthMm) : null;
-      const existingCellText = getQuoteCellTextWithoutSummaries(existingRow);
-      const existingMetres = lengthMm != null ? lengthMm / 1000 : (existingCellText.endsWith('m') ? parseFloat(existingCellText) : parseFloat(existingCellText)) || 0;
-      const addedMetres = parseFloat(qty) || 0;
-      const newLengthMm = Math.round((existingMetres + addedMetres) * 1000);
-      existingRow.dataset.lengthMm = String(newLengthMm);
-      existingRow.cells[1].textContent = formatMetres(newLengthMm);
-    } else {
-      const currentQty = getQuoteLineQuantityMeta(existingRow).value || 0;
-      const nextQty = currentQty + qtyNum;
-      setQuoteRowStoredQty(existingRow, nextQty);
-      existingRow.cells[1].textContent = formatQuoteQtyDisplay(nextQty);
-    }
+    delete existingRow.dataset.lengthMm;
+    const currentQty = getQuoteLineQuantityMeta(existingRow).value || 0;
+    const nextQty = currentQty + qtyNum;
+    setQuoteRowStoredQty(existingRow, nextQty);
+    existingRow.cells[1].textContent = formatQuoteQtyDisplay(nextQty);
     tr.remove();
     appendEmptyQuoteRow();
     ensureLabourRowsExist();
@@ -1854,15 +1987,10 @@ function commitEmptyRow(tr, productId, qty) {
   const qtyCell = tr.cells[1];
   const qtyInput = qtyCell.querySelector('.quote-empty-qty-input');
   if (qtyInput) qtyCell.removeChild(qtyInput);
-  if (isManualLengthProduct && qtyNum >= 0) {
-    const lengthMm = Math.round(qtyNum * 1000);
-    tr.dataset.lengthMm = String(lengthMm);
-    delete tr.dataset.quoteQtyValue;
-    qtyCell.textContent = formatMetres(lengthMm);
-  } else {
-    setQuoteRowStoredQty(tr, qtyNum);
-    qtyCell.textContent = String(qtyNum);
-  }
+  delete tr.dataset.lengthMm;
+  delete tr.dataset.manualLength;
+  setQuoteRowStoredQty(tr, qtyNum);
+  qtyCell.textContent = formatQuoteQtyDisplay(qtyNum);
 
   tr.cells[2].textContent = '—';
   tr.cells[3].textContent = '—';
@@ -1907,10 +2035,10 @@ function initEmptyQuoteRow(tr) {
       return;
     }
     if (e.key === 'Enter') {
-      const first = list.querySelector('.quote-product-list-option');
-      if (first) {
+      const preferred = getPreferredQuoteProductOption(combobox, input.value);
+      if (preferred) {
         e.preventDefault();
-        commitEmptyRow(tr, first.dataset.productId, qtyInput?.value || 1);
+        commitEmptyRow(tr, preferred.dataset.productId, qtyInput?.value || 1);
       }
     }
   });
@@ -1957,14 +2085,13 @@ function initQuoteModal() {
   btnClose?.addEventListener('click', hideQuoteModal);
   btnCloseFooter?.addEventListener('click', hideQuoteModal);
 
-  // Row remove X (Section 40.4): remove line from quote and recalc totals
+  // Row remove X (Section 40.4): remove line from quote and recalc totals. 54.93.2: on mobile, red minus in cell 0 also removes (no early return).
   tableBody?.addEventListener('click', (ev) => {
     const control = ev.target.closest('.quote-row-remove-x');
     if (!control) return;
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
-    if (isMobileQuoteViewport() && isEditableQuoteLineRow(row)) return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
@@ -1976,7 +2103,6 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
-    if (isMobileQuoteViewport() && isEditableQuoteLineRow(row)) return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
@@ -1985,7 +2111,7 @@ function initQuoteModal() {
 
   tableBody?.addEventListener('click', (ev) => {
     if (!isMobileQuoteViewport()) return;
-    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost')) return;
+    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost, .quote-mobile-qty-stepper')) return;
     const row = ev.target.closest('tr');
     if (!isEditableQuoteLineRow(row)) return;
     openLabourEditorModal(row, row);
@@ -1993,6 +2119,7 @@ function initQuoteModal() {
   tableBody?.addEventListener('keydown', (ev) => {
     if (!isMobileQuoteViewport()) return;
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    if (ev.target.closest('.quote-mobile-qty-stepper')) return;
     const row = ev.target.closest('tr');
     if (!isEditableQuoteLineRow(row)) return;
     ev.preventDefault();
@@ -2024,7 +2151,10 @@ function initQuoteModal() {
         tr.dataset.incompleteMeasurement = 'true';
         tr.classList.add('quote-row-incomplete-measurement');
       }
-      if (length_mm != null && length_mm > 0) tr.dataset.lengthMm = String(length_mm);
+      if (length_mm != null && length_mm > 0) {
+        tr.dataset.lengthMm = String(length_mm);
+        tr.dataset.manualLength = 'true';
+      }
       tr.innerHTML = `<td>${escapeHtml(name)}</td><td></td><td>—</td><td>—</td><td>—</td><td>—</td>`;
       const qtyCell = tr.cells[1];
       if (incomplete) {
@@ -2229,6 +2359,7 @@ function commitMetresInput(tr, input) {
   const val = parseFloat(input.value);
   if (!Number.isFinite(val) || val <= 0) return;
   tr.dataset.lengthMm = String(mToMm(val));
+  tr.dataset.manualLength = 'true';
   // Remove incomplete state and input so calculateAndDisplayQuote() can update qty cell with proper value
   tr.removeAttribute('data-incomplete-measurement');
   tr.classList.remove('quote-row-incomplete-measurement');
@@ -2806,6 +2937,8 @@ function getElementsFromQuoteTable() {
     let qty = 0;
     let lengthMm = row.dataset.lengthMm != null && row.dataset.lengthMm !== '' ? parseFloat(row.dataset.lengthMm) : undefined;
     const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
+    const isManualLengthRow = row.dataset.manualLength === 'true' || metresInput != null;
+    if (!isManualLengthRow) lengthMm = undefined;
     if (metresInput) {
       // Row has "Metres?" input: send with qty=1 so backend returns inferred items (we'll set their qty to empty if incomplete)
       const metresVal = parseFloat(metresInput.value);
@@ -2839,7 +2972,7 @@ function getElementsFromQuoteTable() {
 
     // Gutter with length: expand into one element per length type (bin-packing) so backend returns one row per length.
     // Send length_mm on the first bin-packed element so bracket/screw count uses manual length, not bin-packed stock length.
-    if (rowGutterMatch && lengthMm != null && lengthMm > 0) {
+    if (rowGutterMatch && isManualLengthRow && lengthMm != null && lengthMm > 0) {
       const profile = rowGutterMatch[1].toUpperCase();
       const opt = getOptimalGutterCombination(lengthMm);
       if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
@@ -2858,7 +2991,7 @@ function getElementsFromQuoteTable() {
     }
 
     // Downpipe with length: bin-pack into 1.5m and 3m stock lengths.
-    if (isDownpipeElement(assetId) && lengthMm != null && lengthMm > 0) {
+    if (isDownpipeElement(assetId) && isManualLengthRow && lengthMm != null && lengthMm > 0) {
       const size = getDownpipeSizeFromAssetId(assetId);
       if (size) {
         const opt = getOptimalDownpipeCombination(lengthMm);
@@ -2880,7 +3013,7 @@ function getElementsFromQuoteTable() {
 
     if (qty <= 0) qty = 1;
     const item = { assetId, quantity: qty };
-    if (lengthMm != null && Number.isFinite(lengthMm) && lengthMm > 0) item.length_mm = lengthMm;
+    if (isManualLengthRow && lengthMm != null && Number.isFinite(lengthMm) && lengthMm > 0) item.length_mm = lengthMm;
     elements.push(item);
   }
   return elements;
@@ -3394,11 +3527,15 @@ async function calculateAndDisplayQuote() {
           }
         }
       }
-      if (r.dataset.assetId && r.dataset.inferred !== 'true') {
+      if (r.dataset.assetId) {
         const qtyInput = r.querySelector('.quote-line-qty-input');
         if (qtyInput) {
           const v = parseFloat(qtyInput.value);
           if (Number.isFinite(v)) manualOverrides[r.dataset.assetId] = v;
+        } else {
+          // Mobile stepper rows have no qty input; preserve stored qty so rebuild doesn't snap back (including inferred rows e.g. Bracket, Screws)
+          const storedQty = getQuoteRowStoredQty(r);
+          if (storedQty != null && Number.isFinite(storedQty)) manualOverrides[r.dataset.assetId] = storedQty;
         }
       }
     });
@@ -3755,8 +3892,9 @@ function initFloatingToolbar() {
       let top = dragStartTop + dy;
       const maxLeft = window.innerWidth - (toolbar.offsetWidth || 200) - 8;
       const maxTop = window.innerHeight - (toolbar.offsetHeight || 44) - 8;
+      const minTop = Math.min(getFloatingToolbarMinTopPx(), maxTop);
       left = Math.max(8, Math.min(maxLeft, left));
-      top = Math.max(8, Math.min(maxTop, top));
+      top = Math.max(minTop, Math.min(maxTop, top));
       toolbar.style.left = left + 'px';
       toolbar.style.top = top + 'px';
     });
@@ -3970,23 +4108,41 @@ function initFloatingToolbar() {
   const userProfileWrap = document.getElementById('userProfileWrap');
   const profileDropdown = document.getElementById('profileDropdown');
   document.addEventListener('click', (e) => {
+    let shouldDraw = false;
     if (submenu && !submenu.hidden && toolbar && !toolbar.contains(e.target)) {
       submenu.hidden = true;
       if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
-      draw();
+      shouldDraw = true;
     }
     if (flipDropdown && !flipDropdown.hidden && toolbar && !toolbar.contains(e.target)) {
       flipDropdown.hidden = true;
       clearFlipDropdownPosition();
       if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
-      draw();
+      shouldDraw = true;
+    }
+    const palette = document.getElementById('colorPalettePopover');
+    const clickedPalette = !!(palette && palette.contains(e.target));
+    const clickedColorBtn = !!(colorBtn && colorBtn.contains(e.target));
+    if (state.colorPaletteOpen && !clickedPalette && !clickedColorBtn) {
+      state.colorPaletteOpen = false;
+      shouldDraw = true;
+    }
+    const transparencyPopover = document.getElementById('transparencyPopover');
+    const transparencyBtn = document.getElementById('blueprintTransparencyBtn');
+    const clickedTransparencyPopover = !!(transparencyPopover && transparencyPopover.contains(e.target));
+    const clickedTransparencyBtn = !!(transparencyBtn && transparencyBtn.contains(e.target));
+    if (state.transparencyPopoverOpen && !clickedTransparencyPopover && !clickedTransparencyBtn) {
+      state.transparencyPopoverOpen = false;
+      if (transparencyBtn) transparencyBtn.setAttribute('aria-expanded', 'false');
+      shouldDraw = true;
     }
     if (profileDropdown && !profileDropdown.hidden && userProfileWrap && !userProfileWrap.contains(e.target)) {
       profileDropdown.hidden = true;
       const userAvatar = document.getElementById('userAvatar');
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
-      draw();
+      shouldDraw = true;
     }
+    if (shouldDraw) draw();
   });
 }
 
@@ -3998,6 +4154,13 @@ function getCanvasRect() {
   const canvas = getCanvasElement();
   if (!canvas) return null;
   return canvas.getBoundingClientRect();
+}
+
+function getFloatingToolbarMinTopPx() {
+  if (layoutState.viewportMode !== 'mobile') return 8;
+  const wrap = document.getElementById('globalToolbarWrap');
+  if (!wrap) return 8;
+  return Math.max(8, wrap.getBoundingClientRect().bottom + 8);
 }
 
 /** 54.80.4: Mobile-only – diagram toolbar rect when expanded (for positioning popovers away from it). */
@@ -6104,9 +6267,10 @@ function draw() {
         const gapAbove = 12;
         const toolbarLeft = centerScreenX - (toolbarEl.offsetWidth || 200) / 2;
         const toolbarTop = topScreenY - toolbarHeight - gapAbove;
+        const toolbarMinTop = getFloatingToolbarMinTopPx();
         if (!state.floatingToolbarUserMoved) {
           toolbarEl.style.left = Math.max(8, Math.min(window.innerWidth - (toolbarEl.offsetWidth || 200) - 8, toolbarLeft)) + 'px';
-          toolbarEl.style.top = Math.max(8, toolbarTop) + 'px';
+          toolbarEl.style.top = Math.max(toolbarMinTop, toolbarTop) + 'px';
         }
         toolbarEl.removeAttribute('hidden');
         if (wasHidden) collapseDiagramToolbarIfExpanded();
@@ -9560,6 +9724,7 @@ const GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_globalToolbarCollapsed';
 
 /** 54.33: Undo/Redo aria-hidden MutationObserver; disconnect on re-init or future teardown. */
 let globalToolbarUndoRedoAriaObserver = null;
+let globalToolbarController = null;
 
 function applyGlobalToolbarPadding() {
   const wrap = document.getElementById('globalToolbarWrap');
@@ -9573,9 +9738,20 @@ function initGlobalToolbar() {
   const wrap = document.getElementById('globalToolbarWrap');
   const toolbar = document.getElementById('globalToolbar');
   const collapseBtn = document.getElementById('toolbarCollapseBtn');
-  if (!wrap || !toolbar || !collapseBtn) return;
+  if (!wrap || !toolbar || !collapseBtn) {
+    globalToolbarController = null;
+    return;
+  }
 
   let collapsed = localStorage.getItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
+
+  function setCollapsed(next, options = {}) {
+    collapsed = !!next;
+    if (options.persist !== false) {
+      localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, String(collapsed));
+    }
+    applyState();
+  }
 
   function applyState() {
     toolbar.classList.toggle('toolbar--collapsed', collapsed);
@@ -9593,6 +9769,10 @@ function initGlobalToolbar() {
     requestAnimationFrame(applyGlobalToolbarPadding);
   }
 
+  globalToolbarController = {
+    isCollapsed: () => collapsed,
+    setCollapsed,
+  };
   applyState();
 
   /* Track pointer on collapse button so we can expand on pointerup when click is delayed/suppressed (e.g. mobile). */
@@ -9618,9 +9798,7 @@ function initGlobalToolbar() {
     const dy = e.clientY - collapsePointerStartY;
     if (dx * dx + dy * dy <= GLOBAL_TOOLBAR_EXPAND_MOVE_PX_SQ) {
       expandedViaPointer = true;
-      collapsed = false;
-      localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, 'false');
-      applyState();
+      setCollapsed(false);
     }
   }, { passive: true });
 
@@ -9629,9 +9807,7 @@ function initGlobalToolbar() {
       expandedViaPointer = false;
       return; // already expanded from pointerup; avoid double-toggle
     }
-    collapsed = !collapsed;
-    localStorage.setItem(GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED, String(collapsed));
-    applyState();
+    setCollapsed(!collapsed);
   });
 
   const mobileUndoBtn = document.getElementById('mobileUndoBtn');
@@ -9847,6 +10023,40 @@ function setPanelExpanded(expanded, options = {}) {
 
   if (isExpanded) collapseDiagramToolbarIfExpanded();
 
+  let closedTransientPopovers = false;
+  if (isMobileMode && isExpanded) {
+    if (state.colorPaletteOpen) {
+      state.colorPaletteOpen = false;
+      closedTransientPopovers = true;
+    }
+    if (state.transparencyPopoverOpen) {
+      state.transparencyPopoverOpen = false;
+      const transparencyBtn = document.getElementById('blueprintTransparencyBtn');
+      if (transparencyBtn) transparencyBtn.setAttribute('aria-expanded', 'false');
+      closedTransientPopovers = true;
+    }
+  }
+
+  if (isMobileMode) {
+    if (globalToolbarController) {
+      if (isExpanded) {
+        if (!layoutState.panelAutoCollapsedGlobalToolbar && !globalToolbarController.isCollapsed()) {
+          globalToolbarController.setCollapsed(true, { persist: false });
+          layoutState.panelAutoCollapsedGlobalToolbar = true;
+        }
+      } else {
+        if (layoutState.panelAutoCollapsedGlobalToolbar && globalToolbarController.isCollapsed()) {
+          globalToolbarController.setCollapsed(false, { persist: false });
+        }
+        layoutState.panelAutoCollapsedGlobalToolbar = false;
+      }
+    } else if (!isExpanded) {
+      layoutState.panelAutoCollapsedGlobalToolbar = false;
+    }
+  } else {
+    layoutState.panelAutoCollapsedGlobalToolbar = false;
+  }
+
   if (isMobileMode) {
     const announcer = document.getElementById('appAnnouncer');
     if (announcer) announcer.textContent = isExpanded ? 'Products panel opened.' : 'Products panel closed.';
@@ -9863,6 +10073,8 @@ function setPanelExpanded(expanded, options = {}) {
 
   if (options.resizeCanvas !== false) {
     resizeCanvas();
+    draw();
+  } else if (closedTransientPopovers) {
     draw();
   }
 }

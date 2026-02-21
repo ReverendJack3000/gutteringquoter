@@ -5655,6 +5655,133 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table {
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th,
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td {
   padding: 10px 8px;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table thead th {
+  background: #f8f8f8;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr:has(td .quote-product-indent-level-1),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr:has(td .quote-product-indent-level-2) {
+  background: #f9fafb;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-product-indent-level-1,
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-product-indent-level-2 {
+  font-weight: 500;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tr.quote-row-labour td {
+  border-top: 2px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tr.quote-row-labour .quote-labour-label {
+  font-weight: 700;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child {
+  text-align: left;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* 54.93.2: product cell content can shrink so control (minus/plus) stays left */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child .quote-mobile-line-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-row-empty td:first-child > .quote-product-combobox {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 54.93.2: show remove in first cell (override hide inside .quote-mobile-editable-line); style as red circle; 54.93.5: 33% size */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child .quote-row-remove-x {
+  display: inline-flex !important;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  min-height: 15px;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  background: #FF3B30;
+  color: #fff;
+  font-size: 7px;
+  line-height: 1;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child .quote-row-remove-x:hover {
+  background: #e6342a;
+  color: #fff;
+}
+/* 54.93.2: green plus for Add Item/Service row; 54.93.5: 33% size */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child .quote-row-add-plus {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  min-height: 15px;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  background: #34C759;
+  color: #fff;
+  font-size: 7px;
+  line-height: 1;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+
+/* 54.93.3: Qty stepper (minus / value / plus) for material rows on mobile */
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper-btn {
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  color: #374151;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper-btn--minus {
+  color: #6b7280;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper-btn--plus {
+  color: #007aff;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper-value {
+  min-width: 2ch;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-col-cost,
@@ -5664,21 +5791,25 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(3)
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(4),
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(4),
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(5),
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(5) {
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(5),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(6),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(6) {
   display: none !important;
 }
 
+/* 54.93.1: Only Product and Qty visible on mobile; Total column hidden */
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(1),
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(1) { width: 56%; }
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(1) { width: 70%; }
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(2),
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) { width: 18%; }
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(6),
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(6) { width: 26%; }
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) { width: 30%; }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-hours-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-line-qty-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
   min-height: 36px;
+  width: 4.5em;
+  max-width: 72px;
+  box-sizing: border-box;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line {
@@ -5723,10 +5854,16 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-cell-total {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-cell-total-value {
   flex: 1;
+  text-align: right;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-row-remove-x {
@@ -5748,6 +5885,11 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-totals-section {
   background: #f2f2f7;
 }
 
+body[data-viewport-mode="mobile"] #quoteModal .quote-totals-section .quote-total-line:first-child {
+  font-weight: 600;
+  font-size: 15px;
+}
+
 body[data-viewport-mode="mobile"] #quoteModal .quote-total-line {
   gap: 12px;
 }
@@ -5767,9 +5909,6 @@ body[data-viewport-mode="mobile"] #quoteModal #quoteError {
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-section {
-  position: sticky;
-  bottom: 0;
-  z-index: 6;
   margin: 0;
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
@@ -5780,12 +5919,41 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-section {
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-controls {
   gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-job-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-btn {
   min-height: 44px;
   border-radius: 12px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-btn {
+  width: 100%;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon[hidden] {
+  display: none;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal #quoteLabourWarning {
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  border-radius: 6px;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal #quotePrintBtn,

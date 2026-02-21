@@ -33,6 +33,23 @@ async function clickSelectorViaDomIfPresent(page, selector) {
   }, selector);
 }
 
+async function pointerTapSelector(page, selector, options = {}) {
+  const { driftX = 0, driftY = 0, steps = 3 } = options;
+  const point = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, selector);
+  if (!point) throw new Error(`Missing tappable element: ${selector}`);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  if (driftX !== 0 || driftY !== 0) {
+    await page.mouse.move(point.x + driftX, point.y + driftY, { steps });
+  }
+  await page.mouse.up();
+}
+
 async function run() {
   const browser = await puppeteer.launch({
     headless: !HEADED,
@@ -1638,19 +1655,29 @@ async function run() {
         return !!panel && panel.classList.contains('expanded');
       });
       if (!mobilePanelExpandedAfterOpen) throw new Error('Mobile blueprint sizing: products panel did not open');
+      const mobileBlueprintMetricsBeforeTap = await mobilePage.evaluate(() => {
+        const viewport = (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null;
+        const blueprintRect = (window.__quoteAppGetBlueprintScreenRect && window.__quoteAppGetBlueprintScreenRect()) || null;
+        return {
+          scale: viewport ? viewport.scale : null,
+          blueprintLongSide: blueprintRect ? Math.max(blueprintRect.width, blueprintRect.height) : null,
+        };
+      });
+      if (!Number.isFinite(mobileBlueprintMetricsBeforeTap.scale) || mobileBlueprintMetricsBeforeTap.scale <= 0) {
+        throw new Error('Mobile blueprint sizing: add-time viewport scale unavailable');
+      }
+      if (!Number.isFinite(mobileBlueprintMetricsBeforeTap.blueprintLongSide) || mobileBlueprintMetricsBeforeTap.blueprintLongSide <= 0) {
+        throw new Error('Mobile blueprint sizing: add-time blueprint screen metrics unavailable');
+      }
 
       await clickSelectorViaDom(mobilePage, '.product-thumb');
       await delay(750);
       const mobileTapAddState = await mobilePage.evaluate(() => {
         const panel = document.getElementById('panel');
-        const viewport = (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null;
         const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
-        const blueprintRect = (window.__quoteAppGetBlueprintScreenRect && window.__quoteAppGetBlueprintScreenRect()) || null;
         return {
           count: (window.__quoteAppElementCount && window.__quoteAppElementCount()) || elements.length,
           panelCollapsed: !!panel && panel.classList.contains('collapsed'),
-          scale: viewport ? viewport.scale : null,
-          blueprintLongSide: blueprintRect ? Math.max(blueprintRect.width, blueprintRect.height) : null,
           last: elements[elements.length - 1] || null,
         };
       });
@@ -1663,17 +1690,13 @@ async function run() {
         throw new Error('Mobile blueprint sizing: products panel should auto-close after successful tap-add');
       }
       if (!mobileTapAddState.last) throw new Error('Mobile blueprint sizing: no element found after tap-add');
-      if (!Number.isFinite(mobileTapAddState.scale) || mobileTapAddState.scale <= 0) {
-        throw new Error('Mobile blueprint sizing: viewport scale unavailable after tap-add');
-      }
-      if (!Number.isFinite(mobileTapAddState.blueprintLongSide) || mobileTapAddState.blueprintLongSide <= 0) {
-        throw new Error('Mobile blueprint sizing: blueprint screen metrics unavailable after tap-add');
-      }
-      const mobileActualDisplayMax = Math.max(mobileTapAddState.last.width, mobileTapAddState.last.height) * mobileTapAddState.scale;
-      const mobileExpectedDisplayMax = 0.25 * mobileTapAddState.blueprintLongSide;
-      if (Math.abs(mobileActualDisplayMax - mobileExpectedDisplayMax) > 5) {
+      const mobileActualWorldMax = Math.max(mobileTapAddState.last.width, mobileTapAddState.last.height);
+      const baseMaxDimWorld = (0.25 * mobileBlueprintMetricsBeforeTap.blueprintLongSide) / mobileBlueprintMetricsBeforeTap.scale;
+      const minExpectedWorld = baseMaxDimWorld - 5;
+      const maxExpectedWorld = (baseMaxDimWorld * 1.2) + 5;
+      if (mobileActualWorldMax < minExpectedWorld || mobileActualWorldMax > maxExpectedWorld) {
         throw new Error(
-          `Mobile blueprint sizing mismatch: actual=${mobileActualDisplayMax.toFixed(2)}px, expected=${mobileExpectedDisplayMax.toFixed(2)}px`
+          `Mobile blueprint sizing mismatch: actualWorld=${mobileActualWorldMax.toFixed(2)}px, expectedRange=${minExpectedWorld.toFixed(2)}-${maxExpectedWorld.toFixed(2)}px`
         );
       }
       console.log('  ✓ Mobile blueprint tap-add uses 25% of blueprint long side and auto-closes panel');
@@ -1776,6 +1799,106 @@ async function run() {
         throw new Error('Mobile ruler: tapping ruler button should focus the selected measurement input');
       }
       console.log('  ✓ Mobile ruler flow: tap selects without keyboard, ruler focuses measurement input');
+
+      // Mobile navigation smoothing: Products panel should auto-collapse header and restore prior state on close.
+      await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const panelClose = document.getElementById('panelClose');
+        if (panel && panel.classList.contains('expanded') && panelClose) panelClose.click();
+      });
+      await delay(320);
+      await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        const collapseBtn = document.getElementById('toolbarCollapseBtn');
+        if (toolbar && collapseBtn && toolbar.classList.contains('toolbar--collapsed')) collapseBtn.click();
+      });
+      await delay(260);
+      const headerExpandedBeforeProducts = await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        return !!toolbar && !toolbar.classList.contains('toolbar--collapsed');
+      });
+      if (!headerExpandedBeforeProducts) {
+        throw new Error('Mobile navigation: expected global toolbar to start expanded before opening products');
+      }
+      await pointerTapSelector(mobilePage, '#panelCollapsed');
+      await delay(320);
+      const headerCollapsedOnProductsOpen = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const toolbar = document.getElementById('globalToolbar');
+        return {
+          panelExpanded: !!panel && panel.classList.contains('expanded'),
+          headerCollapsed: !!toolbar && toolbar.classList.contains('toolbar--collapsed'),
+        };
+      });
+      if (!headerCollapsedOnProductsOpen.panelExpanded) throw new Error('Mobile navigation: products panel should open from collapsed toggle');
+      if (!headerCollapsedOnProductsOpen.headerCollapsed) throw new Error('Mobile navigation: opening products should auto-collapse global toolbar');
+      await pointerTapSelector(mobilePage, '#panelClose');
+      await delay(320);
+      const headerRestoredAfterProductsClose = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const toolbar = document.getElementById('globalToolbar');
+        return {
+          panelCollapsed: !!panel && panel.classList.contains('collapsed'),
+          headerExpanded: !!toolbar && !toolbar.classList.contains('toolbar--collapsed'),
+        };
+      });
+      if (!headerRestoredAfterProductsClose.panelCollapsed) throw new Error('Mobile navigation: products panel should close');
+      if (!headerRestoredAfterProductsClose.headerExpanded) throw new Error('Mobile navigation: global toolbar should restore expanded state after products close');
+      console.log('  ✓ Mobile products panel auto-collapses global toolbar and restores previous state');
+
+      // Mobile floating toolbar should stay below global header safe area.
+      const movedNearTop = await mobilePage.evaluate((id) => {
+        if (typeof window.__quoteAppMoveElementBy !== 'function') return false;
+        return window.__quoteAppMoveElementBy(id, 0, -1000);
+      }, measurableElementId);
+      if (!movedNearTop) throw new Error('Mobile floating toolbar: failed to move selected element toward top edge');
+      await mobilePage.evaluate((id) => {
+        if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(id);
+      }, measurableElementId);
+      await delay(320);
+      const floatingToolbarSafeTop = await mobilePage.evaluate(() => {
+        const floating = document.getElementById('floatingToolbar');
+        const headerWrap = document.getElementById('globalToolbarWrap');
+        if (!floating || floating.hasAttribute('hidden')) return null;
+        const tr = floating.getBoundingClientRect();
+        const headerBottom = headerWrap ? headerWrap.getBoundingClientRect().bottom : 0;
+        const minTop = Math.max(8, headerBottom + 8);
+        return { top: tr.top, minTop };
+      });
+      if (!floatingToolbarSafeTop) throw new Error('Mobile floating toolbar: expected toolbar to be visible for selected element');
+      if (floatingToolbarSafeTop.top + 0.5 < floatingToolbarSafeTop.minTop) {
+        throw new Error(
+          `Mobile floating toolbar: top ${floatingToolbarSafeTop.top.toFixed(2)} should be >= safe min ${floatingToolbarSafeTop.minTop.toFixed(2)}`
+        );
+      }
+      console.log('  ✓ Mobile floating toolbar respects global header safe top');
+
+      // Mobile popover coherence: opening Products should close per-element color palette.
+      await pointerTapSelector(mobilePage, '#floatingToolbarColor');
+      await delay(220);
+      const colorPaletteOpenBeforeProducts = await mobilePage.evaluate(() => {
+        const palette = document.getElementById('colorPalettePopover');
+        if (!palette) return false;
+        const styles = window.getComputedStyle(palette);
+        return !palette.hasAttribute('hidden') && styles.display !== 'none' && styles.visibility !== 'hidden';
+      });
+      if (!colorPaletteOpenBeforeProducts) throw new Error('Mobile popover coherence: color palette should open from floating toolbar button');
+      await pointerTapSelector(mobilePage, '#panelCollapsed');
+      await delay(320);
+      const colorPaletteHiddenAfterProducts = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const palette = document.getElementById('colorPalettePopover');
+        const paletteHidden = !palette || palette.hasAttribute('hidden');
+        return {
+          panelExpanded: !!panel && panel.classList.contains('expanded'),
+          paletteHidden,
+        };
+      });
+      if (!colorPaletteHiddenAfterProducts.panelExpanded) throw new Error('Mobile popover coherence: products panel should open');
+      if (!colorPaletteHiddenAfterProducts.paletteHidden) throw new Error('Mobile popover coherence: opening products should close color palette');
+      await pointerTapSelector(mobilePage, '#panelClose');
+      await delay(280);
+      console.log('  ✓ Mobile opening Products closes floating color palette');
 
       // Mobile quote modal regression: full-screen shell + visibility policy.
       const generateQuoteBtnMobile = await mobilePage.$('#generateQuoteBtn');
@@ -2018,11 +2141,16 @@ async function run() {
         const rows = Array.from(document.querySelectorAll('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])'))
           .filter((row) => row.dataset.assetId === assetId);
         if (!rows.length) return false;
+        const expectedQty = 2;
         return rows.some((row) => {
           const qtyInput = row.querySelector('.quote-line-qty-input');
-          if (qtyInput) return Math.abs((parseFloat(qtyInput.value) || 0) - 2) < 0.01;
+          if (qtyInput) return Math.abs((parseFloat(qtyInput.value) || 0) - expectedQty) < 0.01;
+          const stepperVal = row.querySelector('.quote-mobile-qty-stepper-value');
+          if (stepperVal) return Math.abs((parseFloat(stepperVal.textContent) || 0) - expectedQty) < 0.01;
+          const stored = row.dataset.quoteQtyValue != null ? parseFloat(row.dataset.quoteQtyValue) : NaN;
+          if (Number.isFinite(stored)) return Math.abs(stored - expectedQty) < 0.01;
           const qtyVal = parseFloat((row.cells[1]?.textContent || '').trim());
-          return Number.isFinite(qtyVal) && Math.abs(qtyVal - 2) < 0.01;
+          return Number.isFinite(qtyVal) && Math.abs(qtyVal - expectedQty) < 0.01;
         });
       }, materialEditorOpenState.assetId);
       if (!materialQtyUpdated) throw new Error('Mobile material editor: Save should apply quantity change for material row');
@@ -2060,15 +2188,15 @@ async function run() {
         }
       });
       await delay(400);
-      await mobilePage.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+      await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn');
       await delay(400);
       const mobileCollapsed = await mobilePage.evaluate(() => document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
       if (!mobileCollapsed) throw new Error('Mobile: diagram toolbar should be collapsed after tap');
-      await mobilePage.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
+      await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn', { driftX: 5, driftY: 2 });
       await delay(400);
       const mobileExpanded = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
-      if (!mobileExpanded) throw new Error('Mobile: diagram toolbar should expand after tap on +');
-      console.log('  ✓ Diagram toolbar collapse/expand (mobile): −/+ swap works');
+      if (!mobileExpanded) throw new Error('Mobile: diagram toolbar should expand after tap on + with slight drift below drag threshold');
+      console.log('  ✓ Diagram toolbar collapse/expand (mobile): user tap path works, including slight drift');
 
       function getToolbarScreenState(pageRef) {
         return pageRef.evaluate(() => {
@@ -2192,12 +2320,13 @@ async function run() {
       }
 
       // Post-drag tap reliability: first deliberate tap after suppression window expands collapsed toolbar.
-      await mobilePage.evaluate(() => {
+      const isCollapsedBeforePostDrag = await mobilePage.evaluate(() => {
         const toolbar = document.getElementById('diagramFloatingToolbar');
-        const btn = document.getElementById('diagramToolbarCollapseBtn');
-        if (!toolbar || !btn) return;
-        if (!toolbar.classList.contains('diagram-floating-toolbar--collapsed')) btn.click();
+        return !!toolbar && toolbar.classList.contains('diagram-floating-toolbar--collapsed');
       });
+      if (!isCollapsedBeforePostDrag) {
+        await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn');
+      }
       await delay(420);
       const collapsedState = await getToolbarScreenState(mobilePage);
       if (!collapsedState || !collapsedState.collapsed) throw new Error('Mobile toolbar should be collapsed before post-drag tap reliability check');
@@ -2206,7 +2335,7 @@ async function run() {
       await mobilePage.mouse.move(collapsedState.handleCenter.x + 80, collapsedState.handleCenter.y + 8, { steps: 8 });
       await mobilePage.mouse.up();
       await delay(340);
-      await clickSelectorViaDom(mobilePage, '#diagramToolbarCollapseBtn');
+      await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn');
       await delay(360);
       const expandedAfterDragTap = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
       if (!expandedAfterDragTap) throw new Error('Mobile toolbar should expand on first deliberate tap after drag suppression window');

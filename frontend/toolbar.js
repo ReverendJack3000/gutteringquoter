@@ -244,6 +244,7 @@ export function initDiagramToolbarDrag(options = {}) {
   let didDragThisSession = false;
   let lastDragEndAt = 0;
   let suppressNextExpandTap = false;
+  let collapsedExpandDragCandidate = null;
 
   /* Zone logic (54.41, 54.48): same for desktop and mobile – top/bottom 20% → horizontal; left/right 20% → vertical; else horizontal. */
   function updateOrientationFromPosition(opts = {}) {
@@ -301,8 +302,41 @@ export function initDiagramToolbarDrag(options = {}) {
     return now - lastDragEndAt <= DIAGRAM_TOOLBAR_COLLAPSE_TAP_SUPPRESS_MS;
   }
 
+  function startCollapsedExpandDragCandidate(e) {
+    if (e.button !== 0 && e.pointerType !== 'touch') return;
+    collapsedExpandDragCandidate = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      toolbarStartLeft: parseFloat(toolbar.style.left) || 0,
+      toolbarStartTop: parseFloat(toolbar.style.top) || 0,
+    };
+  }
+
+  function promoteCollapsedExpandCandidateToDrag(e, candidate) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragPointerId = candidate.pointerId;
+    didDragThisSession = true;
+    dragStartX = candidate.startX;
+    dragStartY = candidate.startY;
+    toolbarStartLeft = candidate.toolbarStartLeft;
+    toolbarStartTop = candidate.toolbarStartTop;
+    toolbar.style.transition = 'none';
+    dragHandle.style.cursor = 'grabbing';
+    if (collapseBtn && toolbar.classList.contains('diagram-floating-toolbar--collapsed')) collapseBtn.style.cursor = 'grabbing';
+    dragHandle.classList.add('diagram-toolbar-drag-handle--dragging');
+    if (getViewportMode() === 'mobile' && typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(10); } catch (_) {}
+    }
+    try {
+      toolbar.setPointerCapture(candidate.pointerId);
+    } catch (_) {}
+  }
+
   function onPointerDown(e) {
     if (e.button !== 0 && e.pointerType !== 'touch') return;
+    collapsedExpandDragCandidate = null;
     /* When collapsed, tap on + must fire click to expand; only preventDefault if we're not on the expand button. */
     const isTapOnExpandBtn = collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target)) && toolbar.classList.contains('diagram-floating-toolbar--collapsed');
     if (!isTapOnExpandBtn) {
@@ -326,6 +360,17 @@ export function initDiagramToolbarDrag(options = {}) {
   /* Movement threshold (px²): above this counts as drag so tap-to-expand still fires. 5px was too low (mobile wobble). */
   const DRAG_THRESHOLD_PX_SQ = 100; // ~10px
   function onPointerMove(e) {
+    if (dragPointerId == null && collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
+      const dx = e.clientX - collapsedExpandDragCandidate.startX;
+      const dy = e.clientY - collapsedExpandDragCandidate.startY;
+      if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) {
+        const candidate = collapsedExpandDragCandidate;
+        collapsedExpandDragCandidate = null;
+        promoteCollapsedExpandCandidateToDrag(e, candidate);
+      } else {
+        return;
+      }
+    }
     if (dragPointerId == null || e.pointerId !== dragPointerId) return;
     e.preventDefault();
     const dx = e.clientX - dragStartX;
@@ -357,6 +402,10 @@ export function initDiagramToolbarDrag(options = {}) {
   }
 
   function onPointerUp(e) {
+    if (dragPointerId == null && collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
+      collapsedExpandDragCandidate = null;
+      return;
+    }
     if (e.pointerId !== dragPointerId) return;
     dragPointerId = null;
     dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
@@ -380,6 +429,9 @@ export function initDiagramToolbarDrag(options = {}) {
   }
 
   function onPointerCancel(e) {
+    if (collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
+      collapsedExpandDragCandidate = null;
+    }
     if (e.pointerId === dragPointerId) {
       dragPointerId = null;
       dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
@@ -449,7 +501,7 @@ export function initDiagramToolbarDrag(options = {}) {
     /* When collapsed, the + button is the only draggable area (drag handle is hidden). */
     const isCollapsed = toolbar.classList.contains('diagram-floating-toolbar--collapsed');
     if (collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target))) {
-      if (isCollapsed) onPointerDown(e);
+      if (isCollapsed) startCollapsedExpandDragCandidate(e);
       return;
     }
     /* 54.77: Do not start toolbar drag when touch starts inside tools-wrap so horizontal scroll works. */
