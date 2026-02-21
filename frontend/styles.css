@@ -2183,6 +2183,28 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   width: 2.5px;
   height: 16px;
 }
+/* Mobile only: collapsed + horizontal (top/bottom) – lock icon size and explicit + bars so horizontal stroke is visible (54.76 follow-up) */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed[data-orientation="horizontal"] .diagram-toolbar-collapse-btn .toggle-icon {
+  min-width: 20px;
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed[data-orientation="horizontal"] .toggle-icon::before {
+  width: 16px;
+  height: 2.5px;
+  left: 2px;
+  top: 9px;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed[data-orientation="horizontal"] .toggle-icon::after {
+  width: 2.5px;
+  height: 16px;
+  left: 9px;
+  top: 2px;
+  transform: rotate(0deg);
+  opacity: 1;
+}
 
 /* 54.57: Horizontal mobile toolbar should be thin and dense, while keeping 44px targets. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
@@ -2212,10 +2234,22 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap::-webkit-scrollbar {
   display: none;
 }
-/* 54.56: Vertical mobile toolbar stays a single slim column. */
+/* 54.78.1: Mobile vertical toolbar – height fits content (tighter pill). */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] {
+  height: fit-content;
+}
+/* 54.56 / 54.78.2–54.78.4: Vertical mobile toolbar – single column, capped height, scroll inside pill, scrollbar hidden. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap {
   flex-direction: column;
   flex-wrap: nowrap;
+  max-height: min(50vh, 280px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap::-webkit-scrollbar {
+  display: none;
 }
 /* 44px strict target policy in horizontal mode as well. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .toolbar-pill-btn,
@@ -2227,18 +2261,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
   min-height: 44px;
   flex-shrink: 0;
 }
-/* Controlled fallback on narrow portrait widths: wrap instead of shrinking below 44px. */
-@media (max-width: 430px) {
-  body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] {
-    flex-wrap: wrap;
-    max-width: calc(100vw - 16px);
-  }
-  body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-tools-wrap {
-    flex-wrap: wrap;
-    justify-content: center;
-    max-width: 100%;
-  }
-}
+/* 54.77: Single row + horizontal scroll at all mobile widths; no wrap override at 430px. */
 
 /* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
 .diagram-toolbar-drag-handle {
@@ -2282,12 +2305,6 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
 }
 .diagram-toolbar-drag-handle:active::before {
   background: rgba(0, 0, 0, 0.35);
-}
-
-.diagram-toolbar-drag-handle span {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,

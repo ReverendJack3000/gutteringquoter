@@ -20,6 +20,8 @@ const state = {
   viewZoom: 1,   // user zoom multiplier (1 = fit); <1 zoom out, >1 zoom in
   viewPanX: 0,
   viewPanY: 0,
+  fitPanFeedbackX: 0, // mobile-only: subtle resistance feedback when trying to pan at fit (viewZoom = 1)
+  fitPanFeedbackY: 0,
   baseScale: 1,  // last computed fit scale (for zoom toward cursor)
   baseOffsetX: 0,
   baseOffsetY: 0,
@@ -28,7 +30,7 @@ const state = {
   selectedIds: [], // multi-select; selectedId === selectedIds[0]
   groups: [], // { id: string, elementIds: string[] }
   dragOffset: { x: 0, y: 0 },
-  mode: null, // 'move' | 'move-primed' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan' | 'pinch' | 'element-transform'
+  mode: null, // 'move' | 'move-primed' | 'resize' | 'rotate' | 'blueprint-move' | 'blueprint-resize' | 'blueprint-rotate' | 'pan' | 'pan-resist' | 'pinch' | 'element-transform'
   resizeHandle: null,
   products: [],
   profileFilter: '', // '' | 'storm_cloud' | 'classic' | 'other'
@@ -329,6 +331,11 @@ const MIN_VIEW_ZOOM = 0.15;
 const MAX_VIEW_ZOOM = 4;
 /** 54.37: On mobile, zoom-out is clamped to 1 (full page) so the view never goes smaller than fit. */
 const MIN_VIEW_ZOOM_MOBILE = 1;
+const MOBILE_FIT_PAN_LOCK_EPSILON = 0.001;
+const MOBILE_FIT_PAN_RESISTANCE_FACTOR = 0.22;
+const MOBILE_FIT_PAN_RESISTANCE_MAX_PX = 14;
+const MOBILE_FIT_PAN_BOUNCE_DECAY = 0.78;
+const MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON = 0.05;
 /** 54.62: Mobile one-finger move starts only after crossing this threshold (tap remains select-only). */
 const MOBILE_MOVE_START_THRESHOLD_PX = 8;
 const ZOOM_WHEEL_FACTOR = 0.92;
@@ -398,14 +405,37 @@ function scheduleBboxRecalcDebounce() {
     draw();
   }, BBOX_RECALC_DEBOUNCE_MS);
 }
+
+function isMobileFitZoomLevel(viewZoom) {
+  const zoom = Number.isFinite(viewZoom) ? viewZoom : state.viewZoom;
+  return layoutState.viewportMode === 'mobile' && zoom <= (MIN_VIEW_ZOOM_MOBILE + MOBILE_FIT_PAN_LOCK_EPSILON);
+}
+
+function clampFitPanFeedback(value) {
+  return Math.max(-MOBILE_FIT_PAN_RESISTANCE_MAX_PX, Math.min(MOBILE_FIT_PAN_RESISTANCE_MAX_PX, value));
+}
+
+function applyFitPanResistance(dx, dy) {
+  state.fitPanFeedbackX = clampFitPanFeedback(
+    state.fitPanFeedbackX + (dx * MOBILE_FIT_PAN_RESISTANCE_FACTOR)
+  );
+  state.fitPanFeedbackY = clampFitPanFeedback(
+    state.fitPanFeedbackY + (dy * MOBILE_FIT_PAN_RESISTANCE_FACTOR)
+  );
+}
+
+function resetMobileFitPanState() {
+  state.viewPanX = 0;
+  state.viewPanY = 0;
+  state.fitPanFeedbackX = 0;
+  state.fitPanFeedbackY = 0;
+}
+
 const MIN_PANEL_WIDTH = 280;
 const MAX_PANEL_WIDTH = 600;
 const DEFAULT_PANEL_WIDTH = 320;
 const MOBILE_LAYOUT_BREAKPOINT_PX = 980;
 const VIEWPORT_MODE_QUERY_KEY = 'viewport';
-// 54.36: Mobile-only logical page size so content fits by default; fit scale computed from this, then centered in viewport
-const MOBILE_PAGE_WIDTH_PX = 800;
-const MOBILE_PAGE_HEIGHT_PX = 600;
 
 // Uniform element sizing: placed elements use 1/5 of reference size (works for portrait/landscape 9:16)
 const REFERENCE_SIZE_PX = 400;
@@ -4809,6 +4839,9 @@ function draw() {
   let hasContent = false;
 
   const inDebounceWindow = state.bboxRecalcDeferredUntil != null && Date.now() < state.bboxRecalcDeferredUntil;
+  const fitFeedbackActive = isMobileFitZoomLevel()
+    && (Math.abs(state.fitPanFeedbackX) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON
+      || Math.abs(state.fitPanFeedbackY) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON);
   const interactionActive = !!state.mode || inDebounceWindow;
   if (blueprintImage && state.blueprintTransform) {
     const bt = state.blueprintTransform;
@@ -4825,18 +4858,12 @@ function draw() {
       if (eb.y < minY) minY = eb.y;
       if (eb.y + eb.height > maxY) maxY = eb.y + eb.height;
     });
-    const bboxW = maxX - minX;
-    const bboxH = maxY - minY;
+    const bboxW = Math.max(1, maxX - minX);
+    const bboxH = Math.max(1, maxY - minY);
     const pad = 20;
     hasContent = true;
     if (!interactionActive) {
-      if (layoutState.viewportMode === 'mobile') {
-        const scaleToPage = Math.min((MOBILE_PAGE_WIDTH_PX - pad * 2) / bboxW, (MOBILE_PAGE_HEIGHT_PX - pad * 2) / bboxH);
-        const scaleToCanvas = Math.min(w / MOBILE_PAGE_WIDTH_PX, h / MOBILE_PAGE_HEIGHT_PX);
-        baseScale = scaleToPage * scaleToCanvas;
-      } else {
-        baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
-      }
+      baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
       baseOffsetX = (w - bboxW * baseScale) / 2 - minX * baseScale;
       baseOffsetY = (h - bboxH * baseScale) / 2 - minY * baseScale;
       state.baseScale = baseScale;
@@ -4847,11 +4874,16 @@ function draw() {
       baseOffsetX = state.baseOffsetX;
       baseOffsetY = state.baseOffsetY;
     }
+    if (isMobileFitZoomLevel()) {
+      state.viewZoom = 1;
+      state.viewPanX = 0;
+      state.viewPanY = 0;
+    }
     state.scale = baseScale * state.viewZoom;
     scale = state.scale;
-    state.offsetX = baseOffsetX + state.viewPanX;
-    state.offsetY = baseOffsetY + state.viewPanY;
-    if (!interactionActive) {
+    state.offsetX = baseOffsetX + state.viewPanX + (isMobileFitZoomLevel() ? state.fitPanFeedbackX : 0);
+    state.offsetY = baseOffsetY + state.viewPanY + (isMobileFitZoomLevel() ? state.fitPanFeedbackY : 0);
+    if (!interactionActive && !fitFeedbackActive) {
       clampViewToPadding(state, baseOffsetX, baseOffsetY, minX, minY, bboxW, bboxH, scale, w, h);
     }
     offsetX = state.offsetX;
@@ -4865,18 +4897,12 @@ function draw() {
       if (eb.y < minY) minY = eb.y;
       if (eb.y + eb.height > maxY) maxY = eb.y + eb.height;
     });
-    const bboxW = maxX - minX;
-    const bboxH = maxY - minY;
+    const bboxW = Math.max(1, maxX - minX);
+    const bboxH = Math.max(1, maxY - minY);
     const pad = 20;
     hasContent = true;
     if (!interactionActive) {
-      if (layoutState.viewportMode === 'mobile') {
-        const scaleToPage = Math.min((MOBILE_PAGE_WIDTH_PX - pad * 2) / bboxW, (MOBILE_PAGE_HEIGHT_PX - pad * 2) / bboxH);
-        const scaleToCanvas = Math.min(w / MOBILE_PAGE_WIDTH_PX, h / MOBILE_PAGE_HEIGHT_PX);
-        baseScale = scaleToPage * scaleToCanvas;
-      } else {
-        baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
-      }
+      baseScale = Math.min((w - pad * 2) / bboxW, (h - pad * 2) / bboxH);
       baseOffsetX = (w - bboxW * baseScale) / 2 - minX * baseScale;
       baseOffsetY = (h - bboxH * baseScale) / 2 - minY * baseScale;
       state.baseScale = baseScale;
@@ -4887,11 +4913,16 @@ function draw() {
       baseOffsetX = state.baseOffsetX;
       baseOffsetY = state.baseOffsetY;
     }
+    if (isMobileFitZoomLevel()) {
+      state.viewZoom = 1;
+      state.viewPanX = 0;
+      state.viewPanY = 0;
+    }
     state.scale = baseScale * state.viewZoom;
     scale = state.scale;
-    state.offsetX = baseOffsetX + state.viewPanX;
-    state.offsetY = baseOffsetY + state.viewPanY;
-    if (!interactionActive) {
+    state.offsetX = baseOffsetX + state.viewPanX + (isMobileFitZoomLevel() ? state.fitPanFeedbackX : 0);
+    state.offsetY = baseOffsetY + state.viewPanY + (isMobileFitZoomLevel() ? state.fitPanFeedbackY : 0);
+    if (!interactionActive && !fitFeedbackActive) {
       clampViewToPadding(state, baseOffsetX, baseOffsetY, minX, minY, bboxW, bboxH, scale, w, h);
     }
     offsetX = state.offsetX;
@@ -4902,6 +4933,8 @@ function draw() {
     state.scale = 1;
     state.offsetX = 0;
     state.offsetY = 0;
+    state.fitPanFeedbackX = 0;
+    state.fitPanFeedbackY = 0;
     scale = 1;
     offsetX = 0;
     offsetY = 0;
@@ -5372,7 +5405,7 @@ function draw() {
   if (canvas) {
     if (state.mode) {
       canvas.style.willChange = 'transform';
-      if (state.mode === 'pan' || state.mode === 'move') canvas.style.cursor = 'grabbing';
+      if (state.mode === 'pan' || state.mode === 'pan-resist' || state.mode === 'move') canvas.style.cursor = 'grabbing';
       else if (state.mode === 'rotate' && state.selectedId) {
         const rotEl = state.elements.find((x) => x.id === state.selectedId);
         canvas.style.cursor = rotEl ? getRotationCursor((rotEl.rotation || 0) + 90) : 'move';
@@ -5380,6 +5413,19 @@ function draw() {
     } else {
       canvas.style.willChange = 'auto';
     }
+  }
+
+  // Mobile fit-level feedback: subtle bounce-back when users try to pan at fit (viewZoom=1).
+  if (isMobileFitZoomLevel()) {
+    if (state.mode !== 'pan-resist') {
+      state.fitPanFeedbackX *= MOBILE_FIT_PAN_BOUNCE_DECAY;
+      state.fitPanFeedbackY *= MOBILE_FIT_PAN_BOUNCE_DECAY;
+      if (Math.abs(state.fitPanFeedbackX) < MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON) state.fitPanFeedbackX = 0;
+      if (Math.abs(state.fitPanFeedbackY) < MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON) state.fitPanFeedbackY = 0;
+    }
+  } else if (state.fitPanFeedbackX || state.fitPanFeedbackY) {
+    state.fitPanFeedbackX = 0;
+    state.fitPanFeedbackY = 0;
   }
 
   updateAccessibilityInspector({ skipActiveField: true });
@@ -5930,7 +5976,7 @@ function initCanvas() {
     state.hoveredId = null;
     // 54.16: On mobile, drag on empty canvas pans the view instead of starting marquee selection.
     if (layoutState.viewportMode === 'mobile') {
-      state.mode = 'pan';
+      state.mode = isMobileFitZoomLevel() ? 'pan-resist' : 'pan';
       state.dragOffset.x = e.clientX;
       state.dragOffset.y = e.clientY;
       return;
@@ -5969,9 +6015,21 @@ function initCanvas() {
         const newScale = state.baseScale * newViewZoom;
         const display = clientToCanvasDisplay(cx, cy);
         if (display) {
-          state.viewZoom = newViewZoom;
-          state.viewPanX = display.x - state.pinchStartContentX * newScale - state.baseOffsetX;
-          state.viewPanY = display.y - state.pinchStartContentY * newScale - state.baseOffsetY;
+          if (layoutState.viewportMode === 'mobile' && newViewZoom <= (MIN_VIEW_ZOOM_MOBILE + MOBILE_FIT_PAN_LOCK_EPSILON)) {
+            state.viewZoom = MIN_VIEW_ZOOM_MOBILE;
+            state.viewPanX = 0;
+            state.viewPanY = 0;
+            const centerDx = cx - (state.pinchStartCenter?.x ?? cx);
+            const centerDy = cy - (state.pinchStartCenter?.y ?? cy);
+            state.fitPanFeedbackX = clampFitPanFeedback(centerDx * MOBILE_FIT_PAN_RESISTANCE_FACTOR);
+            state.fitPanFeedbackY = clampFitPanFeedback(centerDy * MOBILE_FIT_PAN_RESISTANCE_FACTOR);
+          } else {
+            state.viewZoom = newViewZoom;
+            state.viewPanX = display.x - state.pinchStartContentX * newScale - state.baseOffsetX;
+            state.viewPanY = display.y - state.pinchStartContentY * newScale - state.baseOffsetY;
+            state.fitPanFeedbackX = 0;
+            state.fitPanFeedbackY = 0;
+          }
         }
         draw();
       }
@@ -6041,7 +6099,21 @@ function initCanvas() {
       state.previewDragX = primary.x;
       state.previewDragY = primary.y;
     }
+    if (state.mode === 'pan-resist') {
+      const dx = e.clientX - state.dragOffset.x;
+      const dy = e.clientY - state.dragOffset.y;
+      state.dragOffset.x = e.clientX;
+      state.dragOffset.y = e.clientY;
+      applyFitPanResistance(dx, dy);
+      canvas.style.cursor = 'grabbing';
+      draw();
+      return;
+    }
     if (state.mode === 'pan') {
+      if (layoutState.viewportMode === 'mobile' && isMobileFitZoomLevel()) {
+        state.mode = 'pan-resist';
+        return;
+      }
       state.viewPanX += e.clientX - state.dragOffset.x;
       state.viewPanY += e.clientY - state.dragOffset.y;
       state.dragOffset.x = e.clientX;
@@ -6287,12 +6359,21 @@ function initCanvas() {
       const minZoom = layoutState.viewportMode === 'mobile' ? MIN_VIEW_ZOOM_MOBILE : MIN_VIEW_ZOOM;
       const newViewZoom = Math.max(minZoom, Math.min(MAX_VIEW_ZOOM, state.viewZoom * factor));
       const newScale = state.baseScale * newViewZoom;
-      state.viewZoom = newViewZoom;
-      state.viewPanX = sx - contentX * newScale - state.baseOffsetX;
-      state.viewPanY = sy - contentY * newScale - state.baseOffsetY;
+      if (layoutState.viewportMode === 'mobile' && newViewZoom <= (MIN_VIEW_ZOOM_MOBILE + MOBILE_FIT_PAN_LOCK_EPSILON)) {
+        resetMobileFitPanState();
+        state.viewZoom = MIN_VIEW_ZOOM_MOBILE;
+      } else {
+        state.viewZoom = newViewZoom;
+        state.viewPanX = sx - contentX * newScale - state.baseOffsetX;
+        state.viewPanY = sy - contentY * newScale - state.baseOffsetY;
+      }
     } else {
-      state.viewPanX += e.deltaX;
-      state.viewPanY += e.deltaY;
+      if (layoutState.viewportMode === 'mobile' && isMobileFitZoomLevel()) {
+        applyFitPanResistance(e.deltaX, e.deltaY);
+      } else {
+        state.viewPanX += e.deltaX;
+        state.viewPanY += e.deltaY;
+      }
     }
   }, { passive: false });
 
@@ -6597,8 +6678,7 @@ async function processFileAsBlueprint(file) {
       state.blueprintImageSourceUrl = null; // new upload, not from saved project
       state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
       state.viewZoom = 1;
-      state.viewPanX = 0;
-      state.viewPanY = 0;
+      resetMobileFitPanState();
       URL.revokeObjectURL(url);
       updatePlaceholderVisibility();
       draw(); // Trigger full view re-fit to new blueprint
@@ -6776,8 +6856,7 @@ function initUpload() {
         state.blueprintImageSourceUrl = null; // updated from server, not from saved project URL
         state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
         state.viewZoom = 1;
-        state.viewPanX = 0;
-        state.viewPanY = 0;
+        resetMobileFitPanState();
         URL.revokeObjectURL(url);
         updatePlaceholderVisibility();
       };
@@ -6802,19 +6881,27 @@ function initZoomControls() {
   zoomOutBtn?.addEventListener('click', (e) => {
     stopAndPrevent(e);
     const minZoom = layoutState.viewportMode === 'mobile' ? MIN_VIEW_ZOOM_MOBILE : MIN_VIEW_ZOOM;
-    state.viewZoom = Math.max(minZoom, state.viewZoom / ZOOM_BUTTON_FACTOR);
+    const nextZoom = Math.max(minZoom, state.viewZoom / ZOOM_BUTTON_FACTOR);
+    state.viewZoom = nextZoom;
+    if (layoutState.viewportMode === 'mobile' && isMobileFitZoomLevel(nextZoom)) {
+      resetMobileFitPanState();
+      state.viewZoom = MIN_VIEW_ZOOM_MOBILE;
+    }
     draw();
   });
   zoomInBtn?.addEventListener('click', (e) => {
     stopAndPrevent(e);
     state.viewZoom = Math.min(MAX_VIEW_ZOOM, state.viewZoom * ZOOM_BUTTON_FACTOR);
+    if (state.viewZoom > MIN_VIEW_ZOOM_MOBILE) {
+      state.fitPanFeedbackX = 0;
+      state.fitPanFeedbackY = 0;
+    }
     draw();
   });
   zoomFitBtn?.addEventListener('click', (e) => {
     stopAndPrevent(e);
     state.viewZoom = 1;
-    state.viewPanX = 0;
-    state.viewPanY = 0;
+    resetMobileFitPanState();
     draw();
   });
 }
@@ -10294,6 +10381,11 @@ if (typeof window !== 'undefined') {
       viewZoom: state.viewZoom,
       viewPanX: state.viewPanX,
       viewPanY: state.viewPanY,
+      scale: state.scale,
+      offsetX: state.offsetX,
+      offsetY: state.offsetY,
+      fitPanFeedbackX: state.fitPanFeedbackX,
+      fitPanFeedbackY: state.fitPanFeedbackY,
     };
   };
   window.__quoteAppGetViewportMode = function () {
@@ -10356,6 +10448,49 @@ if (typeof window !== 'undefined') {
   };
   window.__quoteAppHasBlueprint = function () { return !!(state.blueprintImage && state.blueprintTransform); };
   window.__quoteAppGetBlueprintOpacity = function () { return state.blueprintTransform?.opacity ?? 1; };
+  window.__quoteAppGetBlueprintScreenRect = function () {
+    if (!state.blueprintImage || !state.blueprintTransform) return null;
+    const rect = getCanvasRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const logicalW = state.canvasWidth / dpr;
+    const logicalH = state.canvasHeight / dpr;
+    if (!logicalW || !logicalH) return null;
+    const bt = state.blueprintTransform;
+    const bbox = rotatedRectBbox(bt.x, bt.y, bt.w, bt.h, bt.rotation || 0);
+    const displayLeft = state.offsetX + bbox.x * state.scale;
+    const displayTop = state.offsetY + bbox.y * state.scale;
+    const displayRight = state.offsetX + (bbox.x + bbox.width) * state.scale;
+    const displayBottom = state.offsetY + (bbox.y + bbox.height) * state.scale;
+    const toClientX = (displayX) => rect.left + displayX * (rect.width / logicalW);
+    const toClientY = (displayY) => rect.top + displayY * (rect.height / logicalH);
+    const left = toClientX(displayLeft);
+    const top = toClientY(displayTop);
+    const right = toClientX(displayRight);
+    const bottom = toClientY(displayBottom);
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+      canvas: {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      },
+      insets: {
+        left: left - rect.left,
+        right: rect.right - right,
+        top: top - rect.top,
+        bottom: rect.bottom - bottom,
+      },
+    };
+  };
   window.__quoteAppSelectBlueprint = function () {
     if (!state.blueprintTransform) return false;
     state.selectedBlueprint = true;

@@ -398,6 +398,8 @@ export function initDiagramToolbarDrag(options = {}) {
       if (isCollapsed) onPointerDown(e);
       return;
     }
+    /* 54.77: Do not start toolbar drag when touch starts inside tools-wrap so horizontal scroll works. */
+    if ((e.target instanceof Element) && e.target.closest('.diagram-toolbar-tools-wrap')) return;
     if ((e.target instanceof Element) && (e.target.closest('button, label, input') || e.target.closest('.toolbar-pill-btn'))) return;
     onPointerDown(e);
   };

@@ -1417,6 +1417,107 @@ async function run() {
         throw new Error('Mobile viewport regression: products panel toggle not visible in portrait');
       }
 
+      // Section 57: mobile fit inset + pan lock behavior
+      const mobileFileInput = await mobilePage.$('#fileInput');
+      if (!mobileFileInput) throw new Error('Mobile viewport regression: #fileInput missing for blueprint fit checks');
+      await mobileFileInput.uploadFile(blueprintImagePath);
+      await mobilePage.evaluate(() => {
+        const input = document.getElementById('fileInput');
+        if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await delay(1500);
+      const mobileCropModal = await mobilePage.$('#cropModal');
+      const mobileCropVisible = mobileCropModal && !(await mobilePage.evaluate((el) => el.hasAttribute('hidden'), mobileCropModal));
+      if (mobileCropVisible) {
+        await clickSelectorViaDomIfPresent(mobilePage, '#cropUseFull');
+        await delay(1800);
+      }
+      const mobilePlaceholderHidden = await mobilePage.evaluate(() => {
+        const el = document.getElementById('canvasPlaceholder');
+        return !!el && (el.hasAttribute('hidden') || !el.offsetParent);
+      });
+      if (!mobilePlaceholderHidden) throw new Error('Mobile viewport regression: blueprint upload did not hide placeholder');
+
+      const fitRect = await mobilePage.evaluate(() => {
+        if (typeof window.__quoteAppGetBlueprintScreenRect !== 'function') return null;
+        return window.__quoteAppGetBlueprintScreenRect();
+      });
+      if (!fitRect || !fitRect.insets) throw new Error('Mobile viewport regression: fit inset metrics unavailable');
+      const insets = [fitRect.insets.left, fitRect.insets.right, fitRect.insets.top, fitRect.insets.bottom];
+      const minInset = Math.min(...insets);
+      if (minInset < 18) {
+        throw new Error(`Mobile fit inset should keep ~20px border; minimum inset was ${minInset.toFixed(2)}px`);
+      }
+      if (Math.abs(minInset - 20) > 5) {
+        throw new Error(`Mobile fit inset should be near 20px on the limiting axis; got ${minInset.toFixed(2)}px`);
+      }
+      console.log('  ✓ Mobile fit inset is approximately 20px at viewZoom=1');
+
+      const panProbe = await mobilePage.evaluate(() => {
+        const c = document.getElementById('canvas');
+        if (!c) return null;
+        const r = c.getBoundingClientRect();
+        return {
+          startX: r.left + r.width * 0.45,
+          startY: r.top + r.height * 0.45,
+          endX: r.left + r.width * 0.72,
+          endY: r.top + r.height * 0.62,
+        };
+      });
+      if (!panProbe) throw new Error('Mobile viewport regression: pan probe coordinates unavailable');
+
+      await mobilePage.mouse.move(panProbe.startX, panProbe.startY);
+      await mobilePage.mouse.down();
+      await mobilePage.mouse.move(panProbe.endX, panProbe.endY, { steps: 10 });
+      await mobilePage.mouse.up();
+      await delay(420);
+      const fitLockedViewport = await mobilePage.evaluate(() => {
+        return typeof window.__quoteAppGetViewport === 'function' ? window.__quoteAppGetViewport() : null;
+      });
+      if (!fitLockedViewport) throw new Error('Mobile viewport regression: fit-level viewport metrics unavailable');
+      if (Math.abs(fitLockedViewport.viewPanX) > 0.75 || Math.abs(fitLockedViewport.viewPanY) > 0.75) {
+        throw new Error(`Mobile fit-level pan should stay locked; got panX=${fitLockedViewport.viewPanX}, panY=${fitLockedViewport.viewPanY}`);
+      }
+      console.log('  ✓ Mobile pan is locked at fit level (viewZoom=1)');
+
+      await clickSelectorViaDom(mobilePage, '#zoomInBtn');
+      await delay(180);
+      const beforeZoomedPan = await mobilePage.evaluate(() => {
+        return typeof window.__quoteAppGetViewport === 'function' ? window.__quoteAppGetViewport() : null;
+      });
+      if (!beforeZoomedPan || beforeZoomedPan.viewZoom <= 1.001) {
+        throw new Error('Mobile viewport regression: zoom-in should raise viewZoom above 1 before pan-resume test');
+      }
+      await mobilePage.mouse.move(panProbe.startX, panProbe.startY);
+      await mobilePage.mouse.down();
+      await mobilePage.mouse.move(panProbe.endX, panProbe.endY, { steps: 10 });
+      await mobilePage.mouse.up();
+      await delay(260);
+      const afterZoomedPan = await mobilePage.evaluate(() => {
+        return typeof window.__quoteAppGetViewport === 'function' ? window.__quoteAppGetViewport() : null;
+      });
+      if (!afterZoomedPan) throw new Error('Mobile viewport regression: zoomed pan metrics unavailable');
+      const panDeltaX = Math.abs((afterZoomedPan.viewPanX || 0) - (beforeZoomedPan.viewPanX || 0));
+      const panDeltaY = Math.abs((afterZoomedPan.viewPanY || 0) - (beforeZoomedPan.viewPanY || 0));
+      if (panDeltaX < 2 && panDeltaY < 2) {
+        throw new Error('Mobile zoomed-in pan should move viewport (pan did not change enough after zoom-in)');
+      }
+      console.log('  ✓ Mobile pan resumes when zoomed in');
+
+      await clickSelectorViaDom(mobilePage, '#zoomFitBtn');
+      await delay(220);
+      const fitResetViewport = await mobilePage.evaluate(() => {
+        return typeof window.__quoteAppGetViewport === 'function' ? window.__quoteAppGetViewport() : null;
+      });
+      if (!fitResetViewport) throw new Error('Mobile viewport regression: fit reset metrics unavailable');
+      if (Math.abs(fitResetViewport.viewZoom - 1) > 0.001) {
+        throw new Error(`Mobile Fit should reset viewZoom to 1; got ${fitResetViewport.viewZoom}`);
+      }
+      if (Math.abs(fitResetViewport.viewPanX) > 0.75 || Math.abs(fitResetViewport.viewPanY) > 0.75) {
+        throw new Error(`Mobile Fit should recenter pan to ~0; got panX=${fitResetViewport.viewPanX}, panY=${fitResetViewport.viewPanY}`);
+      }
+      console.log('  ✓ Mobile Fit resets to centered, pan-locked state');
+
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);
       const landscapeCheck = await mobilePage.evaluate(() => {
