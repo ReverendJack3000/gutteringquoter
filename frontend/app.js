@@ -447,6 +447,8 @@ const MIN_ELEMENT_DIMENSION_PX = 20;
 
 // Canvas Porter: Auto-Scale normalization
 const CANVAS_PORTER_MAX_UNIT = 150; // MaxUnit for normalization (same as DROPPED_ELEMENT_MAX_DIMENSION_PX)
+const MOBILE_ADD_SIZE_RATIO = 0.25;
+const MOBILE_ADD_SCALE_EPSILON = 0.0001;
 const CANVAS_PORTER_VISUAL_PADDING = 10; // Safe zone padding in pixels (canvas coordinates)
 const BLUEPRINT_Z_INDEX = -1; // Blueprint is the back layer; elements use zIndex >= 0
 
@@ -466,6 +468,9 @@ const layoutState = {
   resizeListenerBound: false,
   resizeDebounceId: null,
 };
+
+/** 54.80: Diagram toolbar API (collapseIfExpanded). Set by initDiagramToolbarDragWithApp. */
+let diagramToolbarApi = null;
 
 /** Last successful quote response for edit mode: { materials, materials_subtotal, labour_hours, labour_rate, labour_subtotal, total } */
 let lastQuoteData = null;
@@ -3062,8 +3067,10 @@ function initHeaderColorPalette() {
     const gap = 8;
     let left = rect.left + rect.width / 2 - paletteW / 2;
     left = Math.max(8, Math.min(window.innerWidth - paletteW - 8, left));
-    popover.style.left = left + 'px';
-    popover.style.top = (rect.bottom + gap) + 'px';
+    const top = rect.bottom + gap;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(left, top, paletteW, popover.offsetHeight || 200);
+    popover.style.left = nudge.left + 'px';
+    popover.style.top = nudge.top + 'px';
   }
 
   btn.addEventListener('click', (e) => {
@@ -3250,12 +3257,39 @@ function initFloatingToolbar() {
 
   const btnFlipMenu = document.getElementById('btnFlipMenu');
   const flipDropdown = document.getElementById('flipDropdown');
+  function clearFlipDropdownPosition() {
+    if (!flipDropdown) return;
+    flipDropdown.style.position = '';
+    flipDropdown.style.left = '';
+    flipDropdown.style.top = '';
+    flipDropdown.style.transform = '';
+  }
+  function positionFlipDropdownAwayFromDiagramToolbar() {
+    if (layoutState.viewportMode !== 'mobile' || !flipDropdown || flipDropdown.hidden) return;
+    const tr = getDiagramToolbarExpandRect();
+    if (!tr) return;
+    const r = flipDropdown.getBoundingClientRect();
+    const w = r.width;
+    const h = r.height;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(r.left, r.top, w, h);
+    if (nudge.left === r.left && nudge.top === r.top) return;
+    flipDropdown.style.position = 'fixed';
+    flipDropdown.style.left = nudge.left + 'px';
+    flipDropdown.style.top = nudge.top + 'px';
+    flipDropdown.style.transform = 'none';
+  }
   if (btnFlipMenu && flipDropdown) {
     btnFlipMenu.addEventListener('click', (e) => {
       e.stopPropagation();
       state.colorPaletteOpen = false;
       const wasOpen = !flipDropdown.hidden;
       flipDropdown.hidden = wasOpen;
+      if (flipDropdown.hidden) {
+        clearFlipDropdownPosition();
+      } else {
+        clearFlipDropdownPosition(); /* 54.80: re-open uses CSS position before nudge; avoids stale fixed position */
+        if (layoutState.viewportMode === 'mobile') requestAnimationFrame(() => { positionFlipDropdownAwayFromDiagramToolbar(); });
+      }
       btnFlipMenu.setAttribute('aria-expanded', flipDropdown.hidden ? 'false' : 'true');
       draw();
     });
@@ -3287,6 +3321,7 @@ function initFloatingToolbar() {
       e.stopPropagation();
       if (flipDropdown) {
         flipDropdown.hidden = true;
+        clearFlipDropdownPosition();
         if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
       }
       state.colorPaletteOpen = !state.colorPaletteOpen;
@@ -3299,6 +3334,7 @@ function initFloatingToolbar() {
       e.stopPropagation();
       submenu.hidden = !submenu.hidden;
       moreBtn.setAttribute('aria-expanded', submenu.hidden ? 'false' : 'true');
+      if (!submenu.hidden) collapseDiagramToolbarIfExpanded();
       draw();
     });
     submenu.querySelectorAll('button').forEach((btn) => {
@@ -3329,6 +3365,7 @@ function initFloatingToolbar() {
     }
     if (flipDropdown && !flipDropdown.hidden && toolbar && !toolbar.contains(e.target)) {
       flipDropdown.hidden = true;
+      clearFlipDropdownPosition();
       if (btnFlipMenu) btnFlipMenu.setAttribute('aria-expanded', 'false');
       draw();
     }
@@ -3351,6 +3388,47 @@ function getCanvasRect() {
   return canvas.getBoundingClientRect();
 }
 
+/** 54.80.4: Mobile-only – diagram toolbar rect when expanded (for positioning popovers away from it). */
+function getDiagramToolbarExpandRect() {
+  if (layoutState.viewportMode !== 'mobile') return null;
+  const toolbar = document.getElementById('diagramFloatingToolbar');
+  if (!toolbar || toolbar.classList.contains('diagram-floating-toolbar--collapsed')) return null;
+  return toolbar.getBoundingClientRect();
+}
+
+/** 54.80.4: Mobile-only – nudge (left, top) so a popover of size (w, h) does not overlap the expanded diagram toolbar. */
+function nudgePopoverAwayFromDiagramToolbar(desiredLeft, desiredTop, w, h) {
+  const tr = getDiagramToolbarExpandRect();
+  if (!tr) return { left: desiredLeft, top: desiredTop };
+  const pad = 8;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const minPad = 8;
+  function overlaps(l, t) {
+    const r = l + w;
+    const b = t + h;
+    return !(r <= tr.left - pad || l >= tr.right + pad || b <= tr.top - pad || t >= tr.bottom + pad);
+  }
+  if (!overlaps(desiredLeft, desiredTop)) return { left: desiredLeft, top: desiredTop };
+  const candidates = [
+    { left: tr.left - w - pad, top: desiredTop },
+    { left: tr.right + pad, top: desiredTop },
+    { left: desiredLeft, top: tr.top - h - pad },
+    { left: desiredLeft, top: tr.bottom + pad },
+  ].filter((c) => c.left >= minPad && c.left + w <= vw - minPad && c.top >= minPad && c.top + h <= vh - minPad && !overlaps(c.left, c.top));
+  if (candidates.length === 0) return { left: desiredLeft, top: desiredTop };
+  let best = candidates[0];
+  let bestDist = (best.left - desiredLeft) ** 2 + (best.top - desiredTop) ** 2;
+  for (let i = 1; i < candidates.length; i++) {
+    const d = (candidates[i].left - desiredLeft) ** 2 + (candidates[i].top - desiredTop) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = candidates[i];
+    }
+  }
+  return best;
+}
+
 /** Only show #colorPalettePopover when Color Wheel was clicked; position relative to floating toolbar. */
 function updateColorPalettePositionAndVisibility(toolbarEl, selected, scale) {
   const paletteEl = document.getElementById('colorPalettePopover');
@@ -3367,16 +3445,20 @@ function updateColorPalettePositionAndVisibility(toolbarEl, selected, scale) {
     const toolbarRect = toolbarEl.getBoundingClientRect();
     let left = toolbarRect.left + toolbarRect.width / 2 - paletteW / 2;
     left = Math.max(8, Math.min(window.innerWidth - paletteW - 8, left));
-    paletteEl.style.left = left + 'px';
-    paletteEl.style.top = (toolbarRect.bottom + gap) + 'px';
+    const top = toolbarRect.bottom + gap;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(left, top, paletteW, paletteEl.offsetHeight || 200);
+    paletteEl.style.left = nudge.left + 'px';
+    paletteEl.style.top = nudge.top + 'px';
   } else {
     const cx = rect.left + state.offsetX + (selected.x + selected.width / 2) * scale;
     const cy = rect.top + state.offsetY + (selected.y + selected.height / 2) * scale;
     const sh = selected.height * scale;
     let left = cx - paletteW / 2;
     left = Math.max(8, Math.min(window.innerWidth - paletteW - 8, left));
-    paletteEl.style.left = left + 'px';
-    paletteEl.style.top = (cy + sh / 2 + gap) + 'px';
+    const top = cy + sh / 2 + gap;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(left, top, paletteW, paletteEl.offsetHeight || 200);
+    paletteEl.style.left = nudge.left + 'px';
+    paletteEl.style.top = nudge.top + 'px';
   }
   paletteEl.removeAttribute('hidden');
   paletteEl.querySelectorAll('.color-swatch').forEach((btn) => {
@@ -3458,15 +3540,19 @@ function updateTransparencyPopover(rect, scale) {
     const btnRect = btnEl.getBoundingClientRect();
     let left = btnRect.left + btnRect.width / 2 - popoverW / 2;
     left = Math.max(8, Math.min(window.innerWidth - popoverW - 8, left));
-    popoverEl.style.left = left + 'px';
-    popoverEl.style.top = (btnRect.bottom + gap) + 'px';
+    const top = btnRect.bottom + gap;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(left, top, popoverW, popoverEl.offsetHeight || 120);
+    popoverEl.style.left = nudge.left + 'px';
+    popoverEl.style.top = nudge.top + 'px';
   } else {
     const topLeftX = rect.left + state.offsetX + bt.x * scale;
     const topLeftY = rect.top + state.offsetY + bt.y * scale;
     let left = topLeftX - popoverW / 2 + 16;
     left = Math.max(8, Math.min(window.innerWidth - popoverW - 8, left));
-    popoverEl.style.left = left + 'px';
-    popoverEl.style.top = (topLeftY + 40 + gap) + 'px';
+    const top = topLeftY + 40 + gap;
+    const nudge = nudgePopoverAwayFromDiagramToolbar(left, top, popoverW, popoverEl.offsetHeight || 120);
+    popoverEl.style.left = nudge.left + 'px';
+    popoverEl.style.top = nudge.top + 'px';
   }
   const pct = Math.round((bt.opacity ?? 1) * 100);
   const rangeEl = document.getElementById('transparencyRange');
@@ -4141,6 +4227,35 @@ function elementSizeFromImage(img, maxDim = CANVAS_PORTER_MAX_UNIT, minDim = MIN
     w = (nw / nh) * minDim;
   }
   return { w: Math.round(w), h: Math.round(h) };
+}
+
+/**
+ * Mobile add sizing:
+ * - With blueprint: max dimension = 25% of blueprint long side (world space).
+ * - Without blueprint: max dimension = 25% of canvas long side fallback.
+ *   Keep this independent of transient view scale so repeated adds stay consistent.
+ * Desktop remains fixed at Canvas Porter max unit.
+ */
+function getAddMaxDimensionWorld() {
+  if (layoutState.viewportMode !== 'mobile') return CANVAS_PORTER_MAX_UNIT;
+
+  const bt = state.blueprintTransform;
+  if (bt && Number.isFinite(bt.w) && Number.isFinite(bt.h)) {
+    const blueprintLongSide = Math.max(Math.abs(bt.w), Math.abs(bt.h));
+    if (blueprintLongSide > MOBILE_ADD_SCALE_EPSILON) {
+      return Math.max(MIN_ELEMENT_DIMENSION_PX, blueprintLongSide * MOBILE_ADD_SIZE_RATIO);
+    }
+  }
+
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+  const logicalW = state.canvasWidth > 0 ? state.canvasWidth / dpr : 0;
+  const logicalH = state.canvasHeight > 0 ? state.canvasHeight / dpr : 0;
+  const canvasWorldLongSide = Math.max(logicalW, logicalH);
+  if (canvasWorldLongSide > MOBILE_ADD_SCALE_EPSILON) {
+    return Math.max(MIN_ELEMENT_DIMENSION_PX, canvasWorldLongSide * MOBILE_ADD_SIZE_RATIO);
+  }
+
+  return CANVAS_PORTER_MAX_UNIT;
 }
 
 function getDiagramUrl(assetId) {
@@ -5308,7 +5423,7 @@ function draw() {
   }
 
   if (state.dragPreviewImage && state.dragPreviewCanvasPos) {
-    const { w: gw, h: gh } = elementSizeFromImage(state.dragPreviewImage, DROPPED_ELEMENT_MAX_DIMENSION_PX);
+    const { w: gw, h: gh } = elementSizeFromImage(state.dragPreviewImage, getAddMaxDimensionWorld());
     const gx = offsetX + (state.dragPreviewCanvasPos.x - gw / 2) * scale;
     const gy = offsetY + (state.dragPreviewCanvasPos.y - gh / 2) * scale;
     const gsw = gw * scale;
@@ -5359,6 +5474,7 @@ function draw() {
   const hasSingleSelection = (state.selectedId && selectedElements.length === 1) || state.selectedBlueprint;
   if (toolbarEl) {
     if (hasSingleSelection && rect) {
+      const wasHidden = toolbarEl.hasAttribute('hidden');
       let centerScreenX, topScreenY;
         if (state.selectedBlueprint && state.blueprintTransform) {
           const bt = state.blueprintTransform;
@@ -5381,6 +5497,7 @@ function draw() {
           toolbarEl.style.top = Math.max(8, toolbarTop) + 'px';
         }
         toolbarEl.removeAttribute('hidden');
+        if (wasHidden) collapseDiagramToolbarIfExpanded();
         toolbarEl.classList.toggle('floating-toolbar-has-element', !!selected && selectedElements.length === 1);
         // Update lock icon state (single icon, toggle class)
         const lockBtn = document.getElementById('floatingToolbarLock');
@@ -5393,6 +5510,17 @@ function draw() {
         }
     } else {
       toolbarEl.setAttribute('hidden', '');
+      /* 54.80: When element toolbar is hidden (deselection), close flip dropdown and clear its position so it does not reappear at a stale fixed position on reselect. */
+      const flipDropdownEl = document.getElementById('flipDropdown');
+      if (flipDropdownEl) {
+        flipDropdownEl.hidden = true;
+        flipDropdownEl.style.position = '';
+        flipDropdownEl.style.left = '';
+        flipDropdownEl.style.top = '';
+        flipDropdownEl.style.transform = '';
+      }
+      const btnFlipMenuEl = document.getElementById('btnFlipMenu');
+      if (btnFlipMenuEl) btnFlipMenuEl.setAttribute('aria-expanded', 'false');
     }
   }
 
@@ -5726,7 +5854,13 @@ function resizeCanvas() {
 
 /** Diagram toolbar init: inject viewport mode from app so toolbar.js stays independent. */
 function initDiagramToolbarDragWithApp() {
-  initDiagramToolbarDrag({ getViewportMode: () => layoutState.viewportMode });
+  diagramToolbarApi = initDiagramToolbarDrag({ getViewportMode: () => layoutState.viewportMode });
+}
+
+/** 54.80: Mobile-only – collapse diagram toolbar when element toolbar/dropdowns open. No-op on desktop. */
+function collapseDiagramToolbarIfExpanded() {
+  if (layoutState.viewportMode !== 'mobile') return;
+  diagramToolbarApi?.collapseIfExpanded?.();
 }
 
 function initCanvas() {
@@ -6514,8 +6648,7 @@ function initCanvas() {
     try {
       pushUndoSnapshot();
       const img = await loadDiagramImageForDrop(diagramUrl);
-      // Import normalization: if width or height > 150px, scale so max dimension = 150
-      const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
+      const { w, h } = elementSizeFromImage(img, getAddMaxDimensionWorld());
       // 54.18: Snap drop to grid, then nudge if overlapping existing parts
       let cx = snapToGrid(canvasPos.x);
       let cy = snapToGrid(canvasPos.y);
@@ -6556,6 +6689,7 @@ function initCanvas() {
       if (typeof announceCanvas === 'function') announceCanvas('Product added to canvas.');
       updatePlaceholderVisibility();
       renderMeasurementDeck();
+      if (layoutState.viewportMode === 'mobile') setPanelExpanded(false);
     } catch (err) {
       console.error('Failed to load diagram image', err);
     }
@@ -7356,6 +7490,7 @@ function initAuth() {
       const wasOpen = !profileDropdown.hidden;
       profileDropdown.hidden = wasOpen;
       userAvatar.setAttribute('aria-expanded', profileDropdown.hidden ? 'false' : 'true');
+      if (!profileDropdown.hidden) collapseDiagramToolbarIfExpanded();
     });
   }
   if (menuItemProducts) {
@@ -7675,6 +7810,7 @@ function initServicem8WarningPopover() {
       const userAvatar = document.getElementById('userAvatar');
       const menuItem = document.getElementById('menuItemServiceM8');
       if (profileDropdown && userAvatar) {
+        collapseDiagramToolbarIfExpanded();
         profileDropdown.hidden = false;
         userAvatar.setAttribute('aria-expanded', 'true');
       }
@@ -8047,6 +8183,7 @@ function initProductsView() {
         if (productForm) productForm.style.pointerEvents = '';
         if (productForm) productForm.style.opacity = '';
       }
+      collapseDiagramToolbarIfExpanded();
       openAccessibleModal('productModal', { triggerEl: document.getElementById('productCardNew') || document.activeElement });
       return;
     }
@@ -8083,6 +8220,7 @@ function initProductsView() {
       btnArchiveProduct.setAttribute('data-action', isArchived ? 'unarchive' : 'archive');
       btnArchiveProduct.classList.toggle('btn-archive--destructive', !isArchived);
     }
+    collapseDiagramToolbarIfExpanded();
     openAccessibleModal('productModal', { triggerEl: document.activeElement });
   };
 
@@ -8523,6 +8661,7 @@ function initDiagrams() {
   function openProjectHistoryDropdown() {
     closeDropdown();
     refreshDiagramsList();
+    collapseDiagramToolbarIfExpanded();
     if (projectHistoryDropdown) projectHistoryDropdown.hidden = false;
     if (projectHistoryDropdownBackdrop) projectHistoryDropdownBackdrop.hidden = false;
   }
@@ -8546,6 +8685,7 @@ function initDiagrams() {
     const base = (state.projectName || projectNameInput?.value || '').trim();
     saveDiagramName.value = base || 'Project';
     if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
+    collapseDiagramToolbarIfExpanded();
     openAccessibleModal('saveDiagramModal', { triggerEl: saveDiagramBtn, initialFocusEl: saveDiagramName });
   });
 
@@ -8599,6 +8739,7 @@ function initDiagrams() {
       closeDropdown();
       closeProjectHistoryDropdown();
       refreshDiagramsList().then(() => {
+        collapseDiagramToolbarIfExpanded();
         openAccessibleModal('diagramsBottomSheet', { triggerEl: diagramsDropdownBtn });
       });
       return;
@@ -8610,6 +8751,7 @@ function initDiagrams() {
     }
     closeProjectHistoryDropdown();
     refreshDiagramsList();
+    collapseDiagramToolbarIfExpanded();
     if (diagramsDropdown) diagramsDropdown.hidden = false;
     if (diagramsDropdownBtn) diagramsDropdownBtn.setAttribute('aria-expanded', 'true');
   });
@@ -8640,6 +8782,7 @@ function initDiagrams() {
         closeDropdown();
         closeProjectHistoryDropdown();
         refreshDiagramsList().then(() => {
+          collapseDiagramToolbarIfExpanded();
           openAccessibleModal('diagramsBottomSheet', { triggerEl: breadcrumbsNav });
         });
         return;
@@ -9345,6 +9488,12 @@ function renderProducts(products) {
     // Canvas Porter: Center-Drop - click (not drag) to add at viewport center
     let wasDragged = false;
     thumb.addEventListener('dragstart', (e) => {
+      if (layoutState.viewportMode === 'mobile') {
+        e.preventDefault();
+        state.dragPreviewImage = null;
+        state.dragPreviewCanvasPos = null;
+        return;
+      }
       wasDragged = true;
       e.dataTransfer.setData('application/product-id', p.id);
       e.dataTransfer.setData('application/diagram-url', diagramUrl);
@@ -9373,7 +9522,7 @@ function renderProducts(products) {
       try {
         pushUndoSnapshot();
         const img = await loadDiagramImageForDrop(diagramUrl);
-        const { w, h } = elementSizeFromImage(img, CANVAS_PORTER_MAX_UNIT);
+        const { w, h } = elementSizeFromImage(img, getAddMaxDimensionWorld());
         
         // Canvas Porter: Center-Drop - place at viewport center (54.18: snap to grid, nudge if overlap)
         const rect = getCanvasRect();

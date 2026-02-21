@@ -194,7 +194,7 @@ export function initDiagramToolbarDrag(options = {}) {
   const toolbar = document.getElementById('diagramFloatingToolbar');
   const dragHandle = document.getElementById('diagramToolbarDragHandle');
   const wrap = getDiagramToolbarWrap();
-  if (!toolbar || !dragHandle || !wrap) return;
+  if (!toolbar || !dragHandle || !wrap) return { collapseIfExpanded: function () {} };
 
   if (typeof diagramToolbarDragCleanup === 'function') {
     diagramToolbarDragCleanup();
@@ -420,6 +420,27 @@ export function initDiagramToolbarDrag(options = {}) {
     });
   }
 
+  /** 54.80: Programmatic collapse when element toolbar/dropdowns open (e.g. mobile). Idempotent; no-op if already collapsed. */
+  function collapseIfExpanded() {
+    if (toolbar.classList.contains('diagram-floating-toolbar--collapsed')) return;
+    toolbar.classList.add('diagram-floating-toolbar--collapsed');
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED, 'true');
+    if (collapseBtn) {
+      collapseBtn.setAttribute('aria-expanded', 'false');
+      collapseBtn.setAttribute('aria-label', 'Expand toolbar');
+      collapseBtn.title = 'Expand toolbar';
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
+        if (getViewportMode() === 'mobile') {
+          applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
+        }
+        updateDockedSide(toolbar, wrap);
+      });
+    });
+  }
+
   const toolbarPointerDownHandler = (e) => {
     if (e.target === dragHandle || dragHandle.contains(e.target)) {
       onPointerDown(e);
@@ -462,4 +483,6 @@ export function initDiagramToolbarDrag(options = {}) {
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
     if (collapseBtn) collapseBtn.removeEventListener('click', onCollapseClick);
   };
+
+  return { collapseIfExpanded };
 }
