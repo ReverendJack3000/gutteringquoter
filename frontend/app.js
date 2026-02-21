@@ -6873,6 +6873,15 @@ function initUpload() {
     });
   }
 
+  // 54.84.1: Placeholder camera icon triggers same upload flow (desktop and mobile)
+  const placeholderCamera = placeholder && placeholder.querySelector('.placeholder-icon');
+  if (placeholderCamera && fileInput) {
+    placeholderCamera.addEventListener('click', (e) => {
+      e.preventDefault();
+      fileInput.click();
+    });
+  }
+
   // Do not add a click handler to uploadZone: the label's for="fileInput" already activates the file input.
   // A redundant uploadZone.addEventListener('click', () => fileInput.click()) would open the file dialog twice.
 

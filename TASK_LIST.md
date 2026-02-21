@@ -43,7 +43,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.80.1–54.80.4.4 | Diagram toolbar auto-collapse (8 triggers) + position 4 UIs to avoid overlap with expanded toolbar (plan: docs/plans/2026-02-21-diagram-toolbar-auto-collapse-on-element-toolbar-and-dropdowns.md) |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
 | 54 | 54.82.1–54.82.4 | (Mobile-only) Tools within global header #globalToolbar only: Projects/Untitled top-left, collapse after; chevron left of Projects; hide Export/Diagrams/Accessibility. No diagram toolbar or other toolbar changes (plan: docs/plans/2026-02-21-mobile-global-toolbar-reorder-and-declutter.md). |
-| 54 | 54.84.1–54.84.2 | Wire header #cameraUploadBtn to canvas placeholder camera icon; then remove camera from #globalToolbar (mobile) to declutter. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 ---
 
@@ -1415,10 +1414,11 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.83.5** **Icon affordance clarity for ruler tool.** Replace the measurement button glyph with a clear ruler icon (body + tick marks) so the action is visually explicit and not confused with edit/pencil semantics.
 
 **54.84 Mobile: wire camera upload to canvas placeholder, then remove from header**  
-*Wire the global header camera button to the canvas placeholder camera so the placeholder triggers upload; then remove the camera from the header (mobile) to declutter. Desktop unchanged unless specified.*
+*Wire the global header camera button to the canvas placeholder camera so the placeholder triggers upload; then remove the camera from the header (mobile) to declutter. Desktop unchanged unless specified.*  
+*Plan: docs/plans/2026-02-21-54-84-camera-placeholder-wire-and-mobile-declutter.md*
 
-- [ ] **54.84.1** **Wire #cameraUploadBtn to canvas placeholder camera.** Connect the toolbar camera button (`#cameraUploadBtn` in `#globalToolbar` > `.toolbar-right` > `.toolbar-actions-secondary`) to the canvas placeholder camera entry point (`#canvasPlaceholder` > `.placeholder-card` > `.placeholder-icon` and its SVG). Ensure tapping the placeholder camera icon triggers the same upload flow (e.g. programmatic click on file input or shared handler). Preserve existing placeholder and toolbar behavior; desktop and mobile both use the same entry point logic once wired.
-- [ ] **54.84.2** **Remove camera from global header (mobile) after 54.84.1.** Once the placeholder camera is wired, hide or remove `#cameraUploadBtn` from `#globalToolbar` on mobile only (e.g. `body[data-viewport-mode="mobile"] #cameraUploadBtn { display: none }`) to declutter the header. Desktop keeps the camera in the header. Verify upload remains possible via the canvas placeholder on mobile.
+- [x] **54.84.1** **Wire #cameraUploadBtn to canvas placeholder camera.** Connect the toolbar camera button (`#cameraUploadBtn` in `#globalToolbar` > `.toolbar-right` > `.toolbar-actions-secondary`) to the canvas placeholder camera entry point (`#canvasPlaceholder` > `.placeholder-card` > `.placeholder-icon` and its SVG). Ensure tapping the placeholder camera icon triggers the same upload flow (e.g. programmatic click on file input or shared handler). Preserve existing placeholder and toolbar behavior; desktop and mobile both use the same entry point logic once wired.
+- [x] **54.84.2** **Remove camera from global header (mobile) after 54.84.1.** Once the placeholder camera is wired, hide or remove `#cameraUploadBtn` from `#globalToolbar` on mobile only (e.g. `body[data-viewport-mode="mobile"] #cameraUploadBtn { display: none }`) to declutter the header. Desktop keeps the camera in the header. Verify upload remains possible via the canvas placeholder on mobile.
 
 ---
 

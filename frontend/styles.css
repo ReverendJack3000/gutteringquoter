@@ -1717,6 +1717,12 @@ body.a11y-force-motion .toggle-icon::after {
   width: 36px;
   height: 36px;
   color: #8E8E93;
+  /* 54.84.1: button reset so placeholder camera matches previous span appearance */
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .canvas-placeholder .placeholder-icon svg {
@@ -1941,6 +1947,11 @@ body[data-viewport-mode="mobile"] .toolbar-diagrams-wrap {
 }
 body[data-viewport-mode="mobile"] #openAccessibilitySettingsBtn {
   display: none !important;
+}
+
+/* 54.84.2: Hide camera in global header on mobile; upload via canvas placeholder. */
+body[data-viewport-mode="mobile"] #cameraUploadBtn {
+  display: none;
 }
 
 /* Mobile: toolbar-right on second row below breadcrumb; user avatar hidden to fit. */
