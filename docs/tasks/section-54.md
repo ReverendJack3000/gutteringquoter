@@ -318,6 +318,11 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.93.8.3** **CSS: hide header input when stepper shown.** In `frontend/styles.css` under `body[data-viewport-mode="mobile"] #quoteModal`, add `.quote-header-metres-input--hidden-mobile { display: none !important; }` (e.g. after ~5825 near `.quote-labour-hours-input--hidden-mobile`).
 - [x] **54.93.8.4** **Verify.** Desktop section headers unchanged (input only); mobile section headers show stepper; rebuild and profileLengthOverride/downpipeLengthOverride (app.js 3654–3670, 3002–3022) still work; E2E/manual; Railway-safe.
 
+**54.93.9 Mobile quote modal: tidy visual separation between Product and Qty columns**  
+*Scope: mobile-only; improve the clear visual separation between the Product column (left) and Qty column (right) in the full-screen quote modal—e.g. vertical divider, spacing, or column edge treatment; desktop quote table and layout unchanged; Railway-safe.*
+
+- [x] **54.93.9.1** **Mobile quote: Product vs Qty column visual separation.** Under `body[data-viewport-mode="mobile"] #quoteModal`, refine the separation between the Product column (td:nth-child(1), 70%) and Qty column (td:nth-child(2), 30%)—e.g. add a subtle vertical divider, adjust padding/border, or column edge so the two columns read clearly without relying only on whitespace. Preserve 44px touch targets and existing stepper/remove/plus layout; desktop unchanged.
+
 **54.94 Mobile navigation + popover smoothing (toolbar/header/panel coherence)**  
 *Scope: mobile-only interaction polish; desktop unchanged; Railway-safe.*
 
@@ -333,6 +338,16 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [ ] **54.95.4** **Confirm mobile diagram landscape target and non-diagram portrait target with no desktop regression.**
 - [ ] **54.95.5** **Add E2E orientation-policy transition checks.**
 - [ ] **54.95.6** **Update README/troubleshooting + deploy-safety verification.**
+- [ ] **54.95.7** **Mobile canvas orientation transition follow-up (landscape → portrait zoom drift).** When rotating from landscape to portrait while on `view-canvas`, prevent viewport drift/zoom into the header area that forces manual zoom-out. Keep fit/framing stable across orientation changes on mobile; desktop unchanged; Railway-safe.
+
+**54.96 Mobile: ruler keypad reliability + hide measurement pills (mobile-only, desktop unchanged, Railway-safe)**
+
+- [ ] **54.96.1** **Mobile ruler: open badge length popover + focus input in direct gesture.** In `frontend/app.js`, wire `#floatingToolbarMeasure` to open `#badgeLengthPopover` for the selected measurable element and focus `#badgeLengthInput` synchronously (with safe fallback) so phone keypad opens reliably.
+- [ ] **54.96.2** **Shared measurement popover helper.** Refactor badge-length editing into shared helper(s) used by both badge double-click and mobile ruler action, with centralized close/commit/cleanup (blur, Enter, Escape, outside tap).
+- [ ] **54.96.3** **Hide measurement deck pills on mobile.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`, hide `.measurement-deck`; keep desktop measurement deck unchanged.
+- [ ] **54.96.4** **E2E regression coverage.** Update `e2e/run.js` mobile ruler flow to assert: measurable tap does not auto-open/focus input, ruler opens visible `#badgeLengthPopover`, `document.activeElement.id === 'badgeLengthInput'`, and mobile `#measurementDeck` is hidden; keep desktop ruler-hidden guard.
+- [ ] **54.96.5** **README updates.** Update usage + E2E coverage wording to reflect popover-based mobile ruler entry (`#badgeLengthInput`) and hidden mobile measurement deck.
+- [ ] **54.96.6** **Manual mobile QA + deploy safety.** Verify Safari/Chrome mobile keypad behavior and no desktop regression; run `npm test`; confirm no Railway infra/config changes.
 
 ---
 

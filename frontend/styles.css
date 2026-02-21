@@ -2602,7 +2602,7 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps {
 }
 
 body[data-viewport-mode="mobile"] .measurement-deck {
-  max-height: 30vh;
+  display: none !important;
 }
 
 body[data-viewport-mode="mobile"] .measurement-deck-card input,
@@ -5656,26 +5656,30 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th,
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td {
   padding: 10px 8px;
   border: none;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: none;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-section-header td {
+  border-bottom: none;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table thead th {
   background: #f8f8f8;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr:has(td .quote-product-indent-level-1),
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr:has(td .quote-product-indent-level-2) {
-  background: #f9fafb;
-}
-
+/* Indent rows: no background override so global tbody tr:nth-child(odd/even) applies (alternating row colours) */
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-product-indent-level-1,
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-product-indent-level-2 {
   font-weight: 500;
 }
 
+/* Labour row: set row background so it wins over global tbody tr:nth-child(odd); cells transparent so row fill shows (fixes product cell appearing white) */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-row-labour {
+  background-color: #fafafa;
+}
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tr.quote-row-labour td {
-  border-top: 2px solid #e5e7eb;
-  background: #f8fafc;
+  border-top: none;
+  background-color: transparent;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tr.quote-row-labour .quote-labour-label {
@@ -5760,7 +5764,7 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper-btn {
   padding: 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #f9fafb;
+  background: transparent;
   font-size: 20px;
   line-height: 1;
   font-weight: 600;
@@ -5803,6 +5807,12 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(1)
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(2),
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) { width: 30%; }
 
+/* 54.93.9.1: vertical divider between Product and Qty */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(2),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) {
+  border-left: 1px solid #e5e7eb;
+}
+
 body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-hours-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-line-qty-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
@@ -5810,6 +5820,16 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
   width: 4.5em;
   max-width: 72px;
   box-sizing: border-box;
+}
+
+/* Softer borders in add-product row so controls don't look like floating boxes */
+body[data-viewport-mode="mobile"] #quoteModal .quote-product-combobox-input {
+  border-color: #e5e7eb;
+  background: transparent;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
+  border-color: #e5e7eb;
+  background: transparent;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line {

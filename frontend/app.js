@@ -117,6 +117,9 @@ let allLibraryProducts = [];
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
 
+/** Active cleanup hook for the shared badge-length popover session (ruler + badge double-click). */
+let badgeLengthPopoverSessionCleanup = null;
+
 /** Product IDs that are consumables (billing only); excluded from canvas/panel drag-drop. */
 const CONSUMABLE_PRODUCT_IDS = ['SCR-SS', 'GL-MAR', 'MS-GRY'];
 
@@ -4219,7 +4222,7 @@ function initFloatingToolbar() {
       if (state.selectedBlueprint || state.selectedIds.length !== 1) return;
       const el = state.elements.find((item) => item.id === state.selectedIds[0]);
       if (!el || !(el.sequenceId > 0)) return;
-      scrollToMeasurementCardAndFocus(el.id);
+      openBadgeLengthPopoverForElement(el.id, { source: 'ruler' });
     });
   }
 
@@ -7536,10 +7539,7 @@ function initCanvas() {
     const cmd = e.ctrlKey || e.metaKey;
     if (e.key === 'Escape') {
       if (state.badgeLengthEditElementId) {
-        state.badgeLengthEditElementId = null;
-        const popover = document.getElementById('badgeLengthPopover');
-        if (popover) popover.setAttribute('hidden', '');
-        draw();
+        closeBadgeLengthPopover({ commit: false });
         return;
       }
       setSelection([]);
@@ -7562,11 +7562,7 @@ function initCanvas() {
       if (state.selectedIds.length === 0) return;
       e.preventDefault();
       if (state.badgeLengthEditElementId) {
-        state.badgeLengthEditElementId = null;
-        const popover = document.getElementById('badgeLengthPopover');
-        const input = document.getElementById('badgeLengthInput');
-        if (popover) popover.setAttribute('hidden', '');
-        if (input) input.blur();
+        closeBadgeLengthPopover({ commit: false });
       }
       pushUndoSnapshot();
       const toRemove = new Set(state.selectedIds);
@@ -7719,68 +7715,7 @@ function initCanvas() {
     if (!el) return;
     e.preventDefault();
     e.stopPropagation();
-    const popover = document.getElementById('badgeLengthPopover');
-    const input = document.getElementById('badgeLengthInput');
-    if (!popover || !input) return;
-    const rect = getCanvasRect();
-    if (!rect) return;
-    const pos = getElementDrawPosition(el);
-    const bcx = state.offsetX + (pos.x + el.width / 2) * state.scale;
-    const bcy = state.offsetY + (pos.y + el.height / 2) * state.scale;
-    const viewX = rect.left + bcx * (rect.width / state.canvasWidth);
-    const viewY = rect.top + bcy * (rect.height / state.canvasHeight);
-    popover.style.left = (viewX + 16) + 'px';
-    popover.style.top = (viewY - 18) + 'px';
-    popover.removeAttribute('hidden');
-    const mVal = mmToM(el.measuredLength);
-    input.value = mVal != null ? String(mVal) : '';
-    state.badgeLengthEditElementId = el.id;
-    input.focus();
-
-    function removeOutsideListeners() {
-      document.removeEventListener('mousedown', onOutside, true);
-      document.removeEventListener('pointerdown', onOutside, true);
-    }
-    function closeAndSave() {
-      const id = state.badgeLengthEditElementId;
-      state.badgeLengthEditElementId = null;
-      popover.setAttribute('hidden', '');
-      if (id) {
-        const elem = state.elements.find((x) => x.id === id);
-        if (elem) {
-          const val = parseFloat(input.value);
-          elem.measuredLength = Number.isFinite(val) && val >= 0 ? mToMm(val) : 0;
-          renderMeasurementDeck();
-          draw();
-        }
-      }
-      input.removeEventListener('blur', onBlur);
-      input.removeEventListener('keydown', onKeydown);
-      removeOutsideListeners();
-    }
-    function onBlur() { closeAndSave(); }
-    function onOutside(ev) {
-      if (popover.contains(ev.target)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      closeAndSave();
-    }
-    function onKeydown(ev) {
-      if (ev.key === 'Enter') { ev.preventDefault(); closeAndSave(); }
-      if (ev.key === 'Escape') {
-        ev.preventDefault();
-        state.badgeLengthEditElementId = null;
-        popover.setAttribute('hidden', '');
-        input.removeEventListener('blur', onBlur);
-        input.removeEventListener('keydown', onKeydown);
-        removeOutsideListeners();
-        draw();
-      }
-    }
-    input.addEventListener('blur', onBlur, { once: true });
-    input.addEventListener('keydown', onKeydown);
-    document.addEventListener('mousedown', onOutside, true);
-    document.addEventListener('pointerdown', onOutside, true);
+    openBadgeLengthPopoverForElement(el.id, { source: 'badge-double-click' });
   });
 
   window.addEventListener('resize', () => {
@@ -10731,6 +10666,161 @@ function hitTestBadge(clientX, clientY) {
     if (Math.hypot(bufX - bcx, bufY - bcy) <= radius) return el;
   }
   return null;
+}
+
+function clearBadgeLengthPopoverSessionCleanup() {
+  if (typeof badgeLengthPopoverSessionCleanup !== 'function') return;
+  const cleanup = badgeLengthPopoverSessionCleanup;
+  badgeLengthPopoverSessionCleanup = null;
+  try {
+    cleanup();
+  } catch (_) {
+    // Ignore cleanup errors; listeners are best-effort for session teardown.
+  }
+}
+
+function closeBadgeLengthPopover(options = {}) {
+  const { commit = true, fromBlur = false } = options;
+  const popover = document.getElementById('badgeLengthPopover');
+  const input = document.getElementById('badgeLengthInput');
+  const targetId = state.badgeLengthEditElementId;
+
+  clearBadgeLengthPopoverSessionCleanup();
+  state.badgeLengthEditElementId = null;
+  if (popover) popover.setAttribute('hidden', '');
+
+  let updated = false;
+  if (commit && targetId) {
+    const el = state.elements.find((item) => item.id === targetId);
+    if (el && el.sequenceId > 0) {
+      const val = parseFloat(input?.value ?? '');
+      el.measuredLength = Number.isFinite(val) && val >= 0 ? mToMm(val) : 0;
+      updated = true;
+    }
+  }
+
+  if (input && !fromBlur && document.activeElement === input) {
+    try {
+      input.blur();
+    } catch (_) {}
+  }
+
+  if (updated) renderMeasurementDeck();
+  draw();
+  return true;
+}
+
+function getBadgeLengthPopoverSize(popover) {
+  if (!popover) return { width: 96, height: 42 };
+  const wasHidden = popover.hasAttribute('hidden');
+  const previousVisibility = popover.style.visibility;
+  if (wasHidden) {
+    popover.style.visibility = 'hidden';
+    popover.removeAttribute('hidden');
+  }
+  const rect = popover.getBoundingClientRect();
+  const width = Math.max(96, rect.width || 0);
+  const height = Math.max(42, rect.height || 0);
+  if (wasHidden) popover.setAttribute('hidden', '');
+  popover.style.visibility = previousVisibility;
+  return { width, height };
+}
+
+function positionBadgeLengthPopoverForElement(el, popover) {
+  const rect = getCanvasRect();
+  if (!rect || !popover) return false;
+  const pos = getElementDrawPosition(el);
+  const badgeX = state.offsetX + (pos.x + el.width / 2) * state.scale;
+  const badgeY = state.offsetY + (pos.y + el.height / 2) * state.scale;
+  const viewX = rect.left + badgeX * (rect.width / state.canvasWidth);
+  const viewY = rect.top + badgeY * (rect.height / state.canvasHeight);
+
+  const size = getBadgeLengthPopoverSize(popover);
+  const pad = 8;
+  const maxLeft = Math.max(pad, window.innerWidth - size.width - pad);
+  const maxTop = Math.max(pad, window.innerHeight - size.height - pad);
+  const minTop = Math.min(getFloatingToolbarMinTopPx(), maxTop);
+  let left = Math.max(pad, Math.min(maxLeft, viewX + 16));
+  let top = Math.max(minTop, Math.min(maxTop, viewY - 18));
+
+  const nudged = nudgePopoverAwayFromDiagramToolbar(left, top, size.width, size.height);
+  left = Math.max(pad, Math.min(maxLeft, nudged.left));
+  top = Math.max(minTop, Math.min(maxTop, nudged.top));
+
+  popover.style.left = left + 'px';
+  popover.style.top = top + 'px';
+  return true;
+}
+
+function openBadgeLengthPopoverForElement(elementId, options = {}) {
+  const popover = document.getElementById('badgeLengthPopover');
+  const input = document.getElementById('badgeLengthInput');
+  if (!popover || !input || !elementId) return false;
+
+  const el = state.elements.find((item) => item.id === elementId);
+  if (!el || !(el.sequenceId > 0)) return false;
+
+  if (state.badgeLengthEditElementId) {
+    closeBadgeLengthPopover({ commit: true });
+  } else {
+    clearBadgeLengthPopoverSessionCleanup();
+  }
+
+  if (!positionBadgeLengthPopoverForElement(el, popover)) return false;
+  const mVal = mmToM(el.measuredLength);
+  input.value = mVal != null ? String(mVal) : '';
+  state.badgeLengthEditElementId = el.id;
+  popover.removeAttribute('hidden');
+
+  const onBlur = () => {
+    closeBadgeLengthPopover({ commit: true, fromBlur: true });
+  };
+  const onKeydown = (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      closeBadgeLengthPopover({ commit: true });
+      return;
+    }
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      closeBadgeLengthPopover({ commit: false });
+    }
+  };
+  const onOutside = (ev) => {
+    if (popover.contains(ev.target)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeBadgeLengthPopover({ commit: true });
+  };
+
+  input.addEventListener('blur', onBlur);
+  input.addEventListener('keydown', onKeydown);
+  document.addEventListener('mousedown', onOutside, true);
+  document.addEventListener('pointerdown', onOutside, true);
+  badgeLengthPopoverSessionCleanup = () => {
+    input.removeEventListener('blur', onBlur);
+    input.removeEventListener('keydown', onKeydown);
+    document.removeEventListener('mousedown', onOutside, true);
+    document.removeEventListener('pointerdown', onOutside, true);
+  };
+
+  const focusInput = () => {
+    try {
+      input.focus({ preventScroll: true });
+    } catch (_) {
+      input.focus();
+    }
+  };
+  focusInput();
+  if (options.allowRafFocusFallback !== false && typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (document.activeElement !== input && state.badgeLengthEditElementId === el.id) {
+        focusInput();
+      }
+    });
+  }
+
+  return true;
 }
 
 /**

@@ -1721,7 +1721,7 @@ async function run() {
       }
       console.log('  ✓ Mobile blueprint tap-add uses 25% of blueprint long side and auto-closes panel');
 
-      // Mobile measurement entry: element tap should not auto-focus input; ruler button should focus the selected run input.
+      // Mobile measurement entry: element tap should not auto-open/focus input; ruler button should open/focus badge popover input.
       const measurableThumbSelector = '.product-thumb[data-product-id^="GUT-"], .product-thumb[data-product-id^="DP-"], .product-thumb[data-product-id="DROPPER"], .product-thumb[data-product-id^="DRP-"]';
       const measurableThumbExists = await mobilePage.evaluate((selector) => !!document.querySelector(selector), measurableThumbSelector);
       if (!measurableThumbExists) throw new Error('Mobile ruler: measurable product thumbnail not found');
@@ -1774,21 +1774,21 @@ async function run() {
       await mobilePage.mouse.click(measurableCenter.x, measurableCenter.y);
       await delay(260);
 
-      const noAutoFocusState = await mobilePage.evaluate((id) => {
-        const card = document.querySelector(`.measurement-deck-card[data-element-id="${CSS.escape(id)}"]`);
-        const input = card ? card.querySelector('input') : null;
+      const noAutoFocusState = await mobilePage.evaluate(() => {
+        const popover = document.getElementById('badgeLengthPopover');
+        const input = document.getElementById('badgeLengthInput');
         const active = document.activeElement;
         return {
-          cardExists: !!card,
           inputExists: !!input,
-          focusedMeasurementInput: !!input && active === input,
+          popoverVisible: !!popover && !popover.hasAttribute('hidden'),
+          focusedBadgeInput: !!input && active === input,
         };
-      }, measurableElementId);
-      if (!noAutoFocusState.cardExists || !noAutoFocusState.inputExists) {
-        throw new Error('Mobile ruler: measurement deck card/input missing for measurable element');
+      });
+      if (!noAutoFocusState.inputExists) {
+        throw new Error('Mobile ruler: badge length input missing');
       }
-      if (noAutoFocusState.focusedMeasurementInput) {
-        throw new Error('Mobile ruler: tapping measurable element should not auto-focus measurement input');
+      if (noAutoFocusState.focusedBadgeInput || noAutoFocusState.popoverVisible) {
+        throw new Error('Mobile ruler: tapping measurable element should not auto-open/focus the badge length input');
       }
 
       const rulerButtonState = await mobilePage.evaluate(() => {
@@ -1805,20 +1805,27 @@ async function run() {
       }
       await clickSelectorViaDom(mobilePage, '#floatingToolbarMeasure');
       await delay(420);
-      const rulerFocusState = await mobilePage.evaluate((id) => {
-        const card = document.querySelector(`.measurement-deck-card[data-element-id="${CSS.escape(id)}"]`);
-        const input = card ? card.querySelector('input') : null;
+      const rulerFocusState = await mobilePage.evaluate(() => {
+        const popover = document.getElementById('badgeLengthPopover');
+        const input = document.getElementById('badgeLengthInput');
+        const deck = document.getElementById('measurementDeck');
+        const deckStyles = deck ? window.getComputedStyle(deck) : null;
         const active = document.activeElement;
         return {
-          cardExists: !!card,
           inputExists: !!input,
+          popoverVisible: !!popover && !popover.hasAttribute('hidden'),
           focusMatches: !!input && active === input,
+          deckExists: !!deck,
+          deckHidden: !!deckStyles && deckStyles.display === 'none',
         };
-      }, measurableElementId);
-      if (!rulerFocusState.cardExists || !rulerFocusState.inputExists || !rulerFocusState.focusMatches) {
-        throw new Error('Mobile ruler: tapping ruler button should focus the selected measurement input');
+      });
+      if (!rulerFocusState.inputExists || !rulerFocusState.popoverVisible || !rulerFocusState.focusMatches) {
+        throw new Error('Mobile ruler: tapping ruler button should open/focus badge length popover input');
       }
-      console.log('  ✓ Mobile ruler flow: tap selects without keyboard, ruler focuses measurement input');
+      if (!rulerFocusState.deckExists || !rulerFocusState.deckHidden) {
+        throw new Error('Mobile ruler: measurement deck should be hidden in mobile mode');
+      }
+      console.log('  ✓ Mobile ruler flow: tap selects without keyboard, ruler opens/focuses badge popover input and deck is hidden');
 
       // Mobile navigation smoothing: Products panel should auto-collapse header and restore prior state on close.
       await mobilePage.evaluate(() => {
