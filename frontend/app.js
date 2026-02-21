@@ -485,6 +485,7 @@ const quoteLineEditorState = {
   draftUnitPrice: 0,
   qtyStep: 1,
   title: '',
+  isTaxApplicable: true,
 };
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
@@ -1468,12 +1469,20 @@ function renderLabourEditorRows() {
   taxRow.className = 'labour-editor-group-row';
   const taxLabel = document.createElement('span');
   taxLabel.className = 'labour-editor-field-label';
-  taxLabel.textContent = 'Tax Rate';
-  const taxValueWrap = document.createElement('span');
-  taxValueWrap.className = 'labour-editor-field-value';
-  taxValueWrap.innerHTML = '15% GST on Income 15% <span class="labour-editor-chevron" aria-hidden="true">›</span>';
+  taxLabel.textContent = '15% GST on Income';
+  const taxToggle = document.createElement('label');
+  taxToggle.className = 'labour-editor-tax-toggle';
+  const taxToggleInput = document.createElement('input');
+  taxToggleInput.type = 'checkbox';
+  taxToggleInput.className = 'labour-editor-tax-toggle-input';
+  taxToggleInput.checked = quoteLineEditorState.isTaxApplicable !== false;
+  taxToggleInput.setAttribute('aria-label', 'Toggle GST');
+  const taxToggleSlider = document.createElement('span');
+  taxToggleSlider.className = 'labour-editor-tax-toggle-slider';
+  taxToggle.appendChild(taxToggleInput);
+  taxToggle.appendChild(taxToggleSlider);
   taxRow.appendChild(taxLabel);
-  taxRow.appendChild(taxValueWrap);
+  taxRow.appendChild(taxToggle);
 
   const totalRow = document.createElement('div');
   totalRow.className = 'labour-editor-group-row';
@@ -1517,7 +1526,11 @@ function renderLabourEditorRows() {
   const rerenderTotals = () => {
     const qty = Number.isFinite(quoteLineEditorState.draftQty) ? quoteLineEditorState.draftQty : 0;
     const unitPrice = Number.isFinite(quoteLineEditorState.draftUnitPrice) ? quoteLineEditorState.draftUnitPrice : 0;
-    lineTotal.textContent = formatCurrency(qty * unitPrice);
+    const exGSTTotal = Math.round(qty * unitPrice * 100) / 100;
+    const displayTotal = quoteLineEditorState.isTaxApplicable
+      ? Math.round(exGSTTotal * 1.15 * 100) / 100
+      : exGSTTotal;
+    lineTotal.textContent = formatCurrency(displayTotal);
   };
 
   const setQtyDraft = (nextValue) => {
@@ -1564,6 +1577,11 @@ function renderLabourEditorRows() {
     rateEditor.addEventListener('input', () => setRateDraft(rateEditor.value));
     rateEditor.addEventListener('change', () => setRateDraft(rateEditor.value));
   }
+
+  taxToggleInput.addEventListener('change', () => {
+    quoteLineEditorState.isTaxApplicable = !!taxToggleInput.checked;
+    rerenderTotals();
+  });
 
   removeBtn.addEventListener('click', () => {
     const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
@@ -1620,6 +1638,7 @@ function openLabourEditorModal(row, triggerEl) {
   quoteLineEditorState.draftUnitPrice = getQuoteLineUnitPrice(row);
   quoteLineEditorState.qtyStep = qtyMeta.step;
   quoteLineEditorState.title = getQuoteLineProductName(row);
+  quoteLineEditorState.isTaxApplicable = true;
   renderLabourEditorRows();
   const firstInput = modal.querySelector('.labour-editor-field-input[data-field="qty"]');
   openAccessibleModal('labourEditorModal', {
@@ -9794,6 +9813,11 @@ function setPanelExpanded(expanded, options = {}) {
 
   if (isMobileMode) {
     panel.style.width = '';
+    /* 54.91: Scroll lock when products panel open (mobile) – prevents white space under scroll bar */
+    if (document.body) {
+      if (isExpanded) document.body.classList.add('products-panel-open');
+      else document.body.classList.remove('products-panel-open');
+    }
     if (isExpanded) {
       panel.setAttribute('role', 'dialog');
       panel.setAttribute('aria-modal', 'true');
@@ -9888,7 +9912,11 @@ function applyViewportMode(mode, options = {}) {
   layoutState.viewportMode = normalizedMode;
 
   if (typeof document !== 'undefined') {
-    if (document.body) document.body.setAttribute('data-viewport-mode', normalizedMode);
+    if (document.body) {
+      document.body.setAttribute('data-viewport-mode', normalizedMode);
+      /* 54.91: Remove products-panel-open when switching to desktop so scroll lock is not left on */
+      if (normalizedMode !== 'mobile') document.body.classList.remove('products-panel-open');
+    }
     if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
     updatePlaceholderStepsForViewport(normalizedMode);
     updatePanelTipForViewport(normalizedMode);

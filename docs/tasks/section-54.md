@@ -264,6 +264,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 - [x] **54.89.1** **Mobile: suppress browser tap highlight.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`, add `-webkit-tap-highlight-color: transparent` (and `tap-highlight-color: transparent`) for button, a, input, select, textarea, [tabindex], .product-thumb so only the 54.6 focus ring is visible.
 - [x] **54.89.2** **Mobile: blur on canvas/non-focusable tap.** In `frontend/app.js`, in the canvas pointerdown path (or equivalent), when viewport is mobile and the tap target is non-focusable (canvas/workspace), blur `document.activeElement` if it is a non-input control and no focus-trapping modal is open. Do not blur when activeElement is input/textarea; do not run on desktop.
+- [x] **54.89.3** **Mobile: sleeker tap ring.** Polish the tap ring: softer blue (rgba), 1px outline-offset, 0.12s transition for smooth flick, and `prefers-reduced-motion: reduce` to disable transition. Mobile-only.
 
 **54.90 Mobile quote popup regression: duplicate labour helper + qty inflation (`111`)**
 
@@ -274,6 +275,16 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.90.3** **Stop summary text from contaminating qty parsing.** Ensure mobile summary spans do not mutate numeric qty parsing paths (including modal init and recalc paths that run before/after `calculateAndDisplayQuote()`).
 - [x] **54.90.4** **Eliminate double-sync side effects in quote modal bootstrapping.** Remove redundant summary sync calls that can run twice during labour-row initialization and inflate displayed/parsing qty from `1` to `111`.
 - [x] **54.90.5** **Add regression coverage and QA guardrails.** Extend E2E/manual checks for mobile quote modal to assert: single labour helper line, stable qty after opening quote/editing/adding one item, no desktop regression, and Railway-safe behavior.
+
+**54.91 Mobile: remove white space under scroll bar when parts popup open**
+
+*Plan: docs/plans/2026-02-21-mobile-parts-popup-white-space-under-scrollbar.md. When the mobile screen width is shortened with the parts (products) popup open, white space can appear under the scroll bar. Goal: remove this so it never displays. Mobile-only; desktop and Railway unchanged.*
+
+- [x] **54.91.1** **Reproduce and confirm.** Resize mobile viewport with products panel open; take screenshots when white space appears; confirm whether page-level scroll or panel-internal scroll (or both).
+- [x] **54.91.2** **Body scroll lock when products panel open (mobile).** In `setPanelExpanded`, when viewport is mobile, add `document.body.classList.add('products-panel-open')` on expand and remove on close; in `applyViewportMode`, remove `products-panel-open` when switching to desktop.
+- [x] **54.91.3** **CSS: prevent page scroll and viewport overflow.** In `frontend/styles.css`, add `body[data-viewport-mode="mobile"].products-panel-open { overflow: hidden; }` and optionally `height: 100%; min-height: 100dvh; max-height: 100dvh;` so no white space below viewport.
+- [x] **54.91.4** **Panel-internal (if needed).** If screenshots show white inside the panel below the product strip, ensure `.panel-content` has no extra bottom gap (e.g. justify-content: flex-start, no stray margin/padding).
+- [x] **54.91.5** **Verify.** Manual mobile QA at narrow widths (e.g. 320px, 360px, 390px) with panel open; confirm no white under scroll bar; confirm desktop unchanged; run `npm test`; Railway-safe.
 
 ---
 
