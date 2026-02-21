@@ -1892,6 +1892,13 @@ body[data-viewport-mode="mobile"] .toolbar-breadcrumbs {
   visibility: visible !important;
   justify-content: flex-start;
 }
+/* 54.82.1: Tools within #globalToolbar – Projects/Untitled top-left, collapse after. */
+body[data-viewport-mode="mobile"] .toolbar-left {
+  order: -1;
+}
+body[data-viewport-mode="mobile"] .toolbar-collapse-btn {
+  order: 0;
+}
 body[data-viewport-mode="mobile"] .toolbar-center {
   display: none;
 }
@@ -1916,6 +1923,7 @@ body[data-viewport-mode="mobile"] .breadcrumb-chevron {
   flex-shrink: 0;
   color: #666;
   pointer-events: none;
+  order: -1; /* 54.82.2: chevron left of "Projects /" within header breadcrumb. */
 }
 
 body[data-viewport-mode="mobile"] .toolbar-breadcrumbs-wrap {
@@ -1924,12 +1932,44 @@ body[data-viewport-mode="mobile"] .toolbar-breadcrumbs-wrap {
   align-items: center;
 }
 
+/* 54.82.3: Hide Export, Saved diagrams (clock), Accessibility in global header (mobile only). */
+body[data-viewport-mode="mobile"] #exportBtn {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] .toolbar-diagrams-wrap {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] #openAccessibilitySettingsBtn {
+  display: none !important;
+}
+
+/* Mobile: toolbar-right on second row below breadcrumb; user avatar hidden to fit. */
+body[data-viewport-mode="mobile"] #globalToolbar .toolbar-right {
+  flex-basis: 100%;
+  order: 1;
+  margin-top: var(--mobile-space-md);
+  padding-top: 0;
+  justify-content: flex-start;
+  margin-left: 0;
+}
+body[data-viewport-mode="mobile"] #userProfileWrap {
+  display: none !important;
+}
+
 body[data-viewport-mode="mobile"] .breadcrumb-project-input {
   max-width: min(12rem, 40vw);
   font-weight: 600;
 }
 
 body[data-viewport-mode="mobile"] #generateQuoteBtn {
+  padding: 0.5rem 0.75rem;
+  font-size: clamp(0.8125rem, 0.2vw + 0.75rem, 0.9375rem);
+}
+
+/* Save button in header: match Generate Quote height (same padding/font). */
+body[data-viewport-mode="mobile"] #globalToolbar .btn-save-diagram {
+  min-height: 0;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   font-size: clamp(0.8125rem, 0.2vw + 0.75rem, 0.9375rem);
 }
@@ -2426,6 +2466,11 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps {
 
 body[data-viewport-mode="mobile"] .measurement-deck {
   max-height: 30vh;
+}
+
+body[data-viewport-mode="mobile"] .measurement-deck-card input,
+body[data-viewport-mode="mobile"] #badgeLengthInput {
+  font-size: 16px;
 }
 
 /* 54.21–54.25: Diagrams bottom sheet (mobile only). Desktop never shows these. */

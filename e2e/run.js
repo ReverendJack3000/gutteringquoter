@@ -760,6 +760,22 @@ async function run() {
           throw new Error(`Desktop center-drop normalization regressed: max dimension ${desktopCenterDropMaxDim}, expected <= 150`);
         }
         console.log('  ✓ Desktop center-drop keeps max dimension <= 150px');
+        const desktopRulerButtonState = await page.evaluate(() => {
+          const btn = document.getElementById('floatingToolbarMeasure');
+          if (!btn) return { exists: false, visible: false };
+          const styles = window.getComputedStyle(btn);
+          return {
+            exists: true,
+            visible: styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0',
+          };
+        });
+        if (!desktopRulerButtonState.exists) {
+          throw new Error('Desktop guard: floating toolbar ruler button is missing');
+        }
+        if (desktopRulerButtonState.visible) {
+          throw new Error('Desktop guard: floating toolbar ruler button should not be visible in desktop mode');
+        }
+        console.log('  ✓ Desktop guard: ruler button remains hidden');
 
         // Resize tests on fresh unrotated element (cursor alignment, anchor math for rotated elements)
         const resizeEl = last;
@@ -1661,6 +1677,105 @@ async function run() {
         );
       }
       console.log('  ✓ Mobile blueprint tap-add uses 25% of blueprint long side and auto-closes panel');
+
+      // Mobile measurement entry: element tap should not auto-focus input; ruler button should focus the selected run input.
+      const measurableThumbSelector = '.product-thumb[data-product-id^="GUT-"], .product-thumb[data-product-id^="DP-"], .product-thumb[data-product-id="DROPPER"], .product-thumb[data-product-id^="DRP-"]';
+      const measurableThumbExists = await mobilePage.evaluate((selector) => !!document.querySelector(selector), measurableThumbSelector);
+      if (!measurableThumbExists) throw new Error('Mobile ruler: measurable product thumbnail not found');
+      const measurableCountBefore = await mobilePage.evaluate(
+        () => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0
+      );
+      const measurablePanelExpandedBeforeTap = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!measurablePanelExpandedBeforeTap) {
+        await clickSelectorViaDom(mobilePage, '#panelCollapsed');
+        await delay(320);
+      }
+      await mobilePage.evaluate((selector) => {
+        const thumb = document.querySelector(selector);
+        if (!thumb) throw new Error('Mobile ruler: measurable thumbnail missing at click time');
+        thumb.click();
+      }, measurableThumbSelector);
+      await delay(750);
+      const measurableAddState = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        return {
+          count: (window.__quoteAppElementCount && window.__quoteAppElementCount()) || elements.length,
+          panelCollapsed: !!panel && panel.classList.contains('collapsed'),
+          last: elements[elements.length - 1] || null,
+        };
+      });
+      if (measurableAddState.count !== measurableCountBefore + 1) {
+        throw new Error(
+          `Mobile ruler: measurable tap-add should add one element, before=${measurableCountBefore}, after=${measurableAddState.count}`
+        );
+      }
+      if (!measurableAddState.panelCollapsed) {
+        throw new Error('Mobile ruler: products panel should auto-close after measurable tap-add');
+      }
+      if (!measurableAddState.last || !/^(GUT-|DP-|DROPPER$|DRP-)/i.test(measurableAddState.last.assetId || '')) {
+        throw new Error('Mobile ruler: added element is not measurable');
+      }
+      const measurableElementId = measurableAddState.last.id;
+
+      await mobilePage.keyboard.press('Escape');
+      await delay(200);
+      const measurableCenter = await mobilePage.evaluate((id) => {
+        if (typeof window.__quoteAppGetElementScreenCenter !== 'function') return null;
+        return window.__quoteAppGetElementScreenCenter(id);
+      }, measurableElementId);
+      if (!measurableCenter) throw new Error('Mobile ruler: could not resolve measurable element screen center');
+      await mobilePage.mouse.click(measurableCenter.x, measurableCenter.y);
+      await delay(260);
+
+      const noAutoFocusState = await mobilePage.evaluate((id) => {
+        const card = document.querySelector(`.measurement-deck-card[data-element-id="${CSS.escape(id)}"]`);
+        const input = card ? card.querySelector('input') : null;
+        const active = document.activeElement;
+        return {
+          cardExists: !!card,
+          inputExists: !!input,
+          focusedMeasurementInput: !!input && active === input,
+        };
+      }, measurableElementId);
+      if (!noAutoFocusState.cardExists || !noAutoFocusState.inputExists) {
+        throw new Error('Mobile ruler: measurement deck card/input missing for measurable element');
+      }
+      if (noAutoFocusState.focusedMeasurementInput) {
+        throw new Error('Mobile ruler: tapping measurable element should not auto-focus measurement input');
+      }
+
+      const rulerButtonState = await mobilePage.evaluate(() => {
+        const btn = document.getElementById('floatingToolbarMeasure');
+        if (!btn) return { exists: false, visible: false };
+        const styles = window.getComputedStyle(btn);
+        return {
+          exists: true,
+          visible: styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0',
+        };
+      });
+      if (!rulerButtonState.exists || !rulerButtonState.visible) {
+        throw new Error('Mobile ruler: ruler button should be visible for measurable single selection');
+      }
+      await clickSelectorViaDom(mobilePage, '#floatingToolbarMeasure');
+      await delay(420);
+      const rulerFocusState = await mobilePage.evaluate((id) => {
+        const card = document.querySelector(`.measurement-deck-card[data-element-id="${CSS.escape(id)}"]`);
+        const input = card ? card.querySelector('input') : null;
+        const active = document.activeElement;
+        return {
+          cardExists: !!card,
+          inputExists: !!input,
+          focusMatches: !!input && active === input,
+        };
+      }, measurableElementId);
+      if (!rulerFocusState.cardExists || !rulerFocusState.inputExists || !rulerFocusState.focusMatches) {
+        throw new Error('Mobile ruler: tapping ruler button should focus the selected measurement input');
+      }
+      console.log('  ✓ Mobile ruler flow: tap selects without keyboard, ruler focuses measurement input');
 
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);

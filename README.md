@@ -69,6 +69,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    - Toggle **Technical drawing** on/off to switch blueprint style.
    - Open the right panel (chevron if collapsed); drag products onto the blueprint.
    - Select an element to move, resize (corners), or rotate (top handle).
+   - On mobile, tap a measurable element to select it, then use the ruler button in the floating toolbar to enter length.
    - Drag the divider between blueprint and panel to resize.
    - **Export PNG** to download the composed blueprint.
    - On phones/tablets, the products panel becomes a slide-out drawer and desktop behavior remains unchanged on large screens.
@@ -203,6 +204,7 @@ npm install
 - **Import normalization (desktop):** Dropped/center-added elements keep max dimension ≤ 150px
 - **Mobile tap-add sizing:** Tap-added element max dimension = 25% of blueprint long side, or 25% of canvas long side when no blueprint is loaded
 - **Center-drop / tap-add:** Click/tap on a product thumb adds exactly one element; mobile tap-add auto-closes the products panel
+- **Mobile measurement ruler flow:** measurable element tap does not auto-focus length input; ruler button focuses the matching measurement card input
 - **Color tinting:** originalImage preservation, tintedCanvas creation, multiple color changes, color removal
 - **Selection over blueprint:** Can select elements after color changes
 - **Accessibility modal keyboarding:** focus trap + Escape close in accessibility settings modal

@@ -3126,6 +3126,7 @@ function initFloatingToolbar() {
   const lockBtn = document.getElementById('floatingToolbarLock');
   const duplicateBtn = document.getElementById('floatingToolbarDuplicate');
   const deleteBtn = document.getElementById('floatingToolbarDelete');
+  const measureBtn = document.getElementById('floatingToolbarMeasure');
   const colorBtn = document.getElementById('floatingToolbarColor');
   const moreBtn = document.getElementById('floatingToolbarMore');
   const submenu = document.getElementById('floatingToolbarSubmenu');
@@ -3252,6 +3253,17 @@ function initFloatingToolbar() {
       updatePlaceholderVisibility();
       renderMeasurementDeck();
       draw();
+    });
+  }
+
+  if (measureBtn) {
+    measureBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (layoutState.viewportMode !== 'mobile') return;
+      if (state.selectedBlueprint || state.selectedIds.length !== 1) return;
+      const el = state.elements.find((item) => item.id === state.selectedIds[0]);
+      if (!el || !(el.sequenceId > 0)) return;
+      scrollToMeasurementCardAndFocus(el.id);
     });
   }
 
@@ -5499,6 +5511,17 @@ function draw() {
         toolbarEl.removeAttribute('hidden');
         if (wasHidden) collapseDiagramToolbarIfExpanded();
         toolbarEl.classList.toggle('floating-toolbar-has-element', !!selected && selectedElements.length === 1);
+        const measureBtn = document.getElementById('floatingToolbarMeasure');
+        if (measureBtn) {
+          const showMeasureBtn = layoutState.viewportMode === 'mobile'
+            && !!selected
+            && selectedElements.length === 1
+            && !state.selectedBlueprint
+            && selected.sequenceId != null
+            && selected.sequenceId > 0;
+          measureBtn.style.display = showMeasureBtn ? 'flex' : 'none';
+          measureBtn.setAttribute('aria-hidden', showMeasureBtn ? 'false' : 'true');
+        }
         // Update lock icon state (single icon, toggle class)
         const lockBtn = document.getElementById('floatingToolbarLock');
         if (lockBtn) {
@@ -6011,7 +6034,9 @@ function initCanvas() {
       } else {
         setSelection([hit.element.id].concat(state.selectedIds.filter((id) => id !== hit.element.id)));
       }
-      if (hit.element.sequenceId && state.selectedIds.length === 1) scrollToMeasurementCardAndFocus(hit.element.id);
+      if (layoutState.viewportMode !== 'mobile' && hit.element.sequenceId && state.selectedIds.length === 1) {
+        scrollToMeasurementCardAndFocus(hit.element.id);
+      }
       if (shouldSelectOnlyOnMobile) {
         // 54.62: First tap on an unselected element only selects. One-finger move requires explicit prior selection.
         state.mode = null;
@@ -9620,10 +9645,23 @@ function hitTestBadge(clientX, clientY) {
  */
 function scrollToMeasurementCardAndFocus(elementId) {
   const card = document.querySelector(`.measurement-deck-card[data-element-id="${CSS.escape(elementId)}"]`);
-  if (!card) return;
+  if (!card) return false;
   const input = card.querySelector('input');
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-  if (input) input.focus();
+  if (!input) return true;
+  const focusInput = () => {
+    try {
+      input.focus({ preventScroll: true });
+    } catch (_) {
+      input.focus();
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(focusInput));
+  } else {
+    setTimeout(focusInput, 0);
+  }
+  return true;
 }
 
 /**
