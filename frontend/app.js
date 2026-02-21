@@ -477,6 +477,7 @@ let lastQuoteData = null;
 
 /** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
 let cachedLabourRates = [];
+let labourRowIdCounter = 0;
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
 let hasPricingChanges = false;
@@ -781,6 +782,7 @@ function initCropModal() {
 }
 
 function hideQuoteModal() {
+  closeAccessibleModal('labourEditorModal');
   closeAccessibleModal('quoteModal');
   setQuoteEditMode(false);
   syncQuoteModalViewportState();
@@ -1135,6 +1137,289 @@ function getLabourRowsOrdered() {
   return Array.from(tbody.rows).filter((r) => r.dataset.labourRow === 'true');
 }
 
+function isMobileQuoteViewport() {
+  return layoutState.viewportMode === 'mobile';
+}
+
+function ensureLabourRowUid(row) {
+  if (!row) return '';
+  if (!row.dataset.labourRowUid) {
+    labourRowIdCounter += 1;
+    row.dataset.labourRowUid = 'labour-row-' + labourRowIdCounter;
+  }
+  return row.dataset.labourRowUid;
+}
+
+function formatLabourHoursDisplay(hours) {
+  if (!Number.isFinite(hours) || hours <= 0) return '0 hrs';
+  const rounded = Math.round(hours * 100) / 100;
+  return `${rounded} hrs`;
+}
+
+function syncMobileLabourRowSummary() {
+  const isMobile = isMobileQuoteViewport();
+  const labourRows = getLabourRowsOrdered();
+  labourRows.forEach((row, idx) => {
+    ensureLabourRowUid(row);
+    const productCell = row.cells[0];
+    const qtyCell = row.cells[1];
+    const unitCell = row.cells[4];
+    if (!productCell || !qtyCell || !unitCell) return;
+    let productSummary = productCell.querySelector('.quote-labour-mobile-summary');
+    if (!productSummary) {
+      productSummary = document.createElement('span');
+      productSummary.className = 'quote-labour-mobile-summary';
+      productCell.appendChild(productSummary);
+    }
+    let qtySummary = qtyCell.querySelector('.quote-labour-mobile-qty-summary');
+    if (!qtySummary) {
+      qtySummary = document.createElement('span');
+      qtySummary.className = 'quote-labour-mobile-qty-summary';
+      qtyCell.appendChild(qtySummary);
+    }
+    let rateSummary = unitCell.querySelector('.quote-labour-mobile-rate-summary');
+    if (!rateSummary) {
+      rateSummary = document.createElement('span');
+      rateSummary.className = 'quote-labour-mobile-rate-summary';
+      unitCell.appendChild(rateSummary);
+    }
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+    const hours = parseFloat(hoursInput?.value) || 0;
+    const unitPrice = parseFloat(unitPriceInput?.value) || 0;
+    productSummary.textContent = `${formatLabourHoursDisplay(hours)} x ${formatCurrency(unitPrice)}/hr \u00b7 Tap to edit`;
+    qtySummary.textContent = formatLabourHoursDisplay(hours);
+    rateSummary.textContent = `${formatCurrency(unitPrice)}/hr`;
+    if (isMobile) {
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', `Labour line ${idx + 1}. ${formatLabourHoursDisplay(hours)} at ${formatCurrency(unitPrice)} per hour. Tap to edit.`);
+    } else {
+      row.removeAttribute('tabindex');
+      row.removeAttribute('aria-label');
+    }
+  });
+  if (!isMobile) {
+    const labourEditorModal = document.getElementById('labourEditorModal');
+    if (labourEditorModal && !labourEditorModal.hasAttribute('hidden')) {
+      closeAccessibleModal('labourEditorModal');
+    }
+  }
+}
+
+function closeLabourEditorModal() {
+  closeAccessibleModal('labourEditorModal');
+}
+
+function renderLabourEditorRows() {
+  const list = document.getElementById('labourEditorList');
+  if (!list) return;
+  const labourRows = getLabourRowsOrdered();
+  list.innerHTML = '';
+  labourRows.forEach((row, idx) => {
+    ensureLabourRowUid(row);
+    const rowId = row.dataset.labourRowUid;
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+    if (!hoursInput || !unitPriceInput) return;
+    const initialHours = parseFloat(hoursInput.value) || 0;
+    const initialRate = parseFloat(unitPriceInput.value) || 0;
+
+    const card = document.createElement('div');
+    card.className = 'labour-editor-row';
+    card.dataset.rowId = rowId;
+
+    const header = document.createElement('div');
+    header.className = 'labour-editor-row-header';
+    const title = document.createElement('h4');
+    title.className = 'labour-editor-row-title';
+    title.textContent = labourRows.length > 1 ? `Labour Line ${idx + 1}` : 'Labour';
+    header.appendChild(title);
+
+    const fields = document.createElement('div');
+    fields.className = 'labour-editor-fields';
+
+    const quantityRow = document.createElement('div');
+    quantityRow.className = 'labour-editor-group-row';
+    const quantityLabel = document.createElement('span');
+    quantityLabel.className = 'labour-editor-field-label';
+    quantityLabel.textContent = 'Quantity';
+    const stepper = document.createElement('div');
+    stepper.className = 'labour-editor-stepper';
+    const minusBtn = document.createElement('button');
+    minusBtn.type = 'button';
+    minusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--minus';
+    minusBtn.textContent = '−';
+    minusBtn.setAttribute('aria-label', 'Decrease labour quantity');
+    minusBtn.dataset.step = '-0.5';
+    const hoursEditor = document.createElement('input');
+    hoursEditor.type = 'number';
+    hoursEditor.min = '0';
+    hoursEditor.step = '0.5';
+    hoursEditor.value = String(initialHours);
+    hoursEditor.className = 'labour-editor-field-input';
+    hoursEditor.dataset.field = 'hours';
+    hoursEditor.setAttribute('aria-label', 'Labour quantity');
+    const plusBtn = document.createElement('button');
+    plusBtn.type = 'button';
+    plusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--plus';
+    plusBtn.textContent = '+';
+    plusBtn.setAttribute('aria-label', 'Increase labour quantity');
+    plusBtn.dataset.step = '0.5';
+    stepper.appendChild(minusBtn);
+    stepper.appendChild(hoursEditor);
+    stepper.appendChild(plusBtn);
+    quantityRow.appendChild(quantityLabel);
+    quantityRow.appendChild(stepper);
+
+    const purchaseRow = document.createElement('div');
+    purchaseRow.className = 'labour-editor-group-row';
+    const purchaseLabel = document.createElement('span');
+    purchaseLabel.className = 'labour-editor-field-label';
+    purchaseLabel.textContent = 'Purchase Cost';
+    const purchaseValue = document.createElement('span');
+    purchaseValue.className = 'labour-editor-field-value';
+    purchaseRow.appendChild(purchaseLabel);
+    purchaseRow.appendChild(purchaseValue);
+
+    const markupRow = document.createElement('div');
+    markupRow.className = 'labour-editor-group-row';
+    const markupLabel = document.createElement('span');
+    markupLabel.className = 'labour-editor-field-label';
+    markupLabel.textContent = 'Markup';
+    const markupValue = document.createElement('span');
+    markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
+    markupValue.textContent = '—';
+    markupRow.appendChild(markupLabel);
+    markupRow.appendChild(markupValue);
+
+    const unitPriceRow = document.createElement('label');
+    unitPriceRow.className = 'labour-editor-group-row labour-editor-field';
+    const rateLabel = document.createElement('span');
+    rateLabel.className = 'labour-editor-field-label';
+    rateLabel.textContent = 'Unit Price';
+    const rateEditor = document.createElement('input');
+    rateEditor.type = 'number';
+    rateEditor.min = '0';
+    rateEditor.step = '0.01';
+    rateEditor.value = String(initialRate);
+    rateEditor.className = 'labour-editor-field-input';
+    rateEditor.dataset.field = 'rate';
+    rateEditor.setAttribute('aria-label', 'Unit price per hour');
+    unitPriceRow.appendChild(rateLabel);
+    unitPriceRow.appendChild(rateEditor);
+
+    const note = document.createElement('p');
+    note.className = 'labour-editor-note';
+    note.textContent = 'Unit Price Excludes GST';
+
+    const taxRow = document.createElement('div');
+    taxRow.className = 'labour-editor-group-row';
+    const taxLabel = document.createElement('span');
+    taxLabel.className = 'labour-editor-field-label';
+    taxLabel.textContent = 'Tax Rate';
+    const taxValueWrap = document.createElement('span');
+    taxValueWrap.className = 'labour-editor-field-value';
+    taxValueWrap.innerHTML = '15% GST on Income 15% <span class="labour-editor-chevron" aria-hidden="true">›</span>';
+    taxRow.appendChild(taxLabel);
+    taxRow.appendChild(taxValueWrap);
+
+    const totalRow = document.createElement('div');
+    totalRow.className = 'labour-editor-group-row';
+    const totalLabel = document.createElement('span');
+    totalLabel.className = 'labour-editor-field-label';
+    totalLabel.textContent = 'Total Price';
+    const lineTotal = document.createElement('span');
+    lineTotal.className = 'labour-editor-line-total';
+    totalRow.appendChild(totalLabel);
+    totalRow.appendChild(lineTotal);
+
+    const rowActions = document.createElement('div');
+    rowActions.className = 'labour-editor-row-actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'labour-editor-remove-btn';
+    removeBtn.textContent = 'Remove Line';
+    removeBtn.disabled = labourRows.length <= 1;
+    rowActions.appendChild(removeBtn);
+
+    const taxGroup = document.createElement('div');
+    taxGroup.className = 'labour-editor-fields labour-editor-fields--single';
+    taxGroup.appendChild(taxRow);
+
+    const totalGroup = document.createElement('div');
+    totalGroup.className = 'labour-editor-fields labour-editor-fields--single';
+    totalGroup.appendChild(totalRow);
+
+    fields.appendChild(quantityRow);
+    fields.appendChild(purchaseRow);
+    fields.appendChild(markupRow);
+    fields.appendChild(unitPriceRow);
+    card.appendChild(header);
+    card.appendChild(fields);
+    card.appendChild(note);
+    card.appendChild(taxGroup);
+    card.appendChild(totalGroup);
+    card.appendChild(rowActions);
+    list.appendChild(card);
+
+    const syncFromPopupInputs = () => {
+      let nextHours = parseFloat(hoursEditor.value);
+      let nextRate = parseFloat(rateEditor.value);
+      if (!Number.isFinite(nextHours) || nextHours < 0) nextHours = 0;
+      if (!Number.isFinite(nextRate) || nextRate < 0) nextRate = 0;
+      nextHours = Math.round(nextHours * 100) / 100;
+      nextRate = Math.round(nextRate * 100) / 100;
+      hoursEditor.value = String(nextHours);
+      rateEditor.value = String(nextRate);
+      hoursInput.value = String(nextHours);
+      unitPriceInput.value = String(nextRate);
+      updateLabourRowTotal(row);
+      syncMobileLabourRowSummary();
+      purchaseValue.textContent = formatCurrency(nextRate);
+      lineTotal.textContent = formatCurrency(nextHours * nextRate);
+      updateQuoteTotalWarning();
+    };
+    hoursEditor.addEventListener('input', syncFromPopupInputs);
+    hoursEditor.addEventListener('change', syncFromPopupInputs);
+    rateEditor.addEventListener('input', syncFromPopupInputs);
+    rateEditor.addEventListener('change', syncFromPopupInputs);
+    minusBtn.addEventListener('click', () => {
+      const current = parseFloat(hoursEditor.value) || 0;
+      hoursEditor.value = String(Math.max(0, Math.round((current - 0.5) * 100) / 100));
+      syncFromPopupInputs();
+    });
+    plusBtn.addEventListener('click', () => {
+      const current = parseFloat(hoursEditor.value) || 0;
+      hoursEditor.value = String(Math.round((current + 0.5) * 100) / 100);
+      syncFromPopupInputs();
+    });
+    syncFromPopupInputs();
+
+    removeBtn.addEventListener('click', () => {
+      const currentRows = getLabourRowsOrdered();
+      if (currentRows.length <= 1) return;
+      row.remove();
+      ensureLabourRowsExist();
+      recalcQuoteTotalsFromTableBody();
+      updateQuoteTotalWarning();
+      syncMobileLabourRowSummary();
+      renderLabourEditorRows();
+    });
+  });
+}
+
+function openLabourEditorModal(triggerEl) {
+  if (!isMobileQuoteViewport()) return;
+  const modal = document.getElementById('labourEditorModal');
+  if (!modal) return;
+  renderLabourEditorRows();
+  const firstInput = modal.querySelector('.labour-editor-field-input');
+  openAccessibleModal('labourEditorModal', {
+    triggerEl: triggerEl || document.getElementById('quoteModalBackBtn'),
+    initialFocusEl: firstInput || document.getElementById('labourEditorDoneBtn'),
+  });
+}
+
 /** Default unit price for labour (from labour product REP-LAB). Used when creating new labour rows. */
 function getDefaultLabourUnitPrice() {
   const rate = cachedLabourRates.find((r) => r.id === 'REP-LAB') || cachedLabourRates[0];
@@ -1156,6 +1441,7 @@ function updateLabourRowTotal(row) {
     else totalCell.textContent = formatCurrency(total);
   }
   recalcQuoteTotalsFromTableBody();
+  syncMobileLabourRowSummary();
 }
 
 /** Create one labour row and insert before insertBefore (Section 50, labour as product). Options: { defaultHours, defaultUnitPrice }. Returns the new row. */
@@ -1445,10 +1731,12 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
+    if (isMobileQuoteViewport() && row.dataset.labourRow === 'true') return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
+    syncMobileLabourRowSummary();
   });
   tableBody?.addEventListener('keydown', (ev) => {
     const control = ev.target.closest('.quote-row-remove-x');
@@ -1456,10 +1744,28 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
+    if (isMobileQuoteViewport() && row.dataset.labourRow === 'true') return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
+    syncMobileLabourRowSummary();
+  });
+
+  tableBody?.addEventListener('click', (ev) => {
+    if (!isMobileQuoteViewport()) return;
+    if (ev.target.closest('.quote-row-remove-x')) return;
+    const row = ev.target.closest('tr[data-labour-row="true"]');
+    if (!row) return;
+    openLabourEditorModal(row);
+  });
+  tableBody?.addEventListener('keydown', (ev) => {
+    if (!isMobileQuoteViewport()) return;
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const row = ev.target.closest('tr[data-labour-row="true"]');
+    if (!row) return;
+    ev.preventDefault();
+    openLabourEditorModal(row);
   });
 
   document.addEventListener('click', (ev) => {
@@ -1545,10 +1851,30 @@ function initQuoteModal() {
     if (elements.length > 0) {
       await calculateAndDisplayQuote();
     }
+    syncMobileLabourRowSummary();
 
     const firstLabourRow = getLabourRowsOrdered()[0];
     const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
     if (layoutState.viewportMode !== 'mobile' && firstHoursInput) firstHoursInput.focus();
+  });
+
+  const labourEditorBackdrop = document.getElementById('labourEditorBackdrop');
+  const labourEditorCloseBtn = document.getElementById('labourEditorCloseBtn');
+  const labourEditorDoneBtn = document.getElementById('labourEditorDoneBtn');
+  const labourEditorAddRowBtn = document.getElementById('labourEditorAddRowBtn');
+  labourEditorBackdrop?.addEventListener('click', closeLabourEditorModal);
+  labourEditorCloseBtn?.addEventListener('click', closeLabourEditorModal);
+  labourEditorDoneBtn?.addEventListener('click', closeLabourEditorModal);
+  labourEditorAddRowBtn?.addEventListener('click', () => {
+    const emptyRow = getEmptyRow();
+    if (!emptyRow) return;
+    createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
+    recalcQuoteTotalsFromTableBody();
+    updateQuoteTotalWarning();
+    syncMobileLabourRowSummary();
+    renderLabourEditorRows();
+    const latestHoursInput = document.querySelector('#labourEditorList .labour-editor-row:last-child .labour-editor-field-input[data-field="hours"]');
+    latestHoursInput?.focus();
   });
 
   // ServiceM8 job number (Task 22.28): 1–5 digits only; placeholder "e.g. 4999" is strictly placeholder, never used as value
@@ -9242,6 +9568,8 @@ function setPanelExpanded(expanded, options = {}) {
 
   updatePanelToggleAccessibility(isExpanded);
 
+  if (isExpanded) collapseDiagramToolbarIfExpanded();
+
   if (isMobileMode) {
     const announcer = document.getElementById('appAnnouncer');
     if (announcer) announcer.textContent = isExpanded ? 'Products panel opened.' : 'Products panel closed.';
@@ -9272,7 +9600,7 @@ function updatePanelTipForViewport(mode) {
   if (!tip) return;
   tip.textContent =
     mode === 'mobile'
-      ? 'Tap items to place them on the canvas, then adjust the selected part.'
+      ? 'Tap parts to add'
       : 'Drag items onto the blueprint to add them.';
 }
 
@@ -9305,6 +9633,7 @@ function applyViewportMode(mode, options = {}) {
     const shouldExpandPanelByDefault = normalizedMode === 'desktop';
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
     syncQuoteModalViewportState();
+    syncMobileLabourRowSummary();
     if (options.announce !== false) announceViewportMode(normalizedMode);
     // Re-initialize diagram toolbar drag when switching to mobile
     if (normalizedMode === 'mobile') {
@@ -9315,6 +9644,7 @@ function applyViewportMode(mode, options = {}) {
 
   setPanelExpanded(layoutState.panelExpanded, { resizeCanvas: options.resizeCanvas !== false });
   syncQuoteModalViewportState();
+  syncMobileLabourRowSummary();
 }
 
 function handleViewportResize() {
@@ -9785,16 +10115,6 @@ function initProducts() {
   /* 54.85.7: refine-as-you-type (mobile and desktop); results update as user types */
   search?.addEventListener('input', () => applyProductFilters());
 
-  /* 54.85.6: on mobile, when search is focused scroll the product grid into view above the keyboard */
-  search?.addEventListener('focus', () => {
-    if (layoutState.viewportMode !== 'mobile') return;
-    const grid = document.getElementById('productGrid');
-    if (!grid) return;
-    requestAnimationFrame(() => {
-      grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
-
   loadPanelProducts();
 }
 
@@ -10157,6 +10477,12 @@ function initModalAccessibilityFramework() {
       if (layoutState.viewportMode === 'mobile' && backBtn) return backBtn;
       return document.getElementById('quoteModalClose') || document.getElementById('quoteCloseBtn') || backBtn;
     },
+  });
+  registerAccessibleModal({
+    id: 'labourEditorModal',
+    element: document.getElementById('labourEditorModal'),
+    backdrop: document.getElementById('labourEditorBackdrop'),
+    initialFocus: () => document.querySelector('#labourEditorList .labour-editor-field-input') || document.getElementById('labourEditorDoneBtn') || document.getElementById('labourEditorCloseBtn'),
   });
   registerAccessibleModal({
     id: 'productModal',

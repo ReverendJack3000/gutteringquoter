@@ -175,6 +175,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.80.2.6** **Mobile: auto-minimise when Product modal is opened.** Call collapse before `openAccessibleModal('productModal', ...)` (add new product and edit product flows).
 - [x] **54.80.2.7** **Desktop: auto-minimise when Saved diagrams dropdown is opened.** Call collapse when `#diagramsDropdown` is shown (desktop header); mobile uses bottom sheet (54.80.2.4).
 - [x] **54.80.2.8** **Mobile: auto-minimise when Save diagram modal is opened.** Call collapse before `openAccessibleModal('saveDiagramModal', ...)`.
+- [x] **54.80.2.9** **Mobile: auto-collapse diagram toolbar when products panel is opened.** When the user opens the Products panel (bottom sheet) on mobile—i.e. `#panel` gets class `expanded` and `#panelContent` is visible—call `collapseDiagramToolbarIfExpanded()` so `#diagramFloatingToolbar` collapses to the "+" pill. Wire to the same path that expands the panel (e.g. `#panelCollapsed` click or any open-products-panel entry). Mobile-only; desktop unchanged.
 - [x] **54.80.3** **Verify.** Manual check desktop + mobile for all auto-collapse triggers; run existing E2E; confirm no regressions. (E2E may fail on unrelated product thumbnail assertion if backend has no products; diagram toolbar collapse/expand behaviour is unchanged.)
 - [x] **54.80.4.1** **Position Flip dropdown so it does not overlap expanded diagram toolbar.** Add positioning logic using the diagram toolbar (`#diagramFloatingToolbar`) as anchor; place `#flipDropdown` so no part of it overlaps the expanded toolbar (e.g. open away from toolbar).
 - [x] **54.80.4.2** **Position element colour palette so it does not overlap expanded diagram toolbar.** Add positioning logic using the diagram toolbar as anchor; place `#colorPalettePopover` so no part of it overlaps the expanded toolbar.
@@ -224,6 +225,15 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.85.6** **Mobile search focus: product grid in view above keyboard.** When `#productSearch` is focused on mobile, ensure the scrollable thumbnail strip (`#productGrid`) is in full view above the virtual keyboard (e.g. flex order so grid is above search, and/or scroll panel/grid into view on focus); gate with viewport mode; desktop unchanged.
 - [x] **54.85.7** **Mobile search: verify refine-as-you-type.** Confirm existing `input` → `applyProductFilters()` works when search is focused and keyboard is open; results update as user types; document or fix if testing finds gaps.
 
+**54.85 (follow-up) Mobile: search bar below filters and thumbnail display**  
+*Plan: docs/plans/2026-02-21-mobile-panel-search-position-and-thumbnail-display.md. Scope: mobile-only; desktop and Railway unchanged.*
+
+- [x] **54.85.8** **Move search bar into .panel-filters.** In `frontend/index.html`, move `<div class="panel-search">…</div>` inside `.panel-filters`, just below the two selects. In `frontend/styles.css`, remove mobile flex-order rules that put grid above search; add mobile rule so `.panel-filters .panel-search` wraps to full-width row below the dropdowns.
+- [x] **54.85.9** **Mobile search focus: remove grid scroll-into-view.** In `frontend/app.js`, remove the mobile-only `#productSearch` focus handler that scrolls `#productGrid` into view (search is now above grid); keep refine-as-you-type (`input` → `applyProductFilters()`).
+- [x] **54.85.10** **Mobile thumbnails: uniform size, full text ~10px, fewer at once.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`: reduce product-grid gap and thumb padding; set thumb span font-size ~10px; allow 2-line wrap/line-clamp so full text shows; increase thumb width (e.g. 140–150px) so fewer thumbs in view and image + label fit; keep uniform height and touch target ≥44px.
+- [x] **54.85.11** **Verify desktop unchanged and E2E.** Confirm desktop panel layout (filters → search → grid) unchanged; run `npm test` and fix any assertions that depend on panel DOM or search position.
+- [ ] **54.85.12** **Manual mobile QA.** Confirm search bar directly below dropdowns, thumbnails uniform and readable with full text, tap-to-add and panel close; portrait and landscape.
+
 **54.86 Mobile: full-screen quote modal (mobile-only, desktop unchanged, Railway-safe)**  
 *Context: Convert the quote modal into a full-screen mobile sheet matching the iOS-style reference (`‹ Diagram`, centered `QUOTE`) while preserving quote + ServiceM8 functionality and desktop behavior.*
 
@@ -232,6 +242,15 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.86.3** **Mobile actions policy.** Hide mobile Print/Copy/footer-close actions while keeping quote logic and ServiceM8 API workflow intact.
 - [x] **54.86.4** **Mobile GST simplification.** Hide GST toggle/labels on mobile quote + confirmation overlay while preserving existing calculation/API payload semantics.
 - [x] **54.86.5** **QA/E2E and deploy-safety verification.** Add mobile quote regression assertions in `e2e/run.js` (fullscreen bounds, hidden controls, back close, no labour auto-focus), confirm desktop quote flow remains unchanged, and verify Railway-safe deployment assumptions.
+
+**54.87 Mobile labour popup editing (line item tap, desktop unchanged, Railway-safe)**  
+*Scope: labour remains a normal quote table line item; mobile labour row is summary-only and tap-to-edit via dedicated popup with vertical stacked fields; backend/API and desktop flows unchanged.*
+
+- [x] **54.87.1** **Add mobile labour line-item tap target + summary-only in-table labour row.** On mobile, keep labour as table row, hide inline labour row inputs/dup/remove in-table, show summary text, and open editor on labour row tap/keyboard activation.
+- [x] **54.87.2** **Add labour editor popup (vertical stacked fields, multi-row support).** Add `#labourEditorModal` with list rendering, add-row/remove-row controls, and touch-friendly vertical hours/rate inputs.
+- [x] **54.87.3** **Wire popup edits to existing labour row model/totals/Add-to-Job logic.** Reuse existing labour row inputs as source of truth; popup edits update row inputs and existing totals/warning/ServiceM8 gating logic without API contract changes.
+- [x] **54.87.4** **Add mobile labour popup E2E + desktop regression + deploy-safety checks.** Extend mobile quote regression in `e2e/run.js` to assert tap-open, vertical popup fields, edit propagation, add/remove row behavior, and close flow while preserving existing desktop assertions.
+- [ ] **54.87.5** **Future: extrapolate popup edit pattern from labour to other quote elements/items.** Track as follow-up task only; no non-labour popup editing changes in this phase.
 
 ---
 

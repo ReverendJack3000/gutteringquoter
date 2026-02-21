@@ -1788,6 +1788,10 @@ async function run() {
         const backBtn = document.getElementById('quoteModalBackBtn');
         const servicem8Section = document.getElementById('quoteServicem8Section');
         const tableBody = document.getElementById('quoteTableBody');
+        const labourRow = tableBody ? tableBody.querySelector('tr[data-labour-row="true"]') : null;
+        const labourHoursInput = labourRow ? labourRow.querySelector('.quote-labour-hours-input') : null;
+        const labourRateInput = labourRow ? labourRow.querySelector('.quote-labour-unit-price-input') : null;
+        const labourSummary = labourRow ? labourRow.querySelector('.quote-labour-mobile-summary') : null;
         const quoteOpen = !!modal && !modal.hasAttribute('hidden');
         const vw = window.innerWidth;
         const vh = window.innerHeight;
@@ -1812,6 +1816,10 @@ async function run() {
           backButtonVisible: !!backBtn && window.getComputedStyle(backBtn).display !== 'none',
           hasServiceM8: !!servicem8Section,
           rowCount: tableBody ? tableBody.querySelectorAll('tr').length : 0,
+          labourRowExists: !!labourRow,
+          labourHoursInlineHidden: !!labourHoursInput && window.getComputedStyle(labourHoursInput).display === 'none',
+          labourRateInlineHidden: !!labourRateInput && window.getComputedStyle(labourRateInput).display === 'none',
+          labourSummaryVisible: !!labourSummary && window.getComputedStyle(labourSummary).display !== 'none',
           editPricingHidden: isHidden('editPricingBtn'),
           savePricingHidden: isHidden('savePricingBtn'),
           printHidden: isHidden('quotePrintBtn'),
@@ -1839,6 +1847,12 @@ async function run() {
       if (!mobileQuoteState.hasServiceM8) {
         throw new Error('Mobile quote modal: ServiceM8 section should still be present');
       }
+      if (!mobileQuoteState.labourRowExists) {
+        throw new Error('Mobile quote modal: labour row should be present as a normal line item');
+      }
+      if (!mobileQuoteState.labourHoursInlineHidden || !mobileQuoteState.labourRateInlineHidden || !mobileQuoteState.labourSummaryVisible) {
+        throw new Error('Mobile quote modal: labour row should be summary-only in-table on mobile');
+      }
       if (mobileQuoteState.rowCount < 1) {
         throw new Error('Mobile quote modal: expected at least one quote table row');
       }
@@ -1854,6 +1868,80 @@ async function run() {
       if (mobileQuoteState.activeIsLabourInput) {
         throw new Error('Mobile quote modal: labour input should not auto-focus on open');
       }
+      const labourTapResult = await mobilePage.evaluate(() => {
+        const row = document.querySelector('#quoteTableBody tr[data-labour-row="true"]');
+        if (!row) return false;
+        row.click();
+        return true;
+      });
+      if (!labourTapResult) throw new Error('Mobile labour editor: labour row not found for tap-open');
+      await delay(320);
+      const labourEditorOpenState = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('labourEditorModal');
+        const list = document.getElementById('labourEditorList');
+        const firstFields = list ? list.querySelector('.labour-editor-fields') : null;
+        return {
+          open: !!modal && !modal.hasAttribute('hidden'),
+          cardCount: list ? list.querySelectorAll('.labour-editor-row').length : 0,
+          hasHoursInput: !!list && !!list.querySelector('.labour-editor-field-input[data-field="hours"]'),
+          hasRateInput: !!list && !!list.querySelector('.labour-editor-field-input[data-field="rate"]'),
+          verticalFields: !!firstFields && window.getComputedStyle(firstFields).display === 'flex' && window.getComputedStyle(firstFields).flexDirection === 'column',
+        };
+      });
+      if (!labourEditorOpenState.open) throw new Error('Mobile labour editor: tap on labour row should open popup');
+      if (labourEditorOpenState.cardCount < 1 || !labourEditorOpenState.hasHoursInput || !labourEditorOpenState.hasRateInput) {
+        throw new Error('Mobile labour editor: expected editable hours/rate fields');
+      }
+      if (!labourEditorOpenState.verticalFields) throw new Error('Mobile labour editor: fields should be vertically stacked');
+
+      const labourEditApplied = await mobilePage.evaluate(() => {
+        const hoursInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="hours"]');
+        const rateInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="rate"]');
+        if (!hoursInput || !rateInput) return false;
+        hoursInput.value = '2';
+        hoursInput.dispatchEvent(new Event('input', { bubbles: true }));
+        hoursInput.dispatchEvent(new Event('change', { bubbles: true }));
+        rateInput.value = '130';
+        rateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        rateInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      });
+      if (!labourEditApplied) throw new Error('Mobile labour editor: failed to apply editor values');
+      await delay(260);
+      const labourTotalsState = await mobilePage.evaluate(() => {
+        const subtotalText = document.getElementById('labourTotalDisplay')?.textContent || '0';
+        const subtotal = parseFloat(subtotalText.replace(/[^0-9.-]/g, '')) || 0;
+        const labourWarnHidden = !!document.getElementById('quoteLabourWarning')?.hidden;
+        return { subtotal, labourWarnHidden };
+      });
+      if (Math.abs(labourTotalsState.subtotal - 260) > 0.01) {
+        throw new Error(`Mobile labour editor: expected labour subtotal 260.00 after edit, got ${labourTotalsState.subtotal}`);
+      }
+      if (!labourTotalsState.labourWarnHidden) {
+        throw new Error('Mobile labour editor: labour warning should hide once hours are added');
+      }
+
+      await clickSelectorViaDom(mobilePage, '#labourEditorAddRowBtn');
+      await delay(220);
+      const labourAfterAdd = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
+      if (labourAfterAdd < 2) throw new Error('Mobile labour editor: add row should create a second labour row');
+      const removedExtraRow = await mobilePage.evaluate(() => {
+        const removeButtons = Array.from(document.querySelectorAll('#labourEditorList .labour-editor-remove-btn'));
+        if (removeButtons.length < 2) return false;
+        removeButtons[1].click();
+        return true;
+      });
+      if (!removedExtraRow) throw new Error('Mobile labour editor: second row remove button not available');
+      await delay(220);
+      const labourAfterRemove = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
+      if (labourAfterRemove !== 1) throw new Error(`Mobile labour editor: expected 1 labour row after remove, got ${labourAfterRemove}`);
+      await clickSelectorViaDom(mobilePage, '#labourEditorDoneBtn');
+      await delay(220);
+      const labourEditorClosed = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('labourEditorModal');
+        return !!modal && modal.hasAttribute('hidden');
+      });
+      if (!labourEditorClosed) throw new Error('Mobile labour editor: Done should close popup');
       await clickSelectorViaDom(mobilePage, '#quoteModalBackBtn');
       await delay(260);
       const mobileQuoteClosed = await mobilePage.evaluate(() => {
@@ -1861,7 +1949,7 @@ async function run() {
         return !!modal && modal.hasAttribute('hidden');
       });
       if (!mobileQuoteClosed) throw new Error('Mobile quote modal: back button should close the modal');
-      console.log('  ✓ Mobile quote modal: full-screen layout, hidden controls, and back-close behavior pass');
+      console.log('  ✓ Mobile quote modal: full-screen layout, labour popup editing, hidden controls, and back-close behavior pass');
 
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);

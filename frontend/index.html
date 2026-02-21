@@ -335,9 +335,9 @@
               <option value="65">65 mm</option>
               <option value="80">80 mm</option>
             </select>
-          </div>
-          <div class="panel-search">
-            <input type="search" id="productSearch" placeholder="Search products…" aria-label="Search Marley products" />
+            <div class="panel-search">
+              <input type="search" id="productSearch" placeholder="Search products…" aria-label="Search Marley products" />
+            </div>
           </div>
           <div class="product-grid" id="productGrid"></div>
         </div>
@@ -717,6 +717,20 @@
               <span class="job-confirm-spinner job-confirm-spinner--white" aria-hidden="true"></span>
               <span class="job-confirm-done" aria-hidden="true">✅</span>
             </button>
+          </div>
+        </div>
+      </div>
+      <div class="labour-editor-modal" id="labourEditorModal" role="dialog" aria-labelledby="labourEditorTitle" aria-modal="true" hidden>
+        <div class="labour-editor-backdrop" id="labourEditorBackdrop"></div>
+        <div class="labour-editor-content" id="labourEditorContent">
+          <div class="labour-editor-header">
+            <button type="button" class="labour-editor-nav-btn labour-editor-nav-btn--left" id="labourEditorCloseBtn">Cancel</button>
+            <h3 class="labour-editor-title" id="labourEditorTitle">Modify Item/Service</h3>
+            <button type="button" class="labour-editor-nav-btn labour-editor-nav-btn--right" id="labourEditorDoneBtn">Save</button>
+          </div>
+          <div class="labour-editor-list" id="labourEditorList"></div>
+          <div class="labour-editor-actions">
+            <button type="button" class="btn" id="labourEditorAddRowBtn">Add Labour Line</button>
           </div>
         </div>
       </div>
