@@ -44,10 +44,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/quote-modal-mobile-ux-tidy
-- Based on: main
-- Status: Complete (54.92 + 54.93: grid→dividers, hierarchy, labour/footer/error + hide Total, stepper, red minus/green plus; ready for merge)
-- Related Tasks: 54.92 Mobile Quote modal UX tidy; 54.93 Mobile quote table stepper and delete (reference UI)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
