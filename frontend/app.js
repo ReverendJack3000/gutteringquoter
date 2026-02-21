@@ -4825,8 +4825,9 @@ function draw() {
   const { canvas, ctx, blueprintImage, elements } = state;
   if (!canvas || !ctx) return;
 
-  const w = state.canvasWidth;
-  const h = state.canvasHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const w = state.canvasWidth / dpr;
+  const h = state.canvasHeight / dpr;
   ctx.clearRect(0, 0, w, h);
 
   let scale = state.scale || 1;
@@ -9095,6 +9096,9 @@ function applyViewportMode(mode, options = {}) {
   if (typeof document !== 'undefined') {
     if (document.body) document.body.setAttribute('data-viewport-mode', normalizedMode);
     if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
+    /* 54.79 a11y: hide diagram toolbar drag handle from screen readers on mobile (visually hidden; grip is the affordance). */
+    const diagramDragHandle = document.getElementById('diagramToolbarDragHandle');
+    if (diagramDragHandle) diagramDragHandle.setAttribute('aria-hidden', normalizedMode === 'mobile' ? 'true' : 'false');
     updatePlaceholderStepsForViewport(normalizedMode);
     updatePanelTipForViewport(normalizedMode);
     /* 54.67: Mobile header theme-color blue (#54B3D9); desktop stays green (#71C43C) */

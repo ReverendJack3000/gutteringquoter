@@ -2261,6 +2261,46 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ho
   min-height: 44px;
   flex-shrink: 0;
 }
+
+/* 54.79: Mobile – hide drag handle visually, central grip bar, hide Inspector (desktop unchanged). */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-drag-handle {
+  width: 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  max-width: 0;
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+/* 54.79.2: Central grip pill in drag area (vertical toolbar = horizontal bar; horizontal toolbar = vertical bar). */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar::before {
+  content: "";
+  flex-shrink: 0;
+  width: 4px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 2px;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"]::before {
+  width: 32px;
+  height: 4px;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed::before {
+  display: none;
+}
+/* High-contrast: ensure mobile grip remains visible (audit recommendation). */
+body.a11y-high-contrast[data-viewport-mode="mobile"] .diagram-floating-toolbar::before {
+  background: #111;
+}
+/* 54.79.3: Hide Open Inspector in diagram toolbar on mobile. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
+  display: none;
+}
+
 /* 54.77: Single row + horizontal scroll at all mobile widths; no wrap override at 430px. */
 
 /* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
