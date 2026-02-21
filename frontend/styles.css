@@ -2054,6 +2054,14 @@ body[data-viewport-mode="mobile"] .panel.expanded .panel-content {
   min-height: 0;
 }
 
+/* 54.85.6: grid above search so thumb strip is visible above keyboard when search is focused */
+body[data-viewport-mode="mobile"] .panel.expanded .panel-content .product-grid {
+  order: 0;
+}
+body[data-viewport-mode="mobile"] .panel.expanded .panel-content .panel-search {
+  order: 1;
+}
+
 body[data-viewport-mode="mobile"] .panel.collapsed .panel-content {
   visibility: hidden;
   pointer-events: none;
@@ -2159,6 +2167,22 @@ body[data-viewport-mode="mobile"] .panel-close svg {
   transform: rotate(-90deg); /* down chevron for bottom sheet close */
 }
 
+/* 54.85.5: two dropdowns side-by-side on mobile to save vertical space */
+body[data-viewport-mode="mobile"] .panel-filters {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+}
+body[data-viewport-mode="mobile"] .panel-filters select {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+body[data-viewport-mode="mobile"] .panel-filters select + select {
+  margin-top: 0;
+}
+
 body[data-viewport-mode="mobile"] .product-grid {
   display: flex;
   flex-direction: row;
@@ -2168,6 +2192,7 @@ body[data-viewport-mode="mobile"] .product-grid {
   gap: 0.75rem; /* 54.10: spacing between product thumb touch targets */
   padding: 12px 16px;
   align-content: start;
+  align-items: flex-start; /* 54.85.1: row does not stretch to tallest thumb */
   scroll-snap-type: x mandatory;
 }
 
@@ -2175,7 +2200,28 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb {
   flex: 0 0 auto;
   width: 120px;
   min-width: 120px;
+  max-height: 100px; /* 54.85.1: compact strip height */
+  aspect-ratio: auto; /* 54.85.2: respect height cap */
   scroll-snap-align: start;
+}
+
+body[data-viewport-mode="mobile"] .product-grid .product-thumb img {
+  max-height: 60%; /* 54.85.2: leave room for label */
+  object-fit: contain;
+}
+
+body[data-viewport-mode="mobile"] .product-grid .product-thumb span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+@media (max-width: 400px) {
+  body[data-viewport-mode="mobile"] .product-grid .product-thumb {
+    width: 96px;
+    min-width: 96px;
+  }
 }
 
 /* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing.
@@ -3896,6 +3942,18 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   font-weight: 600;
 }
 
+.quote-modal-back-btn {
+  display: none;
+  border: none;
+  background: transparent;
+  color: #1f4f7a;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0;
+  cursor: pointer;
+}
+
 .quote-modal-close {
   background: none;
   border: none;
@@ -5020,12 +5078,12 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 }
 
 @media (max-width: 640px) {
-  .quote-modal {
+  body:not([data-viewport-mode="mobile"]) .quote-modal {
     align-items: flex-end;
     padding: 8px;
   }
-  .quote-modal-content,
-  #quoteModal .quote-modal-content {
+  body:not([data-viewport-mode="mobile"]) .quote-modal-content,
+  body:not([data-viewport-mode="mobile"]) #quoteModal .quote-modal-content {
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -5036,7 +5094,7 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .quote-modal-header {
+  body:not([data-viewport-mode="mobile"]) .quote-modal-header {
     position: sticky;
     top: 0;
     z-index: 2;
@@ -5044,33 +5102,33 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
     padding: 14px 0 10px;
     margin: 0;
   }
-  .quote-modal-header-actions {
+  body:not([data-viewport-mode="mobile"]) .quote-modal-header-actions {
     gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-end;
   }
-  .quote-parts-table {
+  body:not([data-viewport-mode="mobile"]) .quote-parts-table {
     margin: 0 0 12px;
     min-width: 640px;
     font-size: 13px;
   }
-  .quote-totals-section {
+  body:not([data-viewport-mode="mobile"]) .quote-totals-section {
     padding: 0 0 12px;
     font-size: 13px;
   }
-  .quote-total-line {
+  body:not([data-viewport-mode="mobile"]) .quote-total-line {
     gap: 10px;
   }
-  .quote-total-line span:first-child {
+  body:not([data-viewport-mode="mobile"]) .quote-total-line span:first-child {
     min-width: 0;
   }
-  .quote-servicem8-section {
+  body:not([data-viewport-mode="mobile"]) .quote-servicem8-section {
     padding: 12px 0;
   }
-  .quote-servicem8-controls {
+  body:not([data-viewport-mode="mobile"]) .quote-servicem8-controls {
     gap: 8px;
   }
-  .quote-modal-actions {
+  body:not([data-viewport-mode="mobile"]) .quote-modal-actions {
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -5081,9 +5139,191 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
     grid-template-columns: 1fr;
     gap: 8px;
   }
-  .quote-modal-actions .btn {
+  body:not([data-viewport-mode="mobile"]) .quote-modal-actions .btn {
     min-height: 44px;
   }
+}
+
+/* 54.86: Mobile full-screen Quote modal (mobile-only; desktop unchanged) */
+body[data-viewport-mode="mobile"] #quoteModal,
+body[data-viewport-mode="mobile"] #quoteModal.quote-modal--mobile-fullscreen {
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-content,
+body[data-viewport-mode="mobile"] #quoteModal.quote-modal--mobile-fullscreen .quote-modal-content {
+  width: 100vw;
+  min-width: 0;
+  max-width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(92px, auto) 1fr minmax(92px, auto);
+  align-items: center;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+  margin: 0;
+  background: #f2f2f7;
+  border-bottom: 1px solid #d6d6da;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 44px;
+  padding: 0 4px;
+  color: #2f6fa8;
+  font-size: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-title {
+  justify-self: center;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2f6fa8;
+  font-size: clamp(24px, 6.2vw, 32px);
+  line-height: 1;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-header-actions,
+body[data-viewport-mode="mobile"] #quoteModal #editPricingBtn,
+body[data-viewport-mode="mobile"] #quoteModal #savePricingBtn,
+body[data-viewport-mode="mobile"] #quoteModal #quoteModalClose {
+  display: none !important;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th,
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td {
+  padding: 8px 6px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-col-cost,
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-col-markup,
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(3),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(3),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(4),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(4),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(5),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(5) {
+  display: none !important;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(1),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(1) { width: 56%; }
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(2),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) { width: 18%; }
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(6),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(6) { width: 26%; }
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-hours-input,
+body[data-viewport-mode="mobile"] #quoteModal .quote-line-qty-input,
+body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
+  min-height: 36px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-cell-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-cell-total-value {
+  flex: 1;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-row-remove-x {
+  opacity: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: 4px;
+  padding: 0;
+  font-size: 20px;
+  touch-action: manipulation;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-totals-section {
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-total-line {
+  gap: 12px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-total-line span:first-child {
+  min-width: 0;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-total-exc,
+body[data-viewport-mode="mobile"] #quoteModal #jobConfirmGstToggleWrap,
+body[data-viewport-mode="mobile"] #quoteModal #jobConfirmOverlay .job-confirm-financial-gst {
+  display: none !important;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal #quoteError {
+  margin: 8px 12px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-section {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  margin: 0;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: #f2f2f7;
+  border-top: 1px solid #d6d6da;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-controls {
+  gap: 8px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-job-input,
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-btn {
+  min-height: 44px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal #quotePrintBtn,
+body[data-viewport-mode="mobile"] #quoteModal #quoteCopyBtn,
+body[data-viewport-mode="mobile"] #quoteModal #quoteCloseBtn,
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-actions {
+  display: none !important;
 }
 
 @media (max-width: 760px) {

@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+---
+description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores requirements and design before implementation."
+globs: *
+disable-model-invocation: true
+---
+
+# Superpower: Brainstorming & Execution Planning
+
+Whenever you are asked to invoke `superpowers:brainstorming`, or before you begin writing code for a new feature, component, or UI modification, you MUST follow this exact sequence. Do NOT write or modify any application code until this sequence is complete and the user has explicitly approved the plan.
+
+## Phase 1: Context & Constraint Verification
+Before proposing a solution, silently read and analyze the following:
+1.  **Task Source:** Review `TASK_LIST.md` (index: branch, uncompleted table, "Where to look") and the relevant section file in `docs/tasks/` for the section you're working on (e.g. Section 54 → `docs/tasks/section-54.md`) to understand the current active branch and the immediate objective.
+2.  **Architecture Check:** Understand that this is a single codebase serving both desktop and mobile via an adaptive layout (controlled by `data-viewport-mode` in JS/CSS). 
+3.  **Deployment Rule:** All code must be deployable to Railway. Do not introduce dependencies or build steps that conflict with the existing `./scripts/run-server.sh` setup defined in the `README.md`.
+
+## Phase 2: The Brainstorming Output
+Generate a response formatted exactly like the outline below. 
+
+### 1. Goal Assessment
+* State your understanding of the user's request in 1-2 sentences.
+
+### 2. Desktop vs. Mobile Impact Analysis
+* **Mobile Impact:** Detail exactly how this changes the mobile UI/UX.
+* **Desktop Impact:** Explicitly state how you will ensure the desktop production UI remains completely unaffected (e.g., using `body[data-viewport-mode="mobile"]` CSS scoping, specific touch vs. mouse event listeners, etc.). If it *is* supposed to affect desktop, explain how.
+
+### 3. Proposed Implementation Plan
+Outline the technical approach step-by-step:
+* **HTML (`index.html`):** What DOM elements are being added, moved, or having utility classes removed?
+* **CSS (`styles.css`):** What specific styling rules are required? (Emphasize Apple HIG standards: 44px touch targets, safe-area insets, backdrop blurs, etc., if applicable).
+* **JS (`app.js`):** What logic is being added? Mention specific functions, event listeners, and how state (like `layoutState.viewportMode`) is handled.
+
+### 4. Edge Cases & Accessibility
+* Identify at least two potential edge cases (e.g., scroll bleeding, missing ARIA labels, unhandled screen resizing) and explain how the plan mitigates them.
+
+### 5. Task List Update (Draft)
+* Draft the exact text you will use to update the task list once the implementation is successful: the **section file** in `docs/tasks/` for the task(s) (change `[ ]` to `[x]`) and, if a section becomes fully complete, the uncompleted table in `TASK_LIST.md`.
+
+## Phase 3: The Approval Gate
+End your response with this exact question:
+> "This is the proposed plan. Do you approve this approach, or would you like to make adjustments before I write the code?"

@@ -1,16 +1,19 @@
 ---
-description: Mark completed tasks in TASK_LIST.md with [x]
+description: Mark completed tasks in the task list (TASK_LIST.md index + docs/tasks/*.md) with [x]
 alwaysApply: true
 ---
 
 # Task list completion
 
-- **Single source of truth:** All task tracking for this project lives in `TASK_LIST.md`. Do not create or maintain a separate task list (e.g. in other markdown files or comments) for the same work.
+- **Single source of truth:** All task tracking for this project lives in **`TASK_LIST.md`** (index: branch, uncompleted table, locked decisions, "Where to look" map) and the **section files in `docs/tasks/`** (full task text and checkboxes). Do not create or maintain a separate task list elsewhere.
 
-- **Marking completion:** When a task (or subtask) from `TASK_LIST.md` is done, update that line so the checkbox is **checked** by putting an **X** inside the square brackets:
+- **Where to look:** Use the "Where to look (RAG-style)" tables at the top of `TASK_LIST.md` to find which file contains a given section (e.g. Section 54 → `docs/tasks/section-54.md`).
+
+- **Marking completion:** When a task is done, open the **section file** that contains that task (see `TASK_LIST.md` tables) and change the checkbox to **checked** (`[x]`):
   - Before: `- [ ] **1.1** Create project folder structure`
   - After:  `- [x] **1.1** Create project folder structure`
+  If a section becomes fully complete and its row should be removed from the uncompleted table, update **`TASK_LIST.md`** (the index) to remove that row.
 
 - Prefer lowercase `x` in `[x]` for compatibility with common markdown checklists.
 
-- If you complete multiple tasks in one change, update every corresponding checkbox in `TASK_LIST.md` in the same edit.
+- If you complete multiple tasks in one change, update every corresponding checkbox in the **relevant section file(s)** in the same edit, and the index uncompleted table if needed.

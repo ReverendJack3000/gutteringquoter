@@ -783,6 +783,16 @@ function initCropModal() {
 function hideQuoteModal() {
   closeAccessibleModal('quoteModal');
   setQuoteEditMode(false);
+  syncQuoteModalViewportState();
+}
+
+function syncQuoteModalViewportState() {
+  const modal = document.getElementById('quoteModal');
+  if (!modal) return;
+  const isMobileQuote = layoutState.viewportMode === 'mobile';
+  modal.classList.toggle('quote-modal--mobile-fullscreen', isMobileQuote);
+  if (isMobileQuote) modal.setAttribute('data-mobile-fullscreen', 'true');
+  else modal.removeAttribute('data-mobile-fullscreen');
 }
 
 function updateSavePricingButtonState() {
@@ -1413,6 +1423,7 @@ function initEmptyQuoteRow(tr) {
 
 function initQuoteModal() {
   const modal = document.getElementById('quoteModal');
+  const btnBack = document.getElementById('quoteModalBackBtn');
   const btnClose = document.getElementById('quoteModalClose');
   const btnCloseFooter = document.getElementById('quoteCloseBtn');
   const btnGenerate = document.getElementById('generateQuoteBtn');
@@ -1423,6 +1434,7 @@ function initQuoteModal() {
 
   if (!modal || !btnGenerate) return;
 
+  btnBack?.addEventListener('click', hideQuoteModal);
   btnClose?.addEventListener('click', hideQuoteModal);
   btnCloseFooter?.addEventListener('click', hideQuoteModal);
 
@@ -1498,6 +1510,7 @@ function initQuoteModal() {
     lastQuoteData = null;
     setQuoteEditMode(false);
     updateQuoteTotalWarning();
+    syncQuoteModalViewportState();
 
     // Show modal
     openAccessibleModal('quoteModal', { triggerEl: btnGenerate });
@@ -1535,7 +1548,7 @@ function initQuoteModal() {
 
     const firstLabourRow = getLabourRowsOrdered()[0];
     const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
-    if (firstHoursInput) firstHoursInput.focus();
+    if (layoutState.viewportMode !== 'mobile' && firstHoursInput) firstHoursInput.focus();
   });
 
   // ServiceM8 job number (Task 22.28): 1–5 digits only; placeholder "e.g. 4999" is strictly placeholder, never used as value
@@ -9291,6 +9304,7 @@ function applyViewportMode(mode, options = {}) {
   if (modeChanged) {
     const shouldExpandPanelByDefault = normalizedMode === 'desktop';
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
+    syncQuoteModalViewportState();
     if (options.announce !== false) announceViewportMode(normalizedMode);
     // Re-initialize diagram toolbar drag when switching to mobile
     if (normalizedMode === 'mobile') {
@@ -9300,6 +9314,7 @@ function applyViewportMode(mode, options = {}) {
   }
 
   setPanelExpanded(layoutState.panelExpanded, { resizeCanvas: options.resizeCanvas !== false });
+  syncQuoteModalViewportState();
 }
 
 function handleViewportResize() {
@@ -9767,7 +9782,18 @@ function initProducts() {
   });
 
   const search = document.getElementById('productSearch');
+  /* 54.85.7: refine-as-you-type (mobile and desktop); results update as user types */
   search?.addEventListener('input', () => applyProductFilters());
+
+  /* 54.85.6: on mobile, when search is focused scroll the product grid into view above the keyboard */
+  search?.addEventListener('focus', () => {
+    if (layoutState.viewportMode !== 'mobile') return;
+    const grid = document.getElementById('productGrid');
+    if (!grid) return;
+    requestAnimationFrame(() => {
+      grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 
   loadPanelProducts();
 }
@@ -10126,7 +10152,11 @@ function initModalAccessibilityFramework() {
     id: 'quoteModal',
     element: document.getElementById('quoteModal'),
     backdrop: document.getElementById('quoteModalBackdrop'),
-    initialFocus: () => document.getElementById('quoteModalClose') || document.getElementById('quoteCloseBtn'),
+    initialFocus: () => {
+      const backBtn = document.getElementById('quoteModalBackBtn');
+      if (layoutState.viewportMode === 'mobile' && backBtn) return backBtn;
+      return document.getElementById('quoteModalClose') || document.getElementById('quoteCloseBtn') || backBtn;
+    },
   });
   registerAccessibleModal({
     id: 'productModal',

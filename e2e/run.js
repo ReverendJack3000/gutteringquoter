@@ -1777,6 +1777,92 @@ async function run() {
       }
       console.log('  ✓ Mobile ruler flow: tap selects without keyboard, ruler focuses measurement input');
 
+      // Mobile quote modal regression: full-screen shell + visibility policy.
+      const generateQuoteBtnMobile = await mobilePage.$('#generateQuoteBtn');
+      if (!generateQuoteBtnMobile) throw new Error('Mobile quote modal: Generate Quote button not found');
+      await clickSelectorViaDom(mobilePage, '#generateQuoteBtn');
+      await delay(900);
+      const mobileQuoteState = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('quoteModal');
+        const content = document.querySelector('#quoteModal .quote-modal-content');
+        const backBtn = document.getElementById('quoteModalBackBtn');
+        const servicem8Section = document.getElementById('quoteServicem8Section');
+        const tableBody = document.getElementById('quoteTableBody');
+        const quoteOpen = !!modal && !modal.hasAttribute('hidden');
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const rect = content ? content.getBoundingClientRect() : null;
+        const isHidden = (id) => {
+          const el = document.getElementById(id);
+          if (!el) return false;
+          const cs = window.getComputedStyle(el);
+          return el.hidden || cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0' || el.offsetParent === null;
+        };
+        const gstLabelEls = Array.from(document.querySelectorAll('#quoteModal .quote-total-exc'));
+        const gstLabelsHidden = gstLabelEls.length > 0 && gstLabelEls.every((el) => window.getComputedStyle(el).display === 'none');
+        const gstFinancialEls = Array.from(document.querySelectorAll('#quoteModal #jobConfirmOverlay .job-confirm-financial-gst'));
+        const gstFinancialHidden = gstFinancialEls.length === 0 || gstFinancialEls.every((el) => window.getComputedStyle(el).display === 'none');
+        const active = document.activeElement;
+        return {
+          quoteOpen,
+          rect,
+          vw,
+          vh,
+          hasBackButton: !!backBtn,
+          backButtonVisible: !!backBtn && window.getComputedStyle(backBtn).display !== 'none',
+          hasServiceM8: !!servicem8Section,
+          rowCount: tableBody ? tableBody.querySelectorAll('tr').length : 0,
+          editPricingHidden: isHidden('editPricingBtn'),
+          savePricingHidden: isHidden('savePricingBtn'),
+          printHidden: isHidden('quotePrintBtn'),
+          copyHidden: isHidden('quoteCopyBtn'),
+          gstToggleHidden: isHidden('jobConfirmGstToggleWrap'),
+          gstLabelsHidden,
+          gstFinancialHidden,
+          activeIsLabourInput: !!active && active.classList?.contains('quote-labour-hours-input'),
+        };
+      });
+      if (!mobileQuoteState.quoteOpen) throw new Error('Mobile quote modal: modal did not open');
+      if (!mobileQuoteState.rect) throw new Error('Mobile quote modal: content bounds unavailable');
+      if (mobileQuoteState.rect.left > 1 || mobileQuoteState.rect.top > 1) {
+        throw new Error(`Mobile quote modal: expected full-screen origin near (0,0), got (${mobileQuoteState.rect.left.toFixed(2)}, ${mobileQuoteState.rect.top.toFixed(2)})`);
+      }
+      if (Math.abs(mobileQuoteState.rect.width - mobileQuoteState.vw) > 2) {
+        throw new Error(`Mobile quote modal: width should match viewport, modal=${mobileQuoteState.rect.width.toFixed(2)} viewport=${mobileQuoteState.vw}`);
+      }
+      if (Math.abs(mobileQuoteState.rect.height - mobileQuoteState.vh) > 2) {
+        throw new Error(`Mobile quote modal: height should match viewport, modal=${mobileQuoteState.rect.height.toFixed(2)} viewport=${mobileQuoteState.vh}`);
+      }
+      if (!mobileQuoteState.hasBackButton || !mobileQuoteState.backButtonVisible) {
+        throw new Error('Mobile quote modal: back button should be present and visible');
+      }
+      if (!mobileQuoteState.hasServiceM8) {
+        throw new Error('Mobile quote modal: ServiceM8 section should still be present');
+      }
+      if (mobileQuoteState.rowCount < 1) {
+        throw new Error('Mobile quote modal: expected at least one quote table row');
+      }
+      if (!mobileQuoteState.editPricingHidden || !mobileQuoteState.savePricingHidden) {
+        throw new Error('Mobile quote modal: pricing admin controls should be hidden');
+      }
+      if (!mobileQuoteState.printHidden || !mobileQuoteState.copyHidden) {
+        throw new Error('Mobile quote modal: print/copy actions should be hidden');
+      }
+      if (!mobileQuoteState.gstToggleHidden || !mobileQuoteState.gstLabelsHidden || !mobileQuoteState.gstFinancialHidden) {
+        throw new Error('Mobile quote modal: GST toggle/labels should be hidden in mobile flow');
+      }
+      if (mobileQuoteState.activeIsLabourInput) {
+        throw new Error('Mobile quote modal: labour input should not auto-focus on open');
+      }
+      await clickSelectorViaDom(mobilePage, '#quoteModalBackBtn');
+      await delay(260);
+      const mobileQuoteClosed = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('quoteModal');
+        return !!modal && modal.hasAttribute('hidden');
+      });
+      if (!mobileQuoteClosed) throw new Error('Mobile quote modal: back button should close the modal');
+      console.log('  ✓ Mobile quote modal: full-screen layout, hidden controls, and back-close behavior pass');
+
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);
       const landscapeCheck = await mobilePage.evaluate(() => {

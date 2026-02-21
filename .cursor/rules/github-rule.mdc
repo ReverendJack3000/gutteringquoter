@@ -36,7 +36,7 @@ We operate with a single active feature branch at a time.
 
 ## When Feature Is Complete
 
-1. Mark related tasks as [x] in TASK_LIST.md.
+1. Mark related tasks as [x] in the relevant section file(s) in `docs/tasks/` (see TASK_LIST.md "Where to look" for the file that contains each section).
 2. Commit changes.
 3. Merge into main.
 4. Delete the feature branch.
