@@ -132,6 +132,25 @@ function applyMobileToolbarEdgeSnap(toolbar, wrap, snap, getViewportMode) {
   localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, orientation);
 }
 
+/** Update docked-side classes so the grip sits on the "inside" long edge (facing canvas center). */
+function updateDockedSide(toolbar, wrap) {
+  if (!toolbar || !wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const toolRect = toolbar.getBoundingClientRect();
+  const orient = toolbar.getAttribute('data-orientation') || 'horizontal';
+  const centerX = wrapRect.left + wrapRect.width / 2;
+  const centerY = wrapRect.top + wrapRect.height / 2;
+  const toolCenterX = toolRect.left + toolRect.width / 2;
+  const toolCenterY = toolRect.top + toolRect.height / 2;
+
+  toolbar.classList.remove('is-docked-left', 'is-docked-right', 'is-docked-top', 'is-docked-bottom');
+  if (orient === 'vertical') {
+    toolbar.classList.add(toolCenterX < centerX ? 'is-docked-left' : 'is-docked-right');
+  } else {
+    toolbar.classList.add(toolCenterY < centerY ? 'is-docked-top' : 'is-docked-bottom');
+  }
+}
+
 function clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode) {
   if (!toolbar || !wrap) return;
   const wrapRect = wrap.getBoundingClientRect();
@@ -201,6 +220,7 @@ export function initDiagramToolbarDrag(options = {}) {
     clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
     applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
   }
+  updateDockedSide(toolbar, wrap);
   dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
@@ -310,7 +330,15 @@ export function initDiagramToolbarDrag(options = {}) {
     e.preventDefault();
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) didDragThisSession = true;
+    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) {
+      if (!didDragThisSession) {
+        didDragThisSession = true;
+        dragHandle.classList.add('diagram-toolbar-drag-handle--dragging');
+        if (getViewportMode() === 'mobile' && typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(10); } catch (_) {}
+        }
+      }
+    }
     const wrapRect = wrap.getBoundingClientRect();
     const toolRect = toolbar.getBoundingClientRect();
     const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
@@ -331,6 +359,7 @@ export function initDiagramToolbarDrag(options = {}) {
   function onPointerUp(e) {
     if (e.pointerId !== dragPointerId) return;
     dragPointerId = null;
+    dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
     try {
       toolbar.releasePointerCapture(e.pointerId);
       dragHandle.releasePointerCapture(e.pointerId);
@@ -347,11 +376,13 @@ export function initDiagramToolbarDrag(options = {}) {
     const finalTop = parseFloat(toolbar.style.top) || 0;
     localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(finalLeft)));
     localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(finalTop)));
+    updateDockedSide(toolbar, wrap);
   }
 
   function onPointerCancel(e) {
     if (e.pointerId === dragPointerId) {
       dragPointerId = null;
+      dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
       try {
         toolbar.releasePointerCapture(e.pointerId);
         dragHandle.releasePointerCapture(e.pointerId);
@@ -359,6 +390,7 @@ export function initDiagramToolbarDrag(options = {}) {
       toolbar.style.transition = '';
       dragHandle.style.cursor = '';
       applyDiagramToolbarPosition(toolbar, parseFloat(toolbar.style.left) || 0, parseFloat(toolbar.style.top) || 0, toolbar.getAttribute('data-orientation') || 'horizontal');
+      updateDockedSide(toolbar, wrap);
     }
   }
 
@@ -383,6 +415,7 @@ export function initDiagramToolbarDrag(options = {}) {
         if (getViewportMode() === 'mobile') {
           applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
         }
+        updateDockedSide(toolbar, wrap);
       });
     });
   }
@@ -413,8 +446,10 @@ export function initDiagramToolbarDrag(options = {}) {
 
   const ro = new ResizeObserver(() => {
     if (dragPointerId != null) return;
-    clampDiagramToolbarToWrap(toolbar, getDiagramToolbarWrap(), getViewportMode);
+    const currentWrap = getDiagramToolbarWrap();
+    clampDiagramToolbarToWrap(toolbar, currentWrap, getViewportMode);
     updateOrientationFromPosition();
+    updateDockedSide(toolbar, currentWrap);
   });
   ro.observe(wrap);
 

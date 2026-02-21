@@ -1642,17 +1642,24 @@ async function run() {
       console.log('  ✓ Mobile expanded drag-top snaps to horizontal edge and avoids middle resting');
 
       // Option B: orientation-aware scroll assertion. Vertical = no scroll; horizontal = tools wrap may scroll.
-      const toolbarScrollState = await mobilePage.evaluate(() => {
+      // Allow small overflow from the absolutely positioned side grip (handle on long edge).
+      const GRIP_OVERFLOW_TOLERANCE = 36;
+      const toolbarScrollState = await mobilePage.evaluate((tolerance) => {
         const toolbar = document.getElementById('diagramFloatingToolbar');
         const tools = toolbar ? toolbar.querySelector('.diagram-toolbar-tools-wrap') : null;
         if (!toolbar || !tools) return null;
         const orientation = toolbar.getAttribute('data-orientation');
+        const overflowX = Math.max(0, toolbar.scrollWidth - toolbar.clientWidth);
+        const overflowY = Math.max(0, toolbar.scrollHeight - toolbar.clientHeight);
+        const toolbarScroll = overflowX > 1 || overflowY > 1;
+        const withinGripTolerance = overflowX <= tolerance && overflowY <= tolerance;
         return {
           orientation,
-          toolbarScroll: toolbar.scrollWidth > (toolbar.clientWidth + 1) || toolbar.scrollHeight > (toolbar.clientHeight + 1),
+          toolbarScroll,
+          withinGripTolerance,
           toolsScroll: tools.scrollWidth > (tools.clientWidth + 1) || tools.scrollHeight > (tools.clientHeight + 1),
         };
-      });
+      }, GRIP_OVERFLOW_TOLERANCE);
       if (!toolbarScrollState) throw new Error('Mobile toolbar scroll state unavailable');
       if (toolbarScrollState.orientation === 'vertical') {
         if (toolbarScrollState.toolbarScroll || toolbarScrollState.toolsScroll) {
@@ -1660,8 +1667,8 @@ async function run() {
         }
         console.log('  ✓ Mobile toolbar (vertical) has no internal scrollbars');
       } else {
-        // Horizontal: tools wrap is allowed to scroll; optionally confirm it is scrollable when content overflows.
-        if (toolbarScrollState.toolbarScroll) {
+        // Horizontal: tools wrap is allowed to scroll; toolbar may have small overflow from side grip only.
+        if (toolbarScrollState.toolbarScroll && !toolbarScrollState.withinGripTolerance) {
           throw new Error(`Mobile toolbar container should not scroll (horizontal); only tools-wrap may scroll (toolbarScroll=${toolbarScrollState.toolbarScroll})`);
         }
         console.log('  ✓ Mobile toolbar (horizontal) scroll expectation OK (tools-wrap may scroll)');

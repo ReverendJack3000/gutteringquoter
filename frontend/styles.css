@@ -1239,7 +1239,7 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  overflow: hidden;
+  overflow: visible;
   transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               gap 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1261,8 +1261,10 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   max-height: 48px;
   border-radius: 50%;
 }
-/* Drag handle: animatable hide (not display:none) so container morphs smoothly */
+/* Drag handle: animatable hide when collapsed (not display:none) so container morphs smoothly */
 .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-drag-handle {
+  width: 0;
+  height: 0;
   max-width: 0;
   max-height: 0;
   min-width: 0;
@@ -1273,12 +1275,8 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   overflow: hidden;
   pointer-events: none;
 }
-/* Expanded: explicit size so transition from 0 → 44px works (no transition to max-width:none) */
+/* Expanded: handle visible and interactive (sized by content, absolutely positioned on border). */
 .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) .diagram-toolbar-drag-handle {
-  max-width: 44px;
-  max-height: 44px;
-  min-width: 44px;
-  min-height: 44px;
   opacity: 1;
   pointer-events: auto;
 }
@@ -2140,7 +2138,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem 0.625rem;
-  overflow: hidden;
+  overflow: visible; /* Allow absolutely positioned drag handle on border to show (pill clip via inner tools-wrap). */
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.75);
   -webkit-backdrop-filter: blur(20px);
@@ -2255,47 +2253,12 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="ve
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .toolbar-pill-btn,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .upload-zone,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .blueprint-transparency-btn,
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-drag-handle,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="horizontal"] .diagram-toolbar-collapse-btn {
   min-width: 44px;
   min-height: 44px;
   flex-shrink: 0;
 }
 
-/* 54.79: Mobile – hide drag handle visually, central grip bar, hide Inspector (desktop unchanged). */
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-drag-handle {
-  width: 0;
-  height: 0;
-  min-width: 0;
-  min-height: 0;
-  max-width: 0;
-  max-height: 0;
-  padding: 0;
-  margin: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-/* 54.79.2: Central grip pill in drag area (vertical toolbar = horizontal bar; horizontal toolbar = vertical bar). */
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar::before {
-  content: "";
-  flex-shrink: 0;
-  width: 4px;
-  height: 32px;
-  background: rgba(0, 0, 0, 0.22);
-  border-radius: 2px;
-}
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"]::before {
-  width: 32px;
-  height: 4px;
-}
-body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed::before {
-  display: none;
-}
-/* High-contrast: ensure mobile grip remains visible (audit recommendation). */
-body.a11y-high-contrast[data-viewport-mode="mobile"] .diagram-floating-toolbar::before {
-  background: #111;
-}
 /* 54.79.3: Hide Open Inspector in diagram toolbar on mobile. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
   display: none;
@@ -2303,48 +2266,101 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
 
 /* 54.77: Single row + horizontal scroll at all mobile widths; no wrap override at 430px. */
 
-/* 54.35: 44×44 px touch target (Apple HIG); in-flow so it sits at edge and does not overlap tools. */
+/* Drag handle: pull-tab affordance on the "inside" long edge. Class .is-docked-* set by JS. */
 .diagram-toolbar-drag-handle {
-  flex-shrink: 0;
+  position: absolute;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  width: 44px;
-  height: 44px;
+  min-width: 30px;
+  min-height: 30px;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: none;
-  border-radius: 50%;
+  margin: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   cursor: grab;
   touch-action: none;
-  background: transparent;
-  overflow: hidden;
-  transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              min-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(0, 0, 0, 0.5);
+  opacity: 0.6;
+  box-shadow: none;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, color 0.15s ease;
+  overflow: hidden; /* clip grip icon to pull-tab rounded shape */
+  box-sizing: border-box;
 }
-.diagram-toolbar-drag-handle::before {
-  content: "";
-  width: 40px;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 2px;
+.diagram-toolbar-drag-handle:hover {
+  opacity: 0.85;
+  color: rgba(0, 0, 0, 0.65);
 }
-.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle::before {
-  width: 4px;
-  height: 40px;
-}
-
 .diagram-toolbar-drag-handle:active {
   cursor: grabbing;
 }
-.diagram-toolbar-drag-handle:active::before {
-  background: rgba(0, 0, 0, 0.35);
+/* "Lifted" state when drag is registered: full opacity + subtle shadow. */
+.diagram-toolbar-drag-handle.diagram-toolbar-drag-handle--dragging {
+  opacity: 1;
+  color: rgba(0, 0, 0, 0.75);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+/* Pull-tab: rounded only on the outer (jutting) side so it reads as a tab attached to the pill. */
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-left .diagram-toolbar-drag-handle { border-radius: 0 8px 8px 0; }
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-right .diagram-toolbar-drag-handle { border-radius: 8px 0 0 8px; }
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-top .diagram-toolbar-drag-handle { border-radius: 8px 8px 0 0; }
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-bottom .diagram-toolbar-drag-handle { border-radius: 0 0 8px 8px; }
+/* Vertical pill: grip on left or right long edge (inside = toward canvas center). */
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-left .diagram-toolbar-drag-handle {
+  right: 0;
+  left: auto;
+  top: 50%;
+  transform: translate(50%, -50%);
+}
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-right .diagram-toolbar-drag-handle {
+  left: 0;
+  right: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-drag-handle .diagram-toolbar-grip-icon {
+  transform: rotate(-90deg) scale(0.8);
+}
+/* Grip icon: centered in tab, ~80% size for breathing room. */
+.diagram-toolbar-drag-handle .diagram-toolbar-grip-icon {
+  display: block;
+  flex-shrink: 0;
+  transform: scale(0.8);
+}
+/* Padding so icon sits inside tab and doesn’t overlap the pill border. */
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-left .diagram-toolbar-drag-handle { padding-left: 5px; }
+.diagram-floating-toolbar[data-orientation="vertical"].is-docked-right .diagram-toolbar-drag-handle { padding-right: 5px; }
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-top .diagram-toolbar-drag-handle { padding-bottom: 5px; }
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-bottom .diagram-toolbar-drag-handle { padding-top: 5px; }
+/* Horizontal pill: grip on top or bottom long edge (inside = toward canvas center). */
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-top .diagram-toolbar-drag-handle {
+  bottom: 0;
+  top: auto;
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+.diagram-floating-toolbar[data-orientation="horizontal"].is-docked-bottom .diagram-toolbar-drag-handle {
+  top: 0;
+  bottom: auto;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+/* Safe zone: extra padding on the handle edge so thumb doesn’t hit tools. */
+.diagram-floating-toolbar.is-docked-left:not(.diagram-floating-toolbar--collapsed) { padding-right: 20px; }
+.diagram-floating-toolbar.is-docked-right:not(.diagram-floating-toolbar--collapsed) { padding-left: 20px; }
+.diagram-floating-toolbar.is-docked-top:not(.diagram-floating-toolbar--collapsed) { padding-bottom: 20px; }
+.diagram-floating-toolbar.is-docked-bottom:not(.diagram-floating-toolbar--collapsed) { padding-top: 20px; }
+body.a11y-high-contrast .diagram-toolbar-drag-handle {
+  color: #111;
+}
+/* Mobile: tab matches toolbar frosted look. */
+body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle {
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,
