@@ -388,6 +388,16 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.100.4** **E2E updates for material apply + labour regression guard.** Update `e2e/run.js` mobile quote checks so material popup asserts visible footer action, disabled-before-edit, enabled-after-edit, and apply-via-footer behavior; retain labour add/apply/remove assertions.
 - [ ] **54.100.5** **Manual mobile QA + Railway safety verification.** Validate iOS Safari + Android Chrome (portrait/landscape, 200% zoom), run `npm test`, and confirm no Railway infra/env/build changes.
 
+**54.101 Canvas element bold control (line weight 1–4, desktop + mobile; Railway-safe)**  
+*Scope: frontend-only canvas element rendering and selection toolbar UX. No backend/API contract changes. Blueprint processing (OpenCV) unchanged.*
+
+- [x] **54.101.1** **Add floating toolbar Bold control (desktop/mobile) with a11y labels.** In `frontend/index.html`, add `#floatingToolbarBold` to `#floatingToolbar` as `floating-toolbar-element-only`; include icon-style affordance and dynamic `title`/`aria-label` with current level context. Add matching styles in `frontend/styles.css`.
+- [x] **54.101.2** **Add per-element `lineWeight` model (default 1) and persist paths.** In `frontend/app.js`, add normalization/clamp helper for 1–4; set default on new elements (drop + tap-add), preserve in duplicate flows, include in undo snapshots and save/load payloads (`cloneStateForUndo`, `restoreStateFromSnapshot`, `getDiagramDataForSave`, `restoreStateFromApiSnapshot`), with backward-compatible default `1` when missing.
+- [x] **54.101.3** **Add line-weight render pipeline + cache invalidation.** In `frontend/app.js`, extend element rendering so level `1` is unchanged and levels `2–4` produce cached bold render canvases (multi-offset stamping with deterministic kernel) on top of existing color pipeline. Cache key must include `color`, `width`, `height`, and `lineWeight`. Add centralized render-cache invalidation and use it on color/size/weight changes.
+- [x] **54.101.4** **Wire Bold cycle interaction with undo + announcer.** In `initFloatingToolbar()`, bind `#floatingToolbarBold` to cycle `1→2→3→4→1` for single selected element, push undo snapshot, update element `lineWeight`, announce change via live region, and redraw. In `draw()`, show control only for single selected element (not blueprint) on both desktop and mobile.
+- [x] **54.101.5** **Add E2E regression coverage + hook updates.** Update `e2e/run.js` for desktop/mobile assertions (visibility, cycle, wrap, persistence after reselect), add color+lineWeight interop check, and keep existing desktop/mobile ruler guard assertions unchanged. Extend `window.__quoteAppGetElements()` to include `lineWeight` for deterministic checks.
+- [ ] **54.101.6** **Manual QA + Railway safety verification.** Validate desktop/mobile behavior (selection toolbar, undo/redo, save/load, export thumbnail/PNG parity), run `npm test`, and confirm no Railway env/build/deploy changes are required.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

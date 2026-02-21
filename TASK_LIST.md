@@ -81,6 +81,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.100.5 | Mobile quote material footer Apply action parity: manual mobile QA + Railway safety verification pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). |
 | 54 | 54.95.1–54.95.7 | Mobile-only orientation policy (landscape diagram canvas, portrait non-diagram UI, graceful fallback, E2E/docs) + follow-up to prevent landscape→portrait canvas zoom drift into header. |
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
+| 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 ---
 

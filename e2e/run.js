@@ -807,6 +807,53 @@ async function run() {
           throw new Error('Desktop guard: floating toolbar ruler button should not be visible in desktop mode');
         }
         console.log('  ✓ Desktop guard: ruler button remains hidden');
+        const desktopBoldState = await page.evaluate((id) => {
+          if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(id);
+          const btn = document.getElementById('floatingToolbarBold');
+          const styles = btn ? window.getComputedStyle(btn) : null;
+          const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+          const selected = (window.__quoteAppGetSelection && window.__quoteAppGetSelection()) || [];
+          const selectedId = selected.length === 1 ? selected[0] : null;
+          const lineWeight = selectedId ? (elements.find((el) => el.id === selectedId)?.lineWeight ?? null) : null;
+          return {
+            exists: !!btn,
+            visible: !!btn && !!styles && styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0',
+            selectedId,
+            lineWeight,
+          };
+        }, last.id);
+        if (!desktopBoldState.exists || !desktopBoldState.visible || !desktopBoldState.selectedId) {
+          throw new Error('Desktop bold control: expected bold button to be visible for selected element');
+        }
+        const desktopInitialWeight = Number(desktopBoldState.lineWeight || 1);
+        await clickSelectorViaDom(page, '#floatingToolbarBold');
+        await delay(180);
+        const desktopWeightAfterOne = await page.evaluate((id) => {
+          const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+          return elements.find((el) => el.id === id)?.lineWeight ?? null;
+        }, desktopBoldState.selectedId);
+        const desktopExpectedAfterOne = desktopInitialWeight >= 4 ? 1 : desktopInitialWeight + 1;
+        if (desktopWeightAfterOne !== desktopExpectedAfterOne) {
+          throw new Error(
+            `Desktop bold control: expected first cycle ${desktopInitialWeight} -> ${desktopExpectedAfterOne}, got ${desktopWeightAfterOne}`
+          );
+        }
+        await clickSelectorViaDom(page, '#floatingToolbarBold');
+        await delay(120);
+        await clickSelectorViaDom(page, '#floatingToolbarBold');
+        await delay(120);
+        await clickSelectorViaDom(page, '#floatingToolbarBold');
+        await delay(180);
+        const desktopWeightAfterWrap = await page.evaluate((id) => {
+          const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+          return elements.find((el) => el.id === id)?.lineWeight ?? null;
+        }, desktopBoldState.selectedId);
+        if (desktopWeightAfterWrap !== desktopInitialWeight) {
+          throw new Error(
+            `Desktop bold control: expected wrap to return to ${desktopInitialWeight} after four taps, got ${desktopWeightAfterWrap}`
+          );
+        }
+        console.log('  ✓ Desktop bold control: visible, cycles 1→4, and wraps');
 
         // Resize tests on fresh unrotated element (cursor alignment, anchor math for rotated elements)
         const resizeEl = last;
@@ -1050,6 +1097,24 @@ async function run() {
       throw new Error(`Color tinting: element ${selectedId} tintedCanvasColor mismatch, expected #007AFF, got ${colorInfoAfter.tintedCanvasColor}`);
     }
     console.log('  ✓ Color tinting: originalImage preserved and tintedCanvas created');
+    const colorWeightBeforeBold = Number(colorInfoAfter.lineWeight || 1);
+    await clickSelectorViaDom(page, '#floatingToolbarBold');
+    await delay(220);
+    const colorInfoAfterBold = await page.evaluate((id) => (window.__quoteAppGetElementColorInfo && window.__quoteAppGetElementColorInfo(id)) || null, selectedId);
+    const expectedWeightAfterBold = colorWeightBeforeBold >= 4 ? 1 : colorWeightBeforeBold + 1;
+    if (!colorInfoAfterBold) {
+      throw new Error('Color + bold interop: missing element render info after bold toggle');
+    }
+    if (colorInfoAfterBold.color !== '#007AFF') {
+      throw new Error(`Color + bold interop: expected color to remain #007AFF, got ${colorInfoAfterBold.color}`);
+    }
+    if (colorInfoAfterBold.lineWeight !== expectedWeightAfterBold) {
+      throw new Error(`Color + bold interop: expected lineWeight ${expectedWeightAfterBold}, got ${colorInfoAfterBold.lineWeight}`);
+    }
+    if (!colorInfoAfterBold.hasTintedCanvas || !colorInfoAfterBold.hasBoldCanvas) {
+      throw new Error('Color + bold interop: expected tinted and bold render caches to coexist');
+    }
+    console.log('  ✓ Color + bold interop: line weight cycles while color stays intact');
 
     const redSwatch = await page.$('.color-swatch[data-color="#FF3B30"]');
     if (!redSwatch) {
@@ -1803,6 +1868,51 @@ async function run() {
       if (!rulerButtonState.exists || !rulerButtonState.visible) {
         throw new Error('Mobile ruler: ruler button should be visible for measurable single selection');
       }
+      const mobileBoldState = await mobilePage.evaluate((id) => {
+        const btn = document.getElementById('floatingToolbarBold');
+        const styles = btn ? window.getComputedStyle(btn) : null;
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        const selected = (window.__quoteAppGetSelection && window.__quoteAppGetSelection()) || [];
+        const selectedId = selected.length === 1 ? selected[0] : null;
+        const lineWeight = elements.find((el) => el.id === id)?.lineWeight ?? null;
+        return {
+          exists: !!btn,
+          visible: !!btn && !!styles && styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0',
+          selectedMatches: selectedId === id,
+          lineWeight,
+        };
+      }, measurableElementId);
+      if (!mobileBoldState.exists || !mobileBoldState.visible || !mobileBoldState.selectedMatches) {
+        throw new Error('Mobile bold control: expected bold button to be visible for selected measurable element');
+      }
+      const mobileWeightBeforeBold = Number(mobileBoldState.lineWeight || 1);
+      await clickSelectorViaDom(mobilePage, '#floatingToolbarBold');
+      await delay(220);
+      const mobileWeightAfterBold = await mobilePage.evaluate((id) => {
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        return elements.find((el) => el.id === id)?.lineWeight ?? null;
+      }, measurableElementId);
+      const mobileExpectedAfterBold = mobileWeightBeforeBold >= 4 ? 1 : mobileWeightBeforeBold + 1;
+      if (mobileWeightAfterBold !== mobileExpectedAfterBold) {
+        throw new Error(
+          `Mobile bold control: expected cycle ${mobileWeightBeforeBold} -> ${mobileExpectedAfterBold}, got ${mobileWeightAfterBold}`
+        );
+      }
+      await mobilePage.mouse.click(measurableCenter.x, measurableCenter.y);
+      await delay(220);
+      const mobileWeightAfterReselect = await mobilePage.evaluate((id) => {
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        const selected = (window.__quoteAppGetSelection && window.__quoteAppGetSelection()) || [];
+        const selectedId = selected.length === 1 ? selected[0] : null;
+        return {
+          lineWeight: elements.find((el) => el.id === id)?.lineWeight ?? null,
+          selectedMatches: selectedId === id,
+        };
+      }, measurableElementId);
+      if (!mobileWeightAfterReselect.selectedMatches || mobileWeightAfterReselect.lineWeight !== mobileExpectedAfterBold) {
+        throw new Error('Mobile bold control: expected line weight to persist after reselect');
+      }
+      console.log('  ✓ Mobile bold control: visible, cycles, and persists after reselect');
       await clickSelectorViaDom(mobilePage, '#floatingToolbarMeasure');
       await delay(420);
       const rulerFocusState = await mobilePage.evaluate(() => {

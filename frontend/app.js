@@ -447,6 +447,15 @@ const ELEMENT_MAX_DIMENSION_PX = Math.round(REFERENCE_SIZE_PX / 5); // 80px
 const DROPPED_ELEMENT_MAX_DIMENSION_PX = 150;
 const DROP_GHOST_OPACITY = 0.4;
 const MIN_ELEMENT_DIMENSION_PX = 20;
+const MIN_ELEMENT_LINE_WEIGHT = 1;
+const MAX_ELEMENT_LINE_WEIGHT = 4;
+const DEFAULT_ELEMENT_LINE_WEIGHT = 1;
+const ELEMENT_LINE_WEIGHT_KERNEL_RADIUS = {
+  1: 0,
+  2: 2,
+  3: 4,
+  4: 6,
+};
 
 // Canvas Porter: Auto-Scale normalization
 const CANVAS_PORTER_MAX_UNIT = 150; // MaxUnit for normalization (same as DROPPED_ELEMENT_MAX_DIMENSION_PX)
@@ -454,6 +463,13 @@ const MOBILE_ADD_SIZE_RATIO = 0.25;
 const MOBILE_ADD_SCALE_EPSILON = 0.0001;
 const CANVAS_PORTER_VISUAL_PADDING = 10; // Safe zone padding in pixels (canvas coordinates)
 const BLUEPRINT_Z_INDEX = -1; // Blueprint is the back layer; elements use zIndex >= 0
+
+function normalizeElementLineWeight(lineWeight) {
+  const parsed = Number(lineWeight);
+  if (!Number.isFinite(parsed)) return DEFAULT_ELEMENT_LINE_WEIGHT;
+  const rounded = Math.round(parsed);
+  return Math.max(MIN_ELEMENT_LINE_WEIGHT, Math.min(MAX_ELEMENT_LINE_WEIGHT, rounded));
+}
 
 function getNextElementZIndex() {
   const maxZ = state.elements.reduce((m, e) => Math.max(m, e.zIndex != null ? e.zIndex : 0), BLUEPRINT_Z_INDEX);
@@ -4133,6 +4149,18 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function invalidateElementRenderCache(el) {
+  if (!el) return;
+  el.tintedCanvas = null;
+  el.tintedCanvasColor = null;
+  el.tintedCanvasWidth = null;
+  el.tintedCanvasHeight = null;
+  el._tintedCanvasFailureKey = undefined;
+  el.boldCanvas = null;
+  el.boldCanvasKey = null;
+  el._boldCanvasFailureKey = undefined;
+}
+
 function initColorPalette() {
   const palette = document.getElementById('colorPalettePopover');
   if (!palette) return;
@@ -4163,12 +4191,8 @@ function initColorPalette() {
     const blueprintImageBefore = state.blueprintImage;
     
     el.color = color || null;
-    // Invalidate tintedCanvas cache so it regenerates with new color
-    el.tintedCanvas = null;
-    el.tintedCanvasColor = null;
-    el.tintedCanvasWidth = null;
-    el.tintedCanvasHeight = null;
-    el._tintedCanvasFailureKey = undefined; // allow retry for new color/size
+    // Invalidate element render cache so color + bold variants regenerate on next draw
+    invalidateElementRenderCache(el);
     
     // Diagnostic logging: capture state after color change
     if (DEBUG_COLOR_CHANGES) {
@@ -4266,11 +4290,7 @@ function initHeaderColorPalette() {
     pushUndoSnapshot();
     state.elements.forEach((el) => {
       el.color = colorValue;
-      el.tintedCanvas = null;
-      el.tintedCanvasColor = null;
-      el.tintedCanvasWidth = null;
-      el.tintedCanvasHeight = null;
-      el._tintedCanvasFailureKey = undefined;
+      invalidateElementRenderCache(el);
     });
     draw();
     closeHeaderColorPopover();
@@ -4295,6 +4315,7 @@ function initFloatingToolbar() {
   const duplicateBtn = document.getElementById('floatingToolbarDuplicate');
   const deleteBtn = document.getElementById('floatingToolbarDelete');
   const measureBtn = document.getElementById('floatingToolbarMeasure');
+  const boldBtn = document.getElementById('floatingToolbarBold');
   const colorBtn = document.getElementById('floatingToolbarColor');
   const moreBtn = document.getElementById('floatingToolbarMore');
   const submenu = document.getElementById('floatingToolbarSubmenu');
@@ -4380,10 +4401,10 @@ function initFloatingToolbar() {
             zIndex: getNextElementZIndex(),
             image: el.image,
             originalImage: el.originalImage || el.image,
-            tintedCanvas: null,
-            tintedCanvasColor: null,
+            lineWeight: normalizeElementLineWeight(el.lineWeight),
             locked: !!el.locked,
           };
+          invalidateElementRenderCache(dup);
           const othersDup = state.elements;
           const nudgeDirsDup = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
           for (let n = 0; n < 20; n++) {
@@ -4433,6 +4454,24 @@ function initFloatingToolbar() {
       const el = state.elements.find((item) => item.id === state.selectedIds[0]);
       if (!el || !(el.sequenceId > 0)) return;
       openBadgeLengthPopoverForElement(el.id, { source: 'ruler' });
+    });
+  }
+
+  if (boldBtn) {
+    boldBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.selectedBlueprint || state.selectedIds.length !== 1) return;
+      const el = state.elements.find((item) => item.id === state.selectedIds[0]);
+      if (!el) return;
+      const current = normalizeElementLineWeight(el.lineWeight);
+      const next = current >= MAX_ELEMENT_LINE_WEIGHT ? MIN_ELEMENT_LINE_WEIGHT : current + 1;
+      pushUndoSnapshot();
+      el.lineWeight = next;
+      invalidateElementRenderCache(el);
+      if (typeof announceCanvas === 'function') {
+        announceCanvas(`Line weight ${next} of ${MAX_ELEMENT_LINE_WEIGHT}.`);
+      }
+      draw();
     });
   }
 
@@ -5073,13 +5112,7 @@ function applyMobileElementTransformFromActivePointers() {
   selected.y = nextCenterY - nextH / 2;
   selected.rotation = nextRotation;
 
-  if (selected.tintedCanvas && (selected.tintedCanvasWidth !== nextW || selected.tintedCanvasHeight !== nextH)) {
-    selected.tintedCanvas = null;
-    selected.tintedCanvasColor = null;
-    selected.tintedCanvasWidth = null;
-    selected.tintedCanvasHeight = null;
-    selected._tintedCanvasFailureKey = undefined;
-  }
+  invalidateElementRenderCache(selected);
   return true;
 }
 
@@ -5371,8 +5404,85 @@ function createTintedCanvas(originalImage, color, width, height, elementId = nul
   }
 }
 
+const BOLD_RESOLUTION_SCALE = TINT_RESOLUTION_SCALE;
+
+function getLineWeightKernelOffsets(lineWeight) {
+  const normalizedWeight = normalizeElementLineWeight(lineWeight);
+  const radius = ELEMENT_LINE_WEIGHT_KERNEL_RADIUS[normalizedWeight] || 0;
+  if (radius <= 0) return [{ x: 0, y: 0 }];
+  const offsets = [];
+  for (let oy = -radius; oy <= radius; oy++) {
+    for (let ox = -radius; ox <= radius; ox++) {
+      if ((ox * ox) + (oy * oy) <= (radius * radius)) offsets.push({ x: ox, y: oy });
+    }
+  }
+  return offsets.length ? offsets : [{ x: 0, y: 0 }];
+}
+
+function createBoldCanvas(originalImage, fillColor, width, height, lineWeight, elementId = null) {
+  const normalizedWeight = normalizeElementLineWeight(lineWeight);
+  if (!originalImage || !fillColor || normalizedWeight <= DEFAULT_ELEMENT_LINE_WEIGHT) return null;
+  const tw = Math.max(1, Math.round(width * BOLD_RESOLUTION_SCALE));
+  const th = Math.max(1, Math.round(height * BOLD_RESOLUTION_SCALE));
+  try {
+    const alphaSourceCanvas = document.createElement('canvas');
+    alphaSourceCanvas.width = tw;
+    alphaSourceCanvas.height = th;
+    const alphaSourceCtx = alphaSourceCanvas.getContext('2d', { alpha: true });
+    if (!alphaSourceCtx) return null;
+    alphaSourceCtx.imageSmoothingEnabled = true;
+    alphaSourceCtx.imageSmoothingQuality = 'high';
+    alphaSourceCtx.clearRect(0, 0, tw, th);
+    alphaSourceCtx.drawImage(originalImage, 0, 0, tw, th);
+
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = tw;
+    maskCanvas.height = th;
+    const maskCtx = maskCanvas.getContext('2d', { alpha: true });
+    if (!maskCtx) return null;
+    maskCtx.imageSmoothingEnabled = true;
+    maskCtx.imageSmoothingQuality = 'high';
+    maskCtx.clearRect(0, 0, tw, th);
+
+    const offsets = getLineWeightKernelOffsets(normalizedWeight);
+    offsets.forEach((offset) => {
+      maskCtx.drawImage(alphaSourceCanvas, offset.x, offset.y, tw, th);
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return null;
+    if (state.ctx && ctx === state.ctx) {
+      console.error('[createBoldCanvas] CRITICAL: Using main canvas context instead of offscreen canvas!', { elementId });
+      return null;
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, tw, th);
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(0, 0, tw, th);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(maskCanvas, 0, 0, tw, th);
+    ctx.globalCompositeOperation = 'source-over';
+    return canvas;
+  } catch (error) {
+    console.error('[createBoldCanvas] Error creating bold canvas', {
+      elementId,
+      lineWeight: normalizedWeight,
+      width,
+      height,
+      error: error.message,
+    });
+    return null;
+  }
+}
+
 /**
- * Get the image to render for an element: tintedCanvas if color exists, otherwise originalImage.
+ * Get the image to render for an element:
+ * - base layer = tintedCanvas (when color exists) or originalImage
+ * - optional bold layer = cached bold canvas when lineWeight > 1
  * Also ensures originalImage is set (migrates old elements that only have .image).
  */
 function getElementRenderImage(el) {
@@ -5380,6 +5490,9 @@ function getElementRenderImage(el) {
     el.originalImage = el.image;
   }
   if (!el.originalImage) return null;
+  const lineWeight = normalizeElementLineWeight(el.lineWeight);
+  if (el.lineWeight !== lineWeight) el.lineWeight = lineWeight;
+  let baseImage = el.originalImage;
   if (el.color) {
     const cacheKey = `${el.color}-${el.width}-${el.height}`;
     const needRegenerate = !el.tintedCanvas || el.tintedCanvasColor !== el.color || el.tintedCanvasWidth !== el.width || el.tintedCanvasHeight !== el.height;
@@ -5397,12 +5510,39 @@ function getElementRenderImage(el) {
       el.tintedCanvasColor = el.color;
       el.tintedCanvasWidth = el.width;
       el.tintedCanvasHeight = el.height;
+      baseImage = el.tintedCanvas;
     } else if (alreadyFailedForThisKey) {
-      return el.originalImage;
+      baseImage = el.originalImage;
+    } else {
+      baseImage = el.tintedCanvas || el.originalImage;
     }
-    return el.tintedCanvas;
+  } else {
+    baseImage = el.originalImage;
   }
-  return el.originalImage;
+
+  if (lineWeight <= DEFAULT_ELEMENT_LINE_WEIGHT) return baseImage;
+
+  const boldColor = (el.color && String(el.color).trim()) ? String(el.color).trim() : '#000000';
+  const boldCacheKey = `${boldColor}-${el.width}-${el.height}-${lineWeight}`;
+  const needBoldRegenerate = !el.boldCanvas || el.boldCanvasKey !== boldCacheKey;
+  const boldAlreadyFailedForKey = el._boldCanvasFailureKey === boldCacheKey;
+  if (needBoldRegenerate && !boldAlreadyFailedForKey) {
+    el.boldCanvas = createBoldCanvas(el.originalImage, boldColor, el.width, el.height, lineWeight, el.id);
+    if (!el.boldCanvas) {
+      el._boldCanvasFailureKey = boldCacheKey;
+      return baseImage;
+    }
+    el.boldCanvasKey = boldCacheKey;
+    el._boldCanvasFailureKey = undefined;
+  } else if (boldAlreadyFailedForKey) {
+    return baseImage;
+  }
+  return el.boldCanvas || baseImage;
+}
+
+function isElementRenderFromCanvasCache(el, renderImage) {
+  if (!el || !renderImage) return false;
+  return renderImage === el.tintedCanvas || renderImage === el.boldCanvas;
 }
 
 /**
@@ -5714,6 +5854,7 @@ function cloneStateForUndo() {
       locked: !!el.locked,
       flipX: !!el.flipX,
       flipY: !!el.flipY,
+      lineWeight: normalizeElementLineWeight(el.lineWeight),
       sequenceId: el.sequenceId != null ? el.sequenceId : undefined,
       measuredLength: el.measuredLength != null ? el.measuredLength : 0,
     })),
@@ -5730,10 +5871,17 @@ async function restoreStateFromSnapshot(snapshot) {
       const img = await loadDiagramImage(getDiagramUrl(el.assetId));
       return {
         ...el,
+        lineWeight: normalizeElementLineWeight(el.lineWeight),
         image: img,
         originalImage: img,
         tintedCanvas: null,
         tintedCanvasColor: null,
+        tintedCanvasWidth: null,
+        tintedCanvasHeight: null,
+        _tintedCanvasFailureKey: undefined,
+        boldCanvas: null,
+        boldCanvasKey: null,
+        _boldCanvasFailureKey: undefined,
       };
     })
   );
@@ -6135,11 +6283,8 @@ function applyResizeWith(canvasPos, altKey) {
   el.width = newW;
   el.height = newH;
 
-  // Invalidate tinted canvas
-  if (el.tintedCanvas && (el.tintedCanvasWidth !== newW || el.tintedCanvasHeight !== newH)) {
-    el.tintedCanvas = null;
-    el.tintedCanvasColor = null;
-  }
+  // Invalidate render cache after size changes
+  invalidateElementRenderCache(el);
 }
 
 function draw() {
@@ -6342,16 +6487,16 @@ function draw() {
       if (ghostRenderImage) {
         const gw = ghost.width * scale;
         const gh = ghost.height * scale;
-        const ghostTinted = ghost.color && ghost.tintedCanvas && ghostRenderImage === ghost.tintedCanvas;
+        const ghostRenderUsesCache = isElementRenderFromCanvasCache(ghost, ghostRenderImage);
         let prevQE, prevQQ;
-        if (ghostTinted) {
+        if (ghostRenderUsesCache) {
           prevQE = ctx.imageSmoothingEnabled;
           prevQQ = ctx.imageSmoothingQuality;
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
         }
         ctx.drawImage(ghostRenderImage, -gw / 2, -gh / 2, gw, gh);
-        if (ghostTinted) {
+        if (ghostRenderUsesCache) {
           ctx.imageSmoothingEnabled = prevQE;
           ctx.imageSmoothingQuality = prevQQ;
         }
@@ -6372,16 +6517,16 @@ function draw() {
     if (renderImage) {
       const dw = el.width * scale;
       const dh = el.height * scale;
-      const isTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+      const renderUsesCache = isElementRenderFromCanvasCache(el, renderImage);
       let prevSmoothingEnabled, prevSmoothingQuality;
-      if (isTinted) {
+      if (renderUsesCache) {
         prevSmoothingEnabled = ctx.imageSmoothingEnabled;
         prevSmoothingQuality = ctx.imageSmoothingQuality;
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
       }
       ctx.drawImage(renderImage, -dw / 2, -dh / 2, dw, dh);
-      if (isTinted) {
+      if (renderUsesCache) {
         ctx.imageSmoothingEnabled = prevSmoothingEnabled;
         ctx.imageSmoothingQuality = prevSmoothingQuality;
       }
@@ -6716,6 +6861,24 @@ function draw() {
             && selected.sequenceId > 0;
           measureBtn.style.display = showMeasureBtn ? 'flex' : 'none';
           measureBtn.setAttribute('aria-hidden', showMeasureBtn ? 'false' : 'true');
+        }
+        const boldBtn = document.getElementById('floatingToolbarBold');
+        if (boldBtn) {
+          const showBoldBtn = !!selected && selectedElements.length === 1 && !state.selectedBlueprint;
+          const lineWeight = showBoldBtn ? normalizeElementLineWeight(selected.lineWeight) : DEFAULT_ELEMENT_LINE_WEIGHT;
+          const nextWeight = lineWeight >= MAX_ELEMENT_LINE_WEIGHT ? MIN_ELEMENT_LINE_WEIGHT : lineWeight + 1;
+          boldBtn.style.display = showBoldBtn ? 'flex' : 'none';
+          boldBtn.setAttribute('aria-hidden', showBoldBtn ? 'false' : 'true');
+          if (showBoldBtn) {
+            const levelEl = boldBtn.querySelector('.floating-toolbar-bold-level');
+            if (levelEl) levelEl.textContent = String(lineWeight);
+            boldBtn.dataset.level = String(lineWeight);
+            boldBtn.title = `Line weight ${lineWeight} of ${MAX_ELEMENT_LINE_WEIGHT}`;
+            boldBtn.setAttribute(
+              'aria-label',
+              `Line weight ${lineWeight} of ${MAX_ELEMENT_LINE_WEIGHT}. Tap to set line weight ${nextWeight} of ${MAX_ELEMENT_LINE_WEIGHT}.`
+            );
+          }
         }
         // Update lock icon state (single icon, toggle class)
         const lockBtn = document.getElementById('floatingToolbarLock');
@@ -7270,10 +7433,10 @@ function initCanvas() {
           zIndex: getNextElementZIndex(),
           image: el.image,
           originalImage: el.originalImage || el.image,
-          tintedCanvas: null,
-          tintedCanvasColor: null,
+          lineWeight: normalizeElementLineWeight(el.lineWeight),
           locked: !!el.locked,
         };
+        invalidateElementRenderCache(dup);
         const othersAltDup = state.elements;
         const nudgeDirsAltDup = [[SNAP_GRID_SIZE, 0], [0, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, 0], [0, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [SNAP_GRID_SIZE, -SNAP_GRID_SIZE], [-SNAP_GRID_SIZE, SNAP_GRID_SIZE]];
         for (let n = 0; n < 20; n++) {
@@ -7814,8 +7977,11 @@ function initCanvas() {
             y: el.y + 20,
             zIndex: getNextElementZIndex(),
             image: el.image,
+            originalImage: el.originalImage || el.image,
+            lineWeight: normalizeElementLineWeight(el.lineWeight),
             locked: !!el.locked,
           };
+          invalidateElementRenderCache(dup);
           state.elements.push(dup);
           newIds.push(dup.id);
         }
@@ -7888,6 +8054,7 @@ function initCanvas() {
           image: img,
           originalImage: img,
           color: null,
+          lineWeight: DEFAULT_ELEMENT_LINE_WEIGHT,
           baseScale: 1,
           locked: false,
           flipX: false,
@@ -8269,16 +8436,16 @@ function initExport() {
           ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
           const ew = el.width * scale;
           const eh = el.height * scale;
-          const exportTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+          const exportUsesCache = isElementRenderFromCanvasCache(el, renderImage);
           let prevExQe, prevExQq;
-          if (exportTinted) {
+          if (exportUsesCache) {
             prevExQe = ex.imageSmoothingEnabled;
             prevExQq = ex.imageSmoothingQuality;
             ex.imageSmoothingEnabled = true;
             ex.imageSmoothingQuality = 'high';
           }
           ex.drawImage(renderImage, -ew / 2, -eh / 2, ew, eh);
-          if (exportTinted) {
+          if (exportUsesCache) {
             ex.imageSmoothingEnabled = prevExQe;
             ex.imageSmoothingQuality = prevExQq;
           }
@@ -8350,16 +8517,16 @@ function getExportCanvasDataURL() {
         ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
         const ew = el.width * scale;
         const eh = el.height * scale;
-        const exportTinted = el.color && el.tintedCanvas && renderImage === el.tintedCanvas;
+        const exportUsesCache = isElementRenderFromCanvasCache(el, renderImage);
         let prevExQe, prevExQq;
-        if (exportTinted) {
+        if (exportUsesCache) {
           prevExQe = ex.imageSmoothingEnabled;
           prevExQq = ex.imageSmoothingQuality;
           ex.imageSmoothingEnabled = true;
           ex.imageSmoothingQuality = 'high';
         }
         ex.drawImage(renderImage, -ew / 2, -eh / 2, ew, eh);
-        if (exportTinted) {
+        if (exportUsesCache) {
           ex.imageSmoothingEnabled = prevExQe;
           ex.imageSmoothingQuality = prevExQq;
         }
@@ -8387,6 +8554,7 @@ function getDiagramDataForSave() {
       locked: !!el.locked,
       flipX: !!el.flipX,
       flipY: !!el.flipY,
+      lineWeight: normalizeElementLineWeight(el.lineWeight),
       sequenceId: el.sequenceId != null ? el.sequenceId : undefined,
       measuredLength: el.measuredLength != null ? el.measuredLength : 0,
     })),
@@ -8455,7 +8623,19 @@ function getDiagramDataForSave() {
               tx.translate(el.x + el.width / 2, el.y + el.height / 2);
               tx.rotate((el.rotation * Math.PI) / 180);
               tx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+              const thumbUsesCache = isElementRenderFromCanvasCache(el, renderImage);
+              let prevThumbQe, prevThumbQq;
+              if (thumbUsesCache) {
+                prevThumbQe = tx.imageSmoothingEnabled;
+                prevThumbQq = tx.imageSmoothingQuality;
+                tx.imageSmoothingEnabled = true;
+                tx.imageSmoothingQuality = 'high';
+              }
               tx.drawImage(renderImage, -el.width / 2, -el.height / 2, el.width, el.height);
+              if (thumbUsesCache) {
+                tx.imageSmoothingEnabled = prevThumbQe;
+                tx.imageSmoothingQuality = prevThumbQq;
+              }
               tx.restore();
             }
           }
@@ -8509,10 +8689,17 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
       const img = await loadDiagramImage(getDiagramUrl(el.assetId));
       return {
         ...el,
+        lineWeight: normalizeElementLineWeight(el.lineWeight),
         image: img,
         originalImage: img,
         tintedCanvas: null,
         tintedCanvasColor: null,
+        tintedCanvasWidth: null,
+        tintedCanvasHeight: null,
+        _tintedCanvasFailureKey: undefined,
+        boldCanvas: null,
+        boldCanvasKey: null,
+        _boldCanvasFailureKey: undefined,
       };
     })
   );
@@ -10806,6 +10993,7 @@ function renderProducts(products) {
           image: img,
           originalImage: img,
           color: null,
+          lineWeight: DEFAULT_ELEMENT_LINE_WEIGHT,
           baseScale: 1,
           locked: false,
           flipX: false,
@@ -12038,7 +12226,17 @@ if (typeof window !== 'undefined') {
     }
   };
   window.__quoteAppGetElements = function () {
-    return state.elements.map((el) => ({ id: el.id, assetId: el.assetId || null, x: el.x, y: el.y, width: el.width, height: el.height, rotation: el.rotation || 0, color: el.color || null }));
+    return state.elements.map((el) => ({
+      id: el.id,
+      assetId: el.assetId || null,
+      x: el.x,
+      y: el.y,
+      width: el.width,
+      height: el.height,
+      rotation: el.rotation || 0,
+      color: el.color || null,
+      lineWeight: normalizeElementLineWeight(el.lineWeight),
+    }));
   };
   // E2E helper: deterministic selection in touch/headless environments where click hit-testing can be flaky.
   window.__quoteAppSelectElementById = function (id) {
@@ -12158,7 +12356,9 @@ if (typeof window !== 'undefined') {
       id: el.id,
       hasOriginalImage: !!el.originalImage,
       hasTintedCanvas: !!el.tintedCanvas,
+      hasBoldCanvas: !!el.boldCanvas,
       color: el.color || null,
+      lineWeight: normalizeElementLineWeight(el.lineWeight),
       tintedCanvasColor: el.tintedCanvasColor || null,
       tintedCanvasWidth: el.tintedCanvasWidth || null,
       tintedCanvasHeight: el.tintedCanvasHeight || null,

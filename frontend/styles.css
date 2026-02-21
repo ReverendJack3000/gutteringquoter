@@ -1135,6 +1135,31 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
   display: none;
 }
 
+#floatingToolbarBold {
+  position: relative;
+  font-weight: 700;
+}
+
+#floatingToolbarBold .floating-toolbar-bold-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+#floatingToolbarBold .floating-toolbar-bold-level {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  min-width: 11px;
+  padding: 1px 3px;
+  border-radius: 999px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
 .floating-toolbar-btn.floating-toolbar-element-only {
   display: none;
 }
