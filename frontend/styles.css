@@ -5351,6 +5351,13 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   border: 1px solid #d1d1d6;
 }
 
+.labour-editor-qty-unit {
+  font-size: 12px;
+  color: #4b5563;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
 .labour-editor-stepper-btn {
   width: 38px;
   height: 38px;
@@ -5387,6 +5394,12 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   font-size: 12px;
 }
 
+.labour-editor-unit-price-suffix {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .labour-editor-line-total {
   font-size: 20px;
   color: #111827;
@@ -5411,10 +5424,11 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   backdrop-filter: blur(12px);
 }
 
+/* 54.97: default untoggled (outline); Apply state via .labour-editor-add-btn--apply (green) */
 .labour-editor-actions .btn {
   border: 1px solid #007aff;
-  color: #ffffff;
-  background: #007aff;
+  color: #007aff;
+  background: transparent;
   min-height: 44px;
   border-radius: 12px;
   font-weight: 600;
@@ -5422,7 +5436,29 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 }
 
 .labour-editor-actions .btn:hover {
-  background: #0a84ff;
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.labour-editor-actions .btn:disabled {
+  border-color: #c7c7cc;
+  color: #8e8e93;
+  background: #f2f2f7;
+  cursor: not-allowed;
+}
+
+.labour-editor-actions .btn:disabled:hover {
+  background: #f2f2f7;
+}
+
+.labour-editor-actions .btn.labour-editor-add-btn--apply {
+  background: #34c759;
+  color: #ffffff;
+  border-color: #34c759;
+}
+
+.labour-editor-actions .btn.labour-editor-add-btn--apply:hover {
+  background: #2db34d;
+  border-color: #2db34d;
 }
 
 .labour-editor-tax-toggle {
@@ -5594,6 +5630,10 @@ body[data-viewport-mode="mobile"] #quoteModal.quote-modal--mobile-fullscreen .qu
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-content.quote-modal-content--scroll-locked {
+  overflow: hidden;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-modal-header {
@@ -5992,6 +6032,10 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-modal-actions {
 }
 
 body[data-viewport-mode="mobile"] #quoteModal #labourEditorModal {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
   align-items: stretch;
 }
 

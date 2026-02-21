@@ -349,6 +349,43 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [ ] **54.96.5** **README updates.** Update usage + E2E coverage wording to reflect popover-based mobile ruler entry (`#badgeLengthInput`) and hidden mobile measurement deck.
 - [ ] **54.96.6** **Manual mobile QA + deploy safety.** Verify Safari/Chrome mobile keypad behavior and no desktop regression; run `npm test`; confirm no Railway infra/config changes.
 
+**54.97 Labour editor button: Apply when dirty, untoggled by default**  
+*Plan: docs/plans/2026-02-21-labour-editor-button-apply-and-untoggled.md. Scope: mobile-only (labour editor opens only on mobile); desktop and Railway unchanged.*
+
+- [x] **54.97.1** **Dirty tracking and initial snapshot.** In `quoteLineEditorState` add `initialQty`, `initialUnitPrice`, `initialTaxApplicable`. Set them in `openLabourEditorModal` from the row and in the Add Row click handler to the new row’s draft values so new row is not dirty.
+- [x] **54.97.2** **Update button state helper and wiring.** Add `updateLabourEditorAddButtonState()` (text "Apply" vs "Add Labour Line", class for green vs default). Call it from `openLabourEditorModal` after render, at end of `renderLabourEditorRows` for labour, and from `setQtyDraft` / `setRateDraft` / tax toggle in `renderLabourEditorRows`.
+- [x] **54.97.3** **Add-button click: Apply when dirty, add row when not.** In `#labourEditorAddRowBtn` click handler, if dirty call `applyQuoteLineEditorChanges()`; else keep current add-row behaviour.
+- [x] **54.97.4** **CSS: default untoggled + green Apply.** Default `.labour-editor-actions .btn` to outline/secondary (untoggled); add modifier class for Apply state (green background, white text). Preserve 44px min-height and contrast.
+- [x] **54.97.5** **Verify.** Manual mobile: open labour editor → untoggled "Add Labour Line"; change qty/rate/tax → green "Apply"; click Apply applies and closes; click when not dirty adds row. Desktop unchanged; Railway-safe.
+
+**54.99 Labour editor: editable Markup % (mobile popup only, no backend change)**  
+*Plan: docs/plans/2026-02-21-labour-editor-markup-enable.md. Cost from REP-LAB; unit price = cost × (1+markup/100); persist only unit price on row.*
+
+- [x] **54.99.1** **getLabourCostPrice()** from state.products REP-LAB (fallback 35).
+- [x] **54.99.2** **draftMarkup/initialMarkup** in quoteLineEditorState; set in openLabourEditorModal and Add Row handler.
+- [x] **54.99.3** **Markup input for labour** in renderLabourEditorRows; Purchase Cost = labour cost; markup change → draftUnitPrice; rate change → draftMarkup derived.
+- [x] **54.99.4** **Dirty and revert** include markup (draftMarkup vs initialMarkup); revert still only restores unit price/hours on row.
+- [x] **54.99.5** **Verify** material rows unchanged; labour markup editable; Railway-safe.
+
+**54.98 Mobile quote: non-labour line editor popup parity + no cut-off (mobile-only, desktop unchanged, Railway-safe)**  
+*Context: Tapping non-labour rows currently opens the shared `#labourEditorModal` (`openLabourEditorModal`, `rowType: material`) but can appear vertically offset/cut off and reveal the quote ServiceM8 section behind it. Keep one shared popup for labour/material with full-screen mobile behavior.*
+
+- [x] **54.98.1** **Root-cause fix: editor overlay anchoring independent of quote scroll.** In `frontend/styles.css`, make the mobile quote editor overlay viewport-anchored (`#quoteModal #labourEditorModal` with fixed full-screen inset) so it no longer depends on `.quote-modal-content` scroll position.
+- [x] **54.98.2** **Prevent background quote scroll while editor open.** In `frontend/app.js` modal registration/hooks, lock `#quoteModal .quote-modal-content` scroll on `labourEditorModal` open and restore on close so table/ServiceM8 content cannot shift behind the editor.
+- [x] **54.98.3** **Material-row editor layout parity with labour popup shell.** Keep shared editor structure for material rows and remove dead-space footer chrome. *(Superseded by 54.100 for explicit material `Apply Changes` action policy.)*
+- [x] **54.98.4** **Desktop and labour-row guardrails.** Ensure desktop quote modal remains unchanged and labour-row editor behavior (add/apply/remove, totals, Add-to-Job gating) is preserved; only mobile popup presentation/scroll behavior changes.
+- [x] **54.98.5** **E2E regression coverage for material popup viewport fit.** Extend `e2e/run.js` mobile quote assertions so material-row tap opens editor fully in viewport (no top cut-off, no ServiceM8 footer bleed-through) while existing labour/material edit assertions still pass.
+- [ ] **54.98.6** **Manual mobile QA + Railway safety.** Validate iOS Safari + Android Chrome (portrait/landscape, 200% zoom) for no clipping/footer bleed and reachable actions; run `npm test`; confirm no Railway build/env/config changes.
+
+**54.100 Mobile quote: material footer Apply action parity (mobile-only, desktop unchanged, Railway-safe)**  
+*Note: numbered 54.100 because 54.99 is already allocated in this section.*
+
+- [x] **54.100.1** **Show footer action for material rows in shared editor.** Keep `.labour-editor-actions` visible for editable material rows in `#labourEditorModal`; do not hide footer chrome for non-labour rows.
+- [x] **54.100.2** **Dirty-gated `Apply Changes` behavior + a11y labels.** In `frontend/app.js`, make editor dirty-state row-type aware (labour + material). For materials: footer label `Apply Changes`, disabled when clean, enabled + apply style when qty changes; update aria-label accordingly.
+- [x] **54.100.3** **Preserve labour add/apply behavior with row-type click routing.** Keep labour flow unchanged (`Add Labour Line` when clean, `Apply` when dirty), while material footer click applies only when dirty and closes modal through existing apply path.
+- [x] **54.100.4** **E2E updates for material apply + labour regression guard.** Update `e2e/run.js` mobile quote checks so material popup asserts visible footer action, disabled-before-edit, enabled-after-edit, and apply-via-footer behavior; retain labour add/apply/remove assertions.
+- [ ] **54.100.5** **Manual mobile QA + Railway safety verification.** Validate iOS Safari + Android Chrome (portrait/landscape, 200% zoom), run `npm test`, and confirm no Railway infra/env/build changes.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

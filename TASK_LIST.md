@@ -78,6 +78,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
 | 54 | 54.93.8.1–54.93.8.4 | Mobile quote: stepper for section-header metres (Gutter/Downpipe length). Plan: docs/plans/2026-02-21-mobile-quote-section-header-metres-stepper.md. Context: app.js syncMobileQuoteLineSummaries 1366+, desktop cleanup 1376–1411, rebuild 3719–3735 / 3776–3792, profileLengthOverride 3654–3670, getElementsFromQuoteTable header read 3002–3022; styles.css .quote-mobile-qty-stepper 5749–5784. |
+| 54 | 54.98.6 | Mobile quote non-labour line editor popup: real-device manual QA/sign-off pending (iOS Safari + Android Chrome). Implementation + E2E regression coverage complete; desktop unchanged; Railway-safe. |
+| 54 | 54.100.5 | Mobile quote material footer Apply action parity: manual mobile QA + Railway safety verification pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). |
 | 54 | 54.95.1–54.95.7 | Mobile-only orientation policy (landscape diagram canvas, portrait non-diagram UI, graceful fallback, E2E/docs) + follow-up to prevent landscape→portrait canvas zoom drift into header. |
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |

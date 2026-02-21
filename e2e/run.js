@@ -2093,6 +2093,31 @@ async function run() {
       }
       console.log('  ✓ Mobile orientation policy: labour editor remains portrait');
 
+      // 54.97: Add row when not dirty, then remove; then edit and Done (button shows Apply when dirty).
+      await clickSelectorViaDom(mobilePage, '#labourEditorAddRowBtn');
+      await delay(220);
+      const labourAfterAdd = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
+      if (labourAfterAdd < 2) throw new Error('Mobile labour editor: add row should create a second labour row');
+      const removedExtraRow = await mobilePage.evaluate(() => {
+        const removeButton = document.querySelector('#labourEditorList .labour-editor-remove-btn');
+        if (!removeButton || removeButton.disabled) return false;
+        removeButton.click();
+        return true;
+      });
+      if (!removedExtraRow) throw new Error('Mobile labour editor: remove button should be available after adding second row');
+      await delay(220);
+      const labourAfterRemove = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
+      if (labourAfterRemove !== 1) throw new Error(`Mobile labour editor: expected 1 labour row after remove, got ${labourAfterRemove}`);
+      // Remove closes the modal (54.97); reopen labour editor on the remaining row to edit.
+      const labourReopen = await mobilePage.evaluate(() => {
+        const row = document.querySelector('#quoteTableBody tr[data-labour-row="true"]');
+        if (!row) return false;
+        row.click();
+        return true;
+      });
+      if (!labourReopen) throw new Error('Mobile labour editor: could not reopen after remove');
+      await delay(320);
+
       const labourEditApplied = await mobilePage.evaluate(() => {
         const hoursInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
         const rateInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="rate"]');
@@ -2120,20 +2145,6 @@ async function run() {
         throw new Error('Mobile labour editor: labour warning should hide once hours are added');
       }
 
-      await clickSelectorViaDom(mobilePage, '#labourEditorAddRowBtn');
-      await delay(220);
-      const labourAfterAdd = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
-      if (labourAfterAdd < 2) throw new Error('Mobile labour editor: add row should create a second labour row');
-      const removedExtraRow = await mobilePage.evaluate(() => {
-        const removeButton = document.querySelector('#labourEditorList .labour-editor-remove-btn');
-        if (!removeButton || removeButton.disabled) return false;
-        removeButton.click();
-        return true;
-      });
-      if (!removedExtraRow) throw new Error('Mobile labour editor: remove button should be available after adding second row');
-      await delay(220);
-      const labourAfterRemove = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
-      if (labourAfterRemove !== 1) throw new Error(`Mobile labour editor: expected 1 labour row after remove, got ${labourAfterRemove}`);
       await clickSelectorViaDom(mobilePage, '#labourEditorDoneBtn');
       await delay(220);
       const labourEditorClosed = await mobilePage.evaluate(() => {
@@ -2148,27 +2159,74 @@ async function run() {
       }
 
       const materialEditorOpenState = await mobilePage.evaluate(() => {
+        const quoteContent = document.querySelector('#quoteModal .quote-modal-content');
+        if (quoteContent) quoteContent.scrollTop = quoteContent.scrollHeight;
         const row = document.querySelector('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])');
         if (!row) return { found: false };
         const assetId = row.dataset.assetId || '';
         row.click();
         const modal = document.getElementById('labourEditorModal');
+        const editorContent = document.getElementById('labourEditorContent');
+        const actionsWrap = document.querySelector('#labourEditorModal .labour-editor-actions');
         const addBtn = document.getElementById('labourEditorAddRowBtn');
         const qtyInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
+        const rect = editorContent ? editorContent.getBoundingClientRect() : null;
+        const probeX = Math.max(2, Math.round(window.innerWidth / 2));
+        const topProbe = document.elementFromPoint(probeX, 4);
+        const bottomProbe = document.elementFromPoint(probeX, Math.max(2, window.innerHeight - 4));
         return {
           found: true,
           assetId,
           open: !!modal && !modal.hasAttribute('hidden'),
           hasQtyInput: !!qtyInput,
-          addRowHidden: !addBtn || addBtn.hidden || window.getComputedStyle(addBtn).display === 'none',
+          footerActionVisible: !!addBtn && !addBtn.hidden && window.getComputedStyle(addBtn).display !== 'none',
+          actionsVisible: !!actionsWrap && !actionsWrap.hidden && window.getComputedStyle(actionsWrap).display !== 'none',
+          footerActionText: (addBtn?.textContent || '').trim(),
+          footerActionDisabled: !!addBtn?.disabled,
+          footerActionApplyState: !!addBtn?.classList?.contains('labour-editor-add-btn--apply'),
+          rect,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          topCoveredByEditor: !!topProbe && !!topProbe.closest('#labourEditorModal'),
+          bottomCoveredByEditor: !!bottomProbe && !!bottomProbe.closest('#labourEditorModal'),
         };
       });
       if (!materialEditorOpenState.found) throw new Error('Mobile material editor: no material row found to open');
       if (!materialEditorOpenState.open || !materialEditorOpenState.hasQtyInput) {
         throw new Error('Mobile material editor: tapping material row should open popup with quantity input');
       }
-      if (!materialEditorOpenState.addRowHidden) {
-        throw new Error('Mobile material editor: add labour line action should stay hidden for material rows');
+      if (!materialEditorOpenState.footerActionVisible || !materialEditorOpenState.actionsVisible) {
+        throw new Error('Mobile material editor: footer action should be visible for material rows');
+      }
+      if (materialEditorOpenState.footerActionText !== 'Apply Changes') {
+        throw new Error(`Mobile material editor: expected footer label "Apply Changes", got "${materialEditorOpenState.footerActionText}"`);
+      }
+      if (!materialEditorOpenState.footerActionDisabled) {
+        throw new Error('Mobile material editor: Apply Changes should be disabled before edits');
+      }
+      if (materialEditorOpenState.footerActionApplyState) {
+        throw new Error('Mobile material editor: Apply Changes should not be in active state before edits');
+      }
+      if (!materialEditorOpenState.rect) {
+        throw new Error('Mobile material editor: expected editor content bounds while popup is open');
+      }
+      if (materialEditorOpenState.rect.left > 1 || materialEditorOpenState.rect.top > 1) {
+        throw new Error(
+          `Mobile material editor: expected full-viewport origin near (0,0), got (${materialEditorOpenState.rect.left.toFixed(2)}, ${materialEditorOpenState.rect.top.toFixed(2)})`
+        );
+      }
+      if (Math.abs(materialEditorOpenState.rect.width - materialEditorOpenState.viewportWidth) > 2) {
+        throw new Error(
+          `Mobile material editor: width should match viewport, modal=${materialEditorOpenState.rect.width.toFixed(2)} viewport=${materialEditorOpenState.viewportWidth}`
+        );
+      }
+      if (Math.abs(materialEditorOpenState.rect.height - materialEditorOpenState.viewportHeight) > 2) {
+        throw new Error(
+          `Mobile material editor: height should match viewport, modal=${materialEditorOpenState.rect.height.toFixed(2)} viewport=${materialEditorOpenState.viewportHeight}`
+        );
+      }
+      if (!materialEditorOpenState.topCoveredByEditor || !materialEditorOpenState.bottomCoveredByEditor) {
+        throw new Error('Mobile material editor: popup should cover top and bottom viewport edges (no cut-off or footer bleed-through)');
       }
       const materialEditApplied = await mobilePage.evaluate(() => {
         const qtyInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
@@ -2179,8 +2237,34 @@ async function run() {
         return true;
       });
       if (!materialEditApplied) throw new Error('Mobile material editor: failed to set quantity in popup');
-      await clickSelectorViaDom(mobilePage, '#labourEditorDoneBtn');
+      const materialEditorDirtyState = await mobilePage.evaluate(() => {
+        const addBtn = document.getElementById('labourEditorAddRowBtn');
+        return {
+          visible: !!addBtn && !addBtn.hidden && window.getComputedStyle(addBtn).display !== 'none',
+          text: (addBtn?.textContent || '').trim(),
+          disabled: !!addBtn?.disabled,
+          applyState: !!addBtn?.classList?.contains('labour-editor-add-btn--apply'),
+        };
+      });
+      if (!materialEditorDirtyState.visible) {
+        throw new Error('Mobile material editor: footer action should stay visible after edits');
+      }
+      if (materialEditorDirtyState.text !== 'Apply Changes') {
+        throw new Error(`Mobile material editor: footer label should remain "Apply Changes" after edit, got "${materialEditorDirtyState.text}"`);
+      }
+      if (materialEditorDirtyState.disabled) {
+        throw new Error('Mobile material editor: Apply Changes should enable after quantity edit');
+      }
+      if (!materialEditorDirtyState.applyState) {
+        throw new Error('Mobile material editor: Apply Changes should enter active state after quantity edit');
+      }
+      await clickSelectorViaDom(mobilePage, '#labourEditorAddRowBtn');
       await delay(900);
+      const materialEditorClosed = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('labourEditorModal');
+        return !!modal && modal.hasAttribute('hidden');
+      });
+      if (!materialEditorClosed) throw new Error('Mobile material editor: Apply Changes should close popup');
       const materialQtyUpdated = await mobilePage.evaluate((assetId) => {
         const rows = Array.from(document.querySelectorAll('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])'))
           .filter((row) => row.dataset.assetId === assetId);
@@ -2197,7 +2281,7 @@ async function run() {
           return Number.isFinite(qtyVal) && Math.abs(qtyVal - expectedQty) < 0.01;
         });
       }, materialEditorOpenState.assetId);
-      if (!materialQtyUpdated) throw new Error('Mobile material editor: Save should apply quantity change for material row');
+      if (!materialQtyUpdated) throw new Error('Mobile material editor: Apply Changes should apply quantity change for material row');
       await clickSelectorViaDom(mobilePage, '#quoteModalBackBtn');
       await delay(260);
       const mobileQuoteClosed = await mobilePage.evaluate(() => {

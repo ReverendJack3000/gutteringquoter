@@ -550,10 +550,20 @@ const quoteLineEditorState = {
   qtyStep: 1,
   title: '',
   isTaxApplicable: true,
+  /** Snapshot when opening labour editor or after adding row; used for dirty check (54.97). */
+  initialQty: 0,
+  initialUnitPrice: 0,
+  initialTaxApplicable: true,
+  /** Labour only: markup % in editor; unit price = cost × (1+markup/100). (54.99) */
+  draftMarkup: 0,
+  initialMarkup: 0,
 };
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
 let hasPricingChanges = false;
+
+/** True when labour editor is closed via Save/Apply (so onClose should not revert). */
+let labourEditorJustApplied = false;
 
 const MAX_UNDO_HISTORY = 50;
 let undoHistory = [];
@@ -857,8 +867,19 @@ function initCropModal() {
 function hideQuoteModal() {
   closeAccessibleModal('labourEditorModal');
   closeAccessibleModal('quoteModal');
+  setQuoteModalScrollLock(false);
   setQuoteEditMode(false);
   syncQuoteModalViewportState();
+}
+
+function setQuoteModalScrollLock(locked) {
+  const content = document.querySelector('#quoteModal .quote-modal-content');
+  if (!(content instanceof HTMLElement)) return;
+  if (layoutState.viewportMode !== 'mobile') {
+    content.classList.remove('quote-modal-content--scroll-locked');
+    return;
+  }
+  content.classList.toggle('quote-modal-content--scroll-locked', !!locked);
 }
 
 function syncQuoteModalViewportState() {
@@ -868,6 +889,7 @@ function syncQuoteModalViewportState() {
   modal.classList.toggle('quote-modal--mobile-fullscreen', isMobileQuote);
   if (isMobileQuote) modal.setAttribute('data-mobile-fullscreen', 'true');
   else modal.removeAttribute('data-mobile-fullscreen');
+  if (!isMobileQuote) setQuoteModalScrollLock(false);
 }
 
 function updateSavePricingButtonState() {
@@ -1695,9 +1717,71 @@ function closeLabourEditorModal() {
   closeAccessibleModal('labourEditorModal');
 }
 
+/** Revert labour row to initial values (no close). Used when closing without saving (Cancel / backdrop / Escape). */
+function revertLabourEditorToInitial() {
+  const row = findQuoteRowByUid(quoteLineEditorState.rowUid);
+  if (row && row.dataset.labourRow === 'true') {
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+    if (hoursInput) hoursInput.value = formatQuoteQtyDisplay(quoteLineEditorState.initialQty);
+    if (unitPriceInput) unitPriceInput.value = formatQuoteQtyDisplay(quoteLineEditorState.initialUnitPrice);
+    updateLabourRowTotal(row);
+    updateQuoteTotalWarning();
+  }
+  recalcQuoteTotalsFromTableBody();
+  syncMobileQuoteLineSummaries();
+}
+
+/** True if the shared quote-line editor has unsaved changes. */
+function isQuoteLineEditorDirty() {
+  const rowType = quoteLineEditorState.rowType;
+  if (rowType !== 'labour' && rowType !== 'material') return false;
+  const qtyStep = Number.isFinite(quoteLineEditorState.qtyStep) && quoteLineEditorState.qtyStep > 0
+    ? quoteLineEditorState.qtyStep
+    : (rowType === 'labour' ? 0.5 : 1);
+  const roundQty = (v) => (Number.isFinite(v) ? (qtyStep >= 1 ? Math.round(v) : Math.round(v * 1000) / 1000) : 0);
+  const qtyDirty = roundQty(quoteLineEditorState.draftQty) !== roundQty(quoteLineEditorState.initialQty);
+  if (rowType === 'material') return qtyDirty;
+  const roundPrice = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : 0);
+  const roundMarkup = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : 0);
+  return qtyDirty
+    || roundPrice(quoteLineEditorState.draftUnitPrice) !== roundPrice(quoteLineEditorState.initialUnitPrice)
+    || quoteLineEditorState.isTaxApplicable !== quoteLineEditorState.initialTaxApplicable
+    || roundMarkup(quoteLineEditorState.draftMarkup) !== roundMarkup(quoteLineEditorState.initialMarkup);
+}
+
+/** Update shared quote-line editor footer button state by row type. */
+function updateLabourEditorAddButtonState() {
+  const addBtn = document.getElementById('labourEditorAddRowBtn');
+  const modal = document.getElementById('labourEditorModal');
+  if (!addBtn || !modal || modal.hasAttribute('hidden')) return;
+  const isLabour = quoteLineEditorState.rowType === 'labour';
+  const isMaterial = quoteLineEditorState.rowType === 'material';
+  if (!isLabour && !isMaterial) {
+    addBtn.hidden = true;
+    addBtn.disabled = true;
+    addBtn.classList.remove('labour-editor-add-btn--apply');
+    return;
+  }
+
+  addBtn.hidden = false;
+  const dirty = isQuoteLineEditorDirty();
+  if (isLabour) {
+    addBtn.textContent = dirty ? 'Apply' : 'Add Labour Line';
+    addBtn.setAttribute('aria-label', dirty ? 'Apply changes to labour line' : 'Add labour line');
+    addBtn.disabled = false;
+  } else {
+    addBtn.textContent = 'Apply Changes';
+    addBtn.setAttribute('aria-label', 'Apply changes to material line');
+    addBtn.disabled = !dirty;
+  }
+  addBtn.classList.toggle('labour-editor-add-btn--apply', dirty);
+}
+
 function renderLabourEditorRows() {
   const list = document.getElementById('labourEditorList');
   const addBtn = document.getElementById('labourEditorAddRowBtn');
+  const actionsWrap = document.querySelector('#labourEditorModal .labour-editor-actions');
   if (!list) return;
   list.innerHTML = '';
 
@@ -1706,6 +1790,7 @@ function renderLabourEditorRows() {
     quoteLineEditorState.rowUid = '';
     quoteLineEditorState.rowType = '';
     if (addBtn) addBtn.hidden = true;
+    if (actionsWrap) actionsWrap.hidden = true;
     return;
   }
 
@@ -1714,7 +1799,8 @@ function renderLabourEditorRows() {
     ? quoteLineEditorState.qtyStep
     : (isLabour ? 0.5 : 1);
 
-  if (addBtn) addBtn.hidden = !isLabour;
+  if (addBtn) addBtn.hidden = false;
+  if (actionsWrap) actionsWrap.hidden = false;
 
   const card = document.createElement('div');
   card.className = 'labour-editor-row';
@@ -1757,6 +1843,13 @@ function renderLabourEditorRows() {
   plusBtn.setAttribute('aria-label', 'Increase quantity');
   stepper.appendChild(minusBtn);
   stepper.appendChild(qtyEditor);
+  if (isLabour) {
+    const qtyUnit = document.createElement('span');
+    qtyUnit.className = 'labour-editor-qty-unit';
+    qtyUnit.textContent = 'hrs';
+    qtyUnit.setAttribute('aria-hidden', 'true');
+    stepper.appendChild(qtyUnit);
+  }
   stepper.appendChild(plusBtn);
   quantityRow.appendChild(quantityLabel);
   quantityRow.appendChild(stepper);
@@ -1768,7 +1861,6 @@ function renderLabourEditorRows() {
   purchaseLabel.textContent = 'Purchase Cost';
   const purchaseValue = document.createElement('span');
   purchaseValue.className = 'labour-editor-field-value';
-  purchaseValue.textContent = formatCurrency(getQuoteLineCost(row));
   purchaseRow.appendChild(purchaseLabel);
   purchaseRow.appendChild(purchaseValue);
 
@@ -1777,12 +1869,32 @@ function renderLabourEditorRows() {
   const markupLabel = document.createElement('span');
   markupLabel.className = 'labour-editor-field-label';
   markupLabel.textContent = 'Markup';
-  const markupValue = document.createElement('span');
-  markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
-  const markup = getQuoteLineMarkup(row);
-  markupValue.textContent = Number.isFinite(markup) ? `${formatQuoteQtyDisplay(markup)}%` : '—';
-  markupRow.appendChild(markupLabel);
-  markupRow.appendChild(markupValue);
+  let markupEditor = null;
+  if (isLabour) {
+    markupEditor = document.createElement('input');
+    markupEditor.type = 'number';
+    markupEditor.min = '0';
+    markupEditor.max = '1000';
+    markupEditor.step = '0.01';
+    markupEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftMarkup);
+    markupEditor.className = 'labour-editor-field-input';
+    markupEditor.dataset.field = 'markup';
+    markupEditor.setAttribute('aria-label', 'Markup percentage');
+    markupRow.appendChild(markupLabel);
+    markupRow.appendChild(markupEditor);
+    const markupPctSuffix = document.createElement('span');
+    markupPctSuffix.className = 'labour-editor-unit-price-suffix';
+    markupPctSuffix.textContent = ' %';
+    markupPctSuffix.setAttribute('aria-hidden', 'true');
+    markupRow.appendChild(markupPctSuffix);
+  } else {
+    const markupValue = document.createElement('span');
+    markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
+    const markup = getQuoteLineMarkup(row);
+    markupValue.textContent = Number.isFinite(markup) ? `${formatQuoteQtyDisplay(markup)}%` : '—';
+    markupRow.appendChild(markupLabel);
+    markupRow.appendChild(markupValue);
+  }
 
   const unitPriceRow = document.createElement(isLabour ? 'label' : 'div');
   unitPriceRow.className = 'labour-editor-group-row labour-editor-field';
@@ -1791,6 +1903,7 @@ function renderLabourEditorRows() {
   rateLabel.textContent = 'Unit Price';
   unitPriceRow.appendChild(rateLabel);
   let rateEditor = null;
+  let unitPriceSuffix = null;
   if (isLabour) {
     rateEditor = document.createElement('input');
     rateEditor.type = 'number';
@@ -1801,6 +1914,9 @@ function renderLabourEditorRows() {
     rateEditor.dataset.field = 'rate';
     rateEditor.setAttribute('aria-label', 'Unit price');
     unitPriceRow.appendChild(rateEditor);
+    unitPriceSuffix = document.createElement('span');
+    unitPriceSuffix.className = 'labour-editor-unit-price-suffix';
+    unitPriceRow.appendChild(unitPriceSuffix);
   } else {
     const unitValue = document.createElement('span');
     unitValue.className = 'labour-editor-field-value';
@@ -1810,7 +1926,6 @@ function renderLabourEditorRows() {
 
   const note = document.createElement('p');
   note.className = 'labour-editor-note';
-  note.textContent = 'Unit Price Excludes GST';
 
   const taxRow = document.createElement('div');
   taxRow.className = 'labour-editor-group-row';
@@ -1870,6 +1985,29 @@ function renderLabourEditorRows() {
   card.appendChild(rowActions);
   list.appendChild(card);
 
+  const updatePriceDisplays = () => {
+    const unitPrice = Number.isFinite(quoteLineEditorState.draftUnitPrice) ? quoteLineEditorState.draftUnitPrice : 0;
+    const incUnitPrice = Math.round(unitPrice * 1.15 * 100) / 100;
+    if (isLabour) {
+      const cost = getLabourCostPrice();
+      const incCost = Math.round(cost * 1.15 * 100) / 100;
+      purchaseValue.textContent = quoteLineEditorState.isTaxApplicable
+        ? `${formatCurrency(incCost)} inc GST`
+        : `${formatCurrency(cost)} exc GST`;
+      if (unitPriceSuffix) {
+        unitPriceSuffix.textContent = quoteLineEditorState.isTaxApplicable
+          ? ` (${formatCurrency(incUnitPrice)} inc GST)`
+          : ' (exc GST)';
+      }
+      note.textContent = quoteLineEditorState.isTaxApplicable
+        ? 'Unit price and total include 15% GST.'
+        : 'Unit Price Excludes GST';
+    } else {
+      purchaseValue.textContent = formatCurrency(getQuoteLineCost(row));
+      note.textContent = 'Unit Price Excludes GST';
+    }
+  };
+
   const rerenderTotals = () => {
     const qty = Number.isFinite(quoteLineEditorState.draftQty) ? quoteLineEditorState.draftQty : 0;
     const unitPrice = Number.isFinite(quoteLineEditorState.draftUnitPrice) ? quoteLineEditorState.draftUnitPrice : 0;
@@ -1878,6 +2016,7 @@ function renderLabourEditorRows() {
       ? Math.round(exGSTTotal * 1.15 * 100) / 100
       : exGSTTotal;
     lineTotal.textContent = formatCurrency(displayTotal);
+    updatePriceDisplays();
   };
 
   const setQtyDraft = (nextValue) => {
@@ -1897,6 +2036,7 @@ function renderLabourEditorRows() {
       }
     }
     rerenderTotals();
+    updateLabourEditorAddButtonState();
   };
 
   qtyEditor.addEventListener('input', () => setQtyDraft(qtyEditor.value));
@@ -1910,8 +2050,13 @@ function renderLabourEditorRows() {
       if (!Number.isFinite(next) || next < 0) next = 0;
       next = Math.round(next * 100) / 100;
       quoteLineEditorState.draftUnitPrice = next;
+      const cost = getLabourCostPrice();
+      if (cost > 0) {
+        quoteLineEditorState.draftMarkup = Math.round((next / cost - 1) * 10000) / 100;
+        quoteLineEditorState.draftMarkup = Math.max(0, Math.min(1000, quoteLineEditorState.draftMarkup));
+        if (markupEditor) markupEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftMarkup);
+      }
       rateEditor.value = formatQuoteQtyDisplay(next);
-      purchaseValue.textContent = formatCurrency(next);
       const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
       const unitPriceInput = targetRow?.querySelector('.quote-labour-unit-price-input');
       if (unitPriceInput) unitPriceInput.value = formatQuoteQtyDisplay(next);
@@ -1920,14 +2065,41 @@ function renderLabourEditorRows() {
         updateQuoteTotalWarning();
       }
       rerenderTotals();
+      updateLabourEditorAddButtonState();
     };
     rateEditor.addEventListener('input', () => setRateDraft(rateEditor.value));
     rateEditor.addEventListener('change', () => setRateDraft(rateEditor.value));
   }
 
+  if (markupEditor) {
+    const setMarkupDraft = (nextValue) => {
+      let next = parseFloat(nextValue);
+      if (!Number.isFinite(next) || next < 0) next = 0;
+      next = Math.max(0, Math.min(1000, Math.round(next * 100) / 100));
+      quoteLineEditorState.draftMarkup = next;
+      const cost = getLabourCostPrice();
+      const unitPrice = cost > 0 ? Math.round(cost * (1 + next / 100) * 100) / 100 : 0;
+      quoteLineEditorState.draftUnitPrice = unitPrice;
+      markupEditor.value = formatQuoteQtyDisplay(next);
+      if (rateEditor) rateEditor.value = formatQuoteQtyDisplay(unitPrice);
+      const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
+      const unitPriceInput = targetRow?.querySelector('.quote-labour-unit-price-input');
+      if (unitPriceInput) unitPriceInput.value = formatQuoteQtyDisplay(unitPrice);
+      if (targetRow) {
+        updateLabourRowTotal(targetRow);
+        updateQuoteTotalWarning();
+      }
+      rerenderTotals();
+      updateLabourEditorAddButtonState();
+    };
+    markupEditor.addEventListener('input', () => setMarkupDraft(markupEditor.value));
+    markupEditor.addEventListener('change', () => setMarkupDraft(markupEditor.value));
+  }
+
   taxToggleInput.addEventListener('change', () => {
     quoteLineEditorState.isTaxApplicable = !!taxToggleInput.checked;
     rerenderTotals();
+    updateLabourEditorAddButtonState();
   });
 
   removeBtn.addEventListener('click', () => {
@@ -1943,6 +2115,7 @@ function renderLabourEditorRows() {
   });
 
   rerenderTotals();
+  updateLabourEditorAddButtonState();
 }
 
 function applyQuoteLineEditorChanges() {
@@ -1971,6 +2144,7 @@ function applyQuoteLineEditorChanges() {
     }
   }
   syncMobileQuoteLineSummaries();
+  labourEditorJustApplied = true;
   closeLabourEditorModal();
 }
 
@@ -1985,13 +2159,24 @@ function openLabourEditorModal(row, triggerEl) {
   quoteLineEditorState.draftUnitPrice = getQuoteLineUnitPrice(row);
   quoteLineEditorState.qtyStep = qtyMeta.step;
   quoteLineEditorState.title = getQuoteLineProductName(row);
-  quoteLineEditorState.isTaxApplicable = true;
+  quoteLineEditorState.isTaxApplicable = false;
+  quoteLineEditorState.initialQty = quoteLineEditorState.draftQty;
+  quoteLineEditorState.initialUnitPrice = quoteLineEditorState.draftUnitPrice;
+  quoteLineEditorState.initialTaxApplicable = quoteLineEditorState.isTaxApplicable;
+  if (quoteLineEditorState.rowType === 'labour') {
+    const cost = getLabourCostPrice();
+    quoteLineEditorState.draftMarkup = cost > 0
+      ? Math.round((quoteLineEditorState.draftUnitPrice / cost - 1) * 10000) / 100
+      : 0;
+    quoteLineEditorState.initialMarkup = quoteLineEditorState.draftMarkup;
+  }
   renderLabourEditorRows();
   const firstInput = modal.querySelector('.labour-editor-field-input[data-field="qty"]');
   openAccessibleModal('labourEditorModal', {
     triggerEl: triggerEl || row || document.getElementById('quoteModalBackBtn'),
     initialFocusEl: firstInput || document.getElementById('labourEditorDoneBtn'),
   });
+  updateLabourEditorAddButtonState();
 }
 
 function syncMobileLabourRowSummary() {
@@ -2001,6 +2186,13 @@ function syncMobileLabourRowSummary() {
 function getDefaultLabourUnitPrice() {
   const rate = cachedLabourRates.find((r) => r.id === 'REP-LAB') || cachedLabourRates[0];
   return rate ? Number(rate.hourlyRate) : 100;
+}
+
+/** Labour cost price from REP-LAB product for markup calculation in labour editor (54.99). Fallback 35 if product not loaded. */
+function getLabourCostPrice() {
+  const product = state.products?.find((p) => p.id === 'REP-LAB');
+  const cost = product?.cost_price;
+  return Number.isFinite(cost) && cost >= 0 ? cost : 35;
 }
 
 /** Update a single labour row's total cell and dataset from hours and unit price (Section 50, labour as product). */
@@ -2450,7 +2642,17 @@ function initQuoteModal() {
   labourEditorCloseBtn?.addEventListener('click', closeLabourEditorModal);
   labourEditorDoneBtn?.addEventListener('click', applyQuoteLineEditorChanges);
   labourEditorAddRowBtn?.addEventListener('click', () => {
-    if (quoteLineEditorState.rowType !== 'labour') return;
+    const rowType = quoteLineEditorState.rowType;
+    if (rowType === 'material') {
+      if (!isQuoteLineEditorDirty()) return;
+      applyQuoteLineEditorChanges();
+      return;
+    }
+    if (rowType !== 'labour') return;
+    if (isQuoteLineEditorDirty()) {
+      applyQuoteLineEditorChanges();
+      return;
+    }
     const emptyRow = getEmptyRow();
     if (!emptyRow) return;
     const newRow = createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
@@ -2463,6 +2665,14 @@ function initQuoteModal() {
     quoteLineEditorState.draftUnitPrice = parseFloat(newRow.querySelector('.quote-labour-unit-price-input')?.value) || getDefaultLabourUnitPrice();
     quoteLineEditorState.qtyStep = 0.5;
     quoteLineEditorState.title = getQuoteLineProductName(newRow);
+    quoteLineEditorState.initialQty = quoteLineEditorState.draftQty;
+    quoteLineEditorState.initialUnitPrice = quoteLineEditorState.draftUnitPrice;
+    quoteLineEditorState.initialTaxApplicable = quoteLineEditorState.isTaxApplicable;
+    const cost = getLabourCostPrice();
+    quoteLineEditorState.draftMarkup = cost > 0
+      ? Math.round((quoteLineEditorState.draftUnitPrice / cost - 1) * 10000) / 100
+      : 0;
+    quoteLineEditorState.initialMarkup = quoteLineEditorState.draftMarkup;
     renderLabourEditorRows();
     const latestQtyInput = document.querySelector('#labourEditorList .labour-editor-row:last-child .labour-editor-field-input[data-field="qty"]');
     latestQtyInput?.focus();
@@ -11315,12 +11525,19 @@ function initModalAccessibilityFramework() {
       if (layoutState.viewportMode === 'mobile' && backBtn) return backBtn;
       return document.getElementById('quoteModalClose') || document.getElementById('quoteCloseBtn') || backBtn;
     },
+    onClose: () => setQuoteModalScrollLock(false),
   });
   registerAccessibleModal({
     id: 'labourEditorModal',
     element: document.getElementById('labourEditorModal'),
     backdrop: document.getElementById('labourEditorBackdrop'),
     initialFocus: () => document.querySelector('#labourEditorList .labour-editor-field-input') || document.getElementById('labourEditorDoneBtn') || document.getElementById('labourEditorCloseBtn'),
+    onOpen: () => setQuoteModalScrollLock(true),
+    onClose: () => {
+      if (!labourEditorJustApplied) revertLabourEditorToInitial();
+      labourEditorJustApplied = false;
+      setQuoteModalScrollLock(false);
+    },
   });
   registerAccessibleModal({
     id: 'productModal',
