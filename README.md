@@ -200,8 +200,9 @@ npm install
 - **Recenter View** button present and clickable
 - **Stable viewport:** No auto-refit in 250ms after interaction
 - **Zoom controls** (− / Fit / +)
-- **Import normalization:** All elements have max dimension ≤ 150px
-- **Center-drop:** Click (no drag) on a product thumb adds one element at normalized size
+- **Import normalization (desktop):** Dropped/center-added elements keep max dimension ≤ 150px
+- **Mobile tap-add sizing:** Tap-added element max dimension = 25% of blueprint long side, or 25% of canvas long side when no blueprint is loaded
+- **Center-drop / tap-add:** Click/tap on a product thumb adds exactly one element; mobile tap-add auto-closes the products panel
 - **Color tinting:** originalImage preservation, tintedCanvas creation, multiple color changes, color removal
 - **Selection over blueprint:** Can select elements after color changes
 - **Accessibility modal keyboarding:** focus trap + Escape close in accessibility settings modal

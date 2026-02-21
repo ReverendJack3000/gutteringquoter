@@ -755,6 +755,11 @@ async function run() {
         const elementsAfter = await page.evaluate(() => (window.__quoteAppGetElements && window.__quoteAppGetElements()) || []);
         const last = elementsAfter[elementsAfter.length - 1];
         console.log('  ✓ Center-drop: click on product added one element at normalized size');
+        const desktopCenterDropMaxDim = Math.max(last?.width || 0, last?.height || 0);
+        if (desktopCenterDropMaxDim > 150) {
+          throw new Error(`Desktop center-drop normalization regressed: max dimension ${desktopCenterDropMaxDim}, expected <= 150`);
+        }
+        console.log('  ✓ Desktop center-drop keeps max dimension <= 150px');
 
         // Resize tests on fresh unrotated element (cursor alignment, anchor math for rotated elements)
         const resizeEl = last;
@@ -1389,6 +1394,88 @@ async function run() {
       console.log('  ✓ Quote test skipped: no gutter products found in panel fixture');
     }
 
+    // Mobile tap-add fallback sizing (no blueprint): use 25% of canvas long side on a fresh page.
+    const mobileNoBlueprintPage = await context.newPage();
+    try {
+      await mobileNoBlueprintPage.setCacheEnabled(false);
+      await mobileNoBlueprintPage.setViewport({ width: 375, height: 667, isMobile: true, hasTouch: true });
+      const noBlueprintRes = await mobileNoBlueprintPage.goto(`${BASE_URL}?viewport=mobile`, { waitUntil: 'networkidle2' });
+      if (!noBlueprintRes || !noBlueprintRes.ok()) throw new Error('Mobile no-blueprint sizing: could not load app');
+      await mobileNoBlueprintPage.evaluate(() => {
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      });
+      await delay(500);
+
+      const noBlueprintCountBefore = await mobileNoBlueprintPage.evaluate(
+        () => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0
+      );
+      const noBlueprintBeforeMetrics = await mobileNoBlueprintPage.evaluate(() => {
+        const canvas = document.getElementById('canvas');
+        const canvasRect = canvas ? canvas.getBoundingClientRect() : null;
+        const viewport = (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null;
+        return {
+          scale: viewport ? viewport.scale : null,
+          canvasLongSide: canvasRect ? Math.max(canvasRect.width, canvasRect.height) : 0,
+        };
+      });
+      const noBlueprintPanelExpandedBefore = await mobileNoBlueprintPage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!noBlueprintPanelExpandedBefore) {
+        await clickSelectorViaDom(mobileNoBlueprintPage, '#panelCollapsed');
+        await delay(320);
+      }
+      const noBlueprintPanelExpanded = await mobileNoBlueprintPage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!noBlueprintPanelExpanded) throw new Error('Mobile no-blueprint sizing: products panel did not open');
+
+      await clickSelectorViaDom(mobileNoBlueprintPage, '.product-thumb');
+      await delay(750);
+
+      const noBlueprintAfter = await mobileNoBlueprintPage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const canvas = document.getElementById('canvas');
+        const canvasRect = canvas ? canvas.getBoundingClientRect() : null;
+        const viewport = (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null;
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        return {
+          count: (window.__quoteAppElementCount && window.__quoteAppElementCount()) || elements.length,
+          panelCollapsed: !!panel && panel.classList.contains('collapsed'),
+          scale: viewport ? viewport.scale : null,
+          canvasLongSide: canvasRect ? Math.max(canvasRect.width, canvasRect.height) : 0,
+          last: elements[elements.length - 1] || null,
+        };
+      });
+      if (noBlueprintAfter.count !== noBlueprintCountBefore + 1) {
+        throw new Error(
+          `Mobile no-blueprint sizing: tap-add should add exactly one element, before=${noBlueprintCountBefore}, after=${noBlueprintAfter.count}`
+        );
+      }
+      if (!noBlueprintAfter.panelCollapsed) {
+        throw new Error('Mobile no-blueprint sizing: products panel should auto-close after successful tap-add');
+      }
+      if (!noBlueprintAfter.last) throw new Error('Mobile no-blueprint sizing: no element found after tap-add');
+      if (!Number.isFinite(noBlueprintBeforeMetrics.scale) || noBlueprintBeforeMetrics.scale <= 0) {
+        throw new Error('Mobile no-blueprint sizing: pre-add viewport scale unavailable');
+      }
+      if (!Number.isFinite(noBlueprintBeforeMetrics.canvasLongSide) || noBlueprintBeforeMetrics.canvasLongSide <= 0) {
+        throw new Error('Mobile no-blueprint sizing: pre-add canvas dimensions unavailable');
+      }
+      const noBlueprintActualWorldMax = Math.max(noBlueprintAfter.last.width, noBlueprintAfter.last.height);
+      const noBlueprintExpectedWorldMax = 0.25 * noBlueprintBeforeMetrics.canvasLongSide;
+      if (Math.abs(noBlueprintActualWorldMax - noBlueprintExpectedWorldMax) > 2) {
+        throw new Error(
+          `Mobile no-blueprint sizing mismatch (world units): actual=${noBlueprintActualWorldMax.toFixed(2)}, expected=${noBlueprintExpectedWorldMax.toFixed(2)}`
+        );
+      }
+      console.log('  ✓ Mobile no-blueprint tap-add uses 25% canvas-long-side fallback (world size) and auto-closes panel');
+    } finally {
+      await mobileNoBlueprintPage.close();
+    }
+
     // Mobile viewport regression: mode, overflow, and orientation resilience
     const mobilePage = await context.newPage();
     try {
@@ -1517,6 +1604,63 @@ async function run() {
         throw new Error(`Mobile Fit should recenter pan to ~0; got panX=${fitResetViewport.viewPanX}, panY=${fitResetViewport.viewPanY}`);
       }
       console.log('  ✓ Mobile Fit resets to centered, pan-locked state');
+
+      // Mobile tap-add with blueprint loaded: add exactly one element, auto-close panel, size to 25% of blueprint long side.
+      const mobileTapCountBefore = await mobilePage.evaluate(
+        () => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0
+      );
+      const mobilePanelExpandedBeforeTap = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!mobilePanelExpandedBeforeTap) {
+        await clickSelectorViaDom(mobilePage, '#panelCollapsed');
+        await delay(320);
+      }
+      const mobilePanelExpandedAfterOpen = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!mobilePanelExpandedAfterOpen) throw new Error('Mobile blueprint sizing: products panel did not open');
+
+      await clickSelectorViaDom(mobilePage, '.product-thumb');
+      await delay(750);
+      const mobileTapAddState = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        const viewport = (window.__quoteAppGetViewport && window.__quoteAppGetViewport()) || null;
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        const blueprintRect = (window.__quoteAppGetBlueprintScreenRect && window.__quoteAppGetBlueprintScreenRect()) || null;
+        return {
+          count: (window.__quoteAppElementCount && window.__quoteAppElementCount()) || elements.length,
+          panelCollapsed: !!panel && panel.classList.contains('collapsed'),
+          scale: viewport ? viewport.scale : null,
+          blueprintLongSide: blueprintRect ? Math.max(blueprintRect.width, blueprintRect.height) : null,
+          last: elements[elements.length - 1] || null,
+        };
+      });
+      if (mobileTapAddState.count !== mobileTapCountBefore + 1) {
+        throw new Error(
+          `Mobile blueprint sizing: tap-add should add exactly one element, before=${mobileTapCountBefore}, after=${mobileTapAddState.count}`
+        );
+      }
+      if (!mobileTapAddState.panelCollapsed) {
+        throw new Error('Mobile blueprint sizing: products panel should auto-close after successful tap-add');
+      }
+      if (!mobileTapAddState.last) throw new Error('Mobile blueprint sizing: no element found after tap-add');
+      if (!Number.isFinite(mobileTapAddState.scale) || mobileTapAddState.scale <= 0) {
+        throw new Error('Mobile blueprint sizing: viewport scale unavailable after tap-add');
+      }
+      if (!Number.isFinite(mobileTapAddState.blueprintLongSide) || mobileTapAddState.blueprintLongSide <= 0) {
+        throw new Error('Mobile blueprint sizing: blueprint screen metrics unavailable after tap-add');
+      }
+      const mobileActualDisplayMax = Math.max(mobileTapAddState.last.width, mobileTapAddState.last.height) * mobileTapAddState.scale;
+      const mobileExpectedDisplayMax = 0.25 * mobileTapAddState.blueprintLongSide;
+      if (Math.abs(mobileActualDisplayMax - mobileExpectedDisplayMax) > 5) {
+        throw new Error(
+          `Mobile blueprint sizing mismatch: actual=${mobileActualDisplayMax.toFixed(2)}px, expected=${mobileExpectedDisplayMax.toFixed(2)}px`
+        );
+      }
+      console.log('  ✓ Mobile blueprint tap-add uses 25% of blueprint long side and auto-closes panel');
 
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);

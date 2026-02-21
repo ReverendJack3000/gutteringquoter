@@ -442,6 +442,10 @@ body[data-viewport-mode="mobile"] .project-history-dropdown .diagrams-dropdown-l
 .toolbar-pill-btn .toolbar-icon {
   flex-shrink: 0;
 }
+/* Mobile-only zoom icons: hide magnifying glass by default (desktop keeps minus/plus line icons) */
+.diagram-floating-toolbar .toolbar-pill-btn .icon-mobile {
+  display: none;
+}
 
 .toolbar-pill .upload-zone {
   background: transparent;
@@ -2156,6 +2160,16 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-too
   overflow: hidden;
 }
 
+/* Mobile only: show magnifying glass zoom icons, hide desktop minus/plus line icons */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar #zoomOutBtn .icon-desktop,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar #zoomInBtn .icon-desktop {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar #zoomOutBtn .icon-mobile,
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar #zoomInBtn .icon-mobile {
+  display: block;
+}
+
 /* Mobile collapsed: circle slightly larger than the 44px collapse button */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
@@ -2168,9 +2182,18 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   max-height: 48px;
   border-radius: 50%;
 }
+/* Mobile only: collapsed state = + icon → green */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
-  background: rgba(0, 0, 0, 0.08);
-  color: #333;
+  background: rgba(0, 255, 0, 0.14);
+  color: #2E7D32;
+}
+/* Mobile only: expanded state = − icon → red */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-collapse-btn {
+  color: #C62828;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-collapse-btn:hover {
+  background: rgba(255, 0, 0, 0.1);
+  color: #B71C1C;
 }
 /* Mobile collapsed: ensure CSS-only icon is visible with heavier stroke weight for small screens */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .toggle-icon::before,
