@@ -132,7 +132,7 @@ a:focus:not(:focus-visible),
   outline: none;
 }
 
-/* 54.6 Mobile: show focus ring on any focus (tap often doesn't match :focus-visible) */
+/* 54.6 Mobile: show focus ring on any focus (tap often doesn't match :focus-visible) – sleeker ring */
 body[data-viewport-mode="mobile"] button:focus,
 body[data-viewport-mode="mobile"] a:focus,
 body[data-viewport-mode="mobile"] input:focus,
@@ -140,8 +140,8 @@ body[data-viewport-mode="mobile"] select:focus,
 body[data-viewport-mode="mobile"] textarea:focus,
 body[data-viewport-mode="mobile"] [tabindex]:focus,
 body[data-viewport-mode="mobile"] .product-thumb:focus {
-  outline: 2px solid #0b68ff;
-  outline-offset: 2px;
+  outline: 2px solid rgba(11, 104, 255, 0.75);
+  outline-offset: 1px;
 }
 
 /* Mobile: flick on tap (:active), no persistent ring – hide outline for focus unless :focus-visible (keyboard) */
@@ -155,7 +155,7 @@ body[data-viewport-mode="mobile"] .product-thumb:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* Mobile: show ring only while pressed (flick) so it doesn't persist until next tap */
+/* Mobile: show ring only while pressed (flick) so it doesn't persist until next tap – same sleeker style */
 body[data-viewport-mode="mobile"] button:active,
 body[data-viewport-mode="mobile"] a:active,
 body[data-viewport-mode="mobile"] input:active,
@@ -163,11 +163,11 @@ body[data-viewport-mode="mobile"] select:active,
 body[data-viewport-mode="mobile"] textarea:active,
 body[data-viewport-mode="mobile"] [tabindex]:active,
 body[data-viewport-mode="mobile"] .product-thumb:active {
-  outline: 2px solid #0b68ff;
-  outline-offset: 2px;
+  outline: 2px solid rgba(11, 104, 255, 0.75);
+  outline-offset: 1px;
 }
 
-/* 54.89.1 Mobile: suppress browser default tap highlight; we use 54.6 focus ring only */
+/* 54.89.1 Mobile: suppress tap highlight + smooth transition for tap ring */
 body[data-viewport-mode="mobile"] button,
 body[data-viewport-mode="mobile"] a,
 body[data-viewport-mode="mobile"] input,
@@ -177,6 +177,19 @@ body[data-viewport-mode="mobile"] [tabindex],
 body[data-viewport-mode="mobile"] .product-thumb {
   -webkit-tap-highlight-color: transparent;
   tap-highlight-color: transparent;
+  transition: outline-color 0.12s ease-out, outline-width 0.12s ease-out, outline-offset 0.12s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-viewport-mode="mobile"] button,
+  body[data-viewport-mode="mobile"] a,
+  body[data-viewport-mode="mobile"] input,
+  body[data-viewport-mode="mobile"] select,
+  body[data-viewport-mode="mobile"] textarea,
+  body[data-viewport-mode="mobile"] [tabindex],
+  body[data-viewport-mode="mobile"] .product-thumb {
+    transition: none;
+  }
 }
 
 .app {
