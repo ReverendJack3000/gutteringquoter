@@ -5820,6 +5820,14 @@ body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line:acti
   background: #edf4ff;
 }
 
+/* 54.93.7: when labour stepper is shown, keep hours input in DOM but hidden */
+body[data-viewport-mode="mobile"] #quoteModal .quote-labour-hours-input--hidden-mobile {
+  display: none !important;
+}
+/* 54.93.8: when section-header metres stepper is shown, keep header metres input in DOM but hidden */
+body[data-viewport-mode="mobile"] #quoteModal .quote-header-metres-input--hidden-mobile {
+  display: none !important;
+}
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-hours-input,
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-unit-price-wrap,
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-unit-price-input,

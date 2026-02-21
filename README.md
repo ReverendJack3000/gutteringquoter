@@ -70,6 +70,9 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    - Open the right panel (chevron if collapsed); drag products onto the blueprint.
    - Select an element to move, resize (corners), or rotate (top handle).
    - On mobile, tap a measurable element to select it, then use the ruler button in the floating toolbar to enter length.
+   - On mobile, the diagram canvas view requests `landscape` orientation when no modal is open.
+   - On mobile, non-diagram UI (other views or open modals like Quote/Labour editor) requests `portrait`.
+   - If orientation lock is unsupported or rejected by the browser/device policy, the app continues normally (graceful fallback, no blocking prompt).
    - Drag the divider between blueprint and panel to resize.
    - **Export PNG** to download the composed blueprint.
    - On phones/tablets, the products panel becomes a slide-out drawer and desktop behavior remains unchanged on large screens.
@@ -210,6 +213,7 @@ npm install
 - **Accessibility modal keyboarding:** focus trap + Escape close in accessibility settings modal
 - **Live-region announcements:** app announcer emits updates during core interactions
 - **Mobile viewport regressions:** forced mobile mode, portrait/landscape orientation, no horizontal overflow
+- **Mobile orientation policy transitions:** canvas (no modal) targets landscape; quote/labour modal flows target portrait; closing returns to landscape target
 
 **Manual checks (optional):**
 

@@ -470,6 +470,66 @@ const layoutState = {
   resizeDebounceId: null,
 };
 
+const mobileOrientationPolicyState = {
+  target: 'none',
+  lastAttemptTarget: null,
+  lastAttemptReason: '',
+  lastErrorName: '',
+  supported: false,
+};
+
+function supportsScreenOrientationLock() {
+  if (typeof window === 'undefined') return false;
+  const orientation = window.screen && window.screen.orientation;
+  return !!orientation && typeof orientation.lock === 'function';
+}
+
+function setMobileOrientationTargetDataAttr(target) {
+  if (typeof document === 'undefined') return;
+  const normalizedTarget = target === 'landscape' || target === 'portrait' ? target : 'none';
+  if (document.body) document.body.dataset.mobileOrientationTarget = normalizedTarget;
+  if (document.documentElement) document.documentElement.dataset.mobileOrientationTarget = normalizedTarget;
+}
+
+function getMobileOrientationTarget() {
+  if (layoutState.viewportMode !== 'mobile') return 'none';
+  const visibleViewId = getVisibleViewId();
+  if (visibleViewId !== 'view-canvas') return 'portrait';
+  if (modalA11yState.stack.length > 0) return 'portrait';
+  return 'landscape';
+}
+
+async function applyMobileOrientationTarget(target, reason) {
+  const normalizedTarget = target === 'landscape' || target === 'portrait' ? target : 'none';
+  mobileOrientationPolicyState.target = normalizedTarget;
+  mobileOrientationPolicyState.supported = supportsScreenOrientationLock();
+  setMobileOrientationTargetDataAttr(normalizedTarget);
+  if (!mobileOrientationPolicyState.supported) return;
+
+  const orientation = window.screen && window.screen.orientation;
+  if (!orientation) return;
+  if (mobileOrientationPolicyState.lastAttemptTarget === normalizedTarget) return;
+
+  mobileOrientationPolicyState.lastAttemptTarget = normalizedTarget;
+  mobileOrientationPolicyState.lastAttemptReason = reason || '';
+  mobileOrientationPolicyState.lastErrorName = '';
+
+  try {
+    if (normalizedTarget === 'none') {
+      if (typeof orientation.unlock === 'function') orientation.unlock();
+      return;
+    }
+    await orientation.lock(normalizedTarget);
+  } catch (err) {
+    mobileOrientationPolicyState.lastErrorName = err && err.name ? err.name : 'UnknownError';
+  }
+}
+
+function syncMobileOrientationPolicy(reason) {
+  const target = getMobileOrientationTarget();
+  void applyMobileOrientationTarget(target, reason);
+}
+
 /** 54.80: Diagram toolbar API (collapseIfExpanded). Set by initDiagramToolbarDragWithApp. */
 let diagramToolbarApi = null;
 
@@ -1241,6 +1301,16 @@ function getQuoteLineProductName(row) {
 
 function getQuoteLineQuantityMeta(row) {
   if (!row) return { value: 0, step: 1 };
+  // 54.93.6: metres rows (gutter/downpipe length) – step 0.1 is sufficient for product spec
+  const metresInput = row.querySelector('.quote-qty-metres-input');
+  if (metresInput) {
+    const value = parseFloat(metresInput.value) || 0;
+    return { value, step: 0.1 };
+  }
+  if (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '') {
+    const value = mmToM(parseFloat(row.dataset.lengthMm));
+    return { value: Number.isFinite(value) ? value : 0, step: 0.1 };
+  }
   if (row.dataset.labourRow === 'true') {
     const hoursInput = row.querySelector('.quote-labour-hours-input');
     return { value: parseFloat(hoursInput?.value) || 0, step: 0.5 };
@@ -1303,7 +1373,7 @@ function syncMobileQuoteLineSummaries() {
       totalLabourHours += parseFloat(r.querySelector('.quote-labour-hours-input')?.value) || 0;
     });
   }
-  // 54.93.2 / 54.93.3: desktop cleanup – remove cell-0 remove/plus and restore qty cell (remove stepper)
+  // 54.93.2 / 54.93.3 / 54.93.6 / 54.93.7: desktop cleanup – remove cell-0 remove/plus and restore qty cell (remove stepper) by row type
   if (!isMobile) {
     Array.from(tableBody.rows).forEach((row) => {
       const productCell = row.cells[0];
@@ -1313,19 +1383,106 @@ function syncMobileQuoteLineSummaries() {
       }
       const qtyCell = row.cells[1];
       if (qtyCell?.querySelector('.quote-mobile-qty-stepper')) {
-        const stored = getQuoteRowStoredQty(row);
-        const val = stored != null ? stored : 0;
-        qtyCell.innerHTML = '';
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'quote-line-qty-input';
-        input.value = formatQuoteQtyDisplay(val);
-        input.min = '0';
-        input.step = '1';
-        input.setAttribute('aria-label', 'Quantity');
-        qtyCell.appendChild(input);
-        setQuoteRowStoredQty(row, parseFloat(String(val)) || 0);
+        // 54.93.8.2: desktop cleanup – restore section header metres input (remove stepper, restore wrap with input + suffix)
+        if (row.dataset.sectionHeader) {
+          const stepper = qtyCell.querySelector('.quote-mobile-qty-stepper');
+          const hiddenInput = qtyCell.querySelector('.quote-header-metres-input');
+          const currentVal = hiddenInput ? (parseFloat(hiddenInput.value) || 0) : 0;
+          const displayVal = currentVal % 1 === 0 ? String(currentVal) : currentVal.toFixed(3).replace(/\.?0+$/, '');
+          stepper?.remove();
+          const wrap = qtyCell.querySelector('.quote-header-metres-wrap');
+          if (wrap) {
+            wrap.innerHTML = `<input type="number" class="quote-header-metres-input" value="${escapeHtml(displayVal)}" min="0" step="0.5" placeholder="Metres?" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span>`;
+            const headerMetresInput = wrap.querySelector('.quote-header-metres-input');
+            if (headerMetresInput) {
+              headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
+              headerMetresInput.addEventListener('blur', () => calculateAndDisplayQuote());
+            }
+          }
+        } else if (row.dataset.labourRow === 'true') {
+          const stepper = qtyCell.querySelector('.quote-mobile-qty-stepper');
+          const hoursInput = qtyCell.querySelector('.quote-labour-hours-input');
+          stepper?.remove();
+          if (hoursInput) hoursInput.classList.remove('quote-labour-hours-input--hidden-mobile');
+        } else if (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '') {
+          const metresVal = mmToM(parseFloat(row.dataset.lengthMm));
+          const m = Number.isFinite(metresVal) ? metresVal : 0;
+          qtyCell.innerHTML = '';
+          qtyCell.textContent = (Number(m) === m && m % 1 !== 0 ? m.toFixed(1) : String(m)) + ' m';
+        } else {
+          const stored = getQuoteRowStoredQty(row);
+          const val = stored != null ? stored : 0;
+          qtyCell.innerHTML = '';
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.className = 'quote-line-qty-input';
+          input.value = formatQuoteQtyDisplay(val);
+          input.min = '0';
+          input.step = '1';
+          input.setAttribute('aria-label', 'Quantity');
+          qtyCell.appendChild(input);
+          setQuoteRowStoredQty(row, parseFloat(String(val)) || 0);
+        }
       }
+    });
+  }
+  // 54.93.8: mobile – section header rows (Gutter/Downpipe length): replace metres input with stepper, keep input in DOM (hidden)
+  if (isMobile) {
+    const step = 0.5;
+    Array.from(tableBody.rows).forEach((row) => {
+      if (!row.dataset.sectionHeader) return;
+      const qtyCell = row.cells[1];
+      if (!qtyCell) return;
+      const wrap = qtyCell.querySelector('.quote-header-metres-wrap');
+      const input = wrap?.querySelector('.quote-header-metres-input');
+      if (!input) return;
+      const existingStepper = qtyCell.querySelector('.quote-mobile-qty-stepper');
+      if (existingStepper) {
+        const valueSpan = existingStepper.querySelector('.quote-mobile-qty-stepper-value');
+        if (valueSpan) {
+          const v = parseFloat(input.value) || 0;
+          const s = Number(v) === v && v % 1 !== 0 ? v.toFixed(1) : String(v);
+          valueSpan.textContent = s + ' m';
+        }
+        return;
+      }
+      const stepperWrap = document.createElement('div');
+      stepperWrap.className = 'quote-mobile-qty-stepper';
+      const minusBtn = document.createElement('button');
+      minusBtn.type = 'button';
+      minusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--minus';
+      minusBtn.setAttribute('aria-label', 'Decrease length');
+      minusBtn.textContent = '−';
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'quote-mobile-qty-stepper-value';
+      valueSpan.setAttribute('aria-live', 'polite');
+      const plusBtn = document.createElement('button');
+      plusBtn.type = 'button';
+      plusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--plus';
+      plusBtn.setAttribute('aria-label', 'Increase length');
+      plusBtn.textContent = '+';
+      stepperWrap.appendChild(minusBtn);
+      stepperWrap.appendChild(valueSpan);
+      stepperWrap.appendChild(plusBtn);
+      const updateValueSpan = () => {
+        const v = parseFloat(input.value) || 0;
+        const s = Number(v) === v && v % 1 !== 0 ? v.toFixed(1) : String(v);
+        valueSpan.textContent = s + ' m';
+      };
+      const applyStep = (delta) => {
+        const current = parseFloat(input.value) || 0;
+        const next = Math.max(0, current + delta);
+        input.value = String(next);
+        updateValueSpan();
+        calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+      };
+      minusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(-step); });
+      plusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(step); });
+      wrap.innerHTML = '';
+      wrap.appendChild(stepperWrap);
+      input.classList.add('quote-header-metres-input--hidden-mobile');
+      wrap.appendChild(input);
+      updateValueSpan();
     });
   }
   const rows = Array.from(tableBody.rows).filter((row) => isEditableQuoteLineRow(row));
@@ -1365,8 +1522,13 @@ function syncMobileQuoteLineSummaries() {
     lineSummary.textContent = `${qtyLabel} x ${unitLabel}${row.dataset.labourRow === 'true' ? '/hr' : ''} · Tap to edit`;
 
     // 54.93.3: on mobile, material rows (non-labour, non-metres) get qty stepper; only add qty summary for labour/metres so we don’t leave a stray summary in the cell
-    const useQtyStepper = isMobile && row.dataset.labourRow !== 'true' && !row.querySelector('.quote-qty-metres-input');
-    if (!useQtyStepper) {
+    const isLabourRow = row.dataset.labourRow === 'true';
+    const isMetresRow = !!(
+      row.querySelector('.quote-qty-metres-input') ||
+      (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '')
+    );
+    const useStepper = isMobile && (isLabourRow || isMetresRow || !isLabourRow);
+    if (!useStepper) {
       let qtySummary = qtyCell.querySelector('.quote-mobile-line-qty-summary');
       if (!qtySummary) {
         qtySummary = document.createElement('span');
@@ -1376,7 +1538,7 @@ function syncMobileQuoteLineSummaries() {
       qtySummary.textContent = qtyLabel;
     }
 
-    if (useQtyStepper) {
+    if (useStepper) {
       qtyCell.querySelector('.quote-mobile-line-qty-summary')?.remove();
       let stepperWrap = qtyCell.querySelector('.quote-mobile-qty-stepper');
       if (!stepperWrap) {
@@ -1385,7 +1547,7 @@ function syncMobileQuoteLineSummaries() {
         const minusBtn = document.createElement('button');
         minusBtn.type = 'button';
         minusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--minus';
-        minusBtn.setAttribute('aria-label', 'Decrease quantity');
+        minusBtn.setAttribute('aria-label', isLabourRow ? 'Decrease hours' : 'Decrease quantity');
         minusBtn.textContent = '−';
         const valueSpan = document.createElement('span');
         valueSpan.className = 'quote-mobile-qty-stepper-value';
@@ -1393,30 +1555,86 @@ function syncMobileQuoteLineSummaries() {
         const plusBtn = document.createElement('button');
         plusBtn.type = 'button';
         plusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--plus';
-        plusBtn.setAttribute('aria-label', 'Increase quantity');
+        plusBtn.setAttribute('aria-label', isLabourRow ? 'Increase hours' : 'Increase quantity');
         plusBtn.textContent = '+';
         stepperWrap.appendChild(minusBtn);
         stepperWrap.appendChild(valueSpan);
         stepperWrap.appendChild(plusBtn);
-        qtyCell.innerHTML = '';
-        qtyCell.appendChild(stepperWrap);
-        const step = 1;
-        const updateStepperValue = () => {
-          const v = getQuoteRowStoredQty(row);
-          valueSpan.textContent = v != null ? formatQuoteQtyDisplay(v) : '0';
-        };
-        const applyStep = (delta) => {
-          const current = parseFloat(getQuoteRowStoredQty(row)) || 0;
-          const next = Math.max(0, current + delta);
-          setQuoteRowStoredQty(row, next);
-          updateStepperValue();
-          calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
-        };
+        const step = qtyMeta.step;
+        let updateStepperValue;
+        let applyStep;
+        if (isLabourRow) {
+          const hoursInput = row.querySelector('.quote-labour-hours-input');
+          if (hoursInput) {
+            qtyCell.innerHTML = '';
+            qtyCell.appendChild(stepperWrap);
+            hoursInput.classList.add('quote-labour-hours-input--hidden-mobile');
+            qtyCell.appendChild(hoursInput);
+          } else {
+            qtyCell.innerHTML = '';
+            qtyCell.appendChild(stepperWrap);
+          }
+          updateStepperValue = () => {
+            const h = parseFloat(hoursInput?.value) || 0;
+            valueSpan.textContent = formatLabourHoursDisplay(h);
+          };
+          applyStep = (delta) => {
+            const current = parseFloat(hoursInput?.value) || 0;
+            const next = Math.max(0, current + delta);
+            if (hoursInput) hoursInput.value = String(next);
+            updateLabourRowTotal(row);
+            updateStepperValue();
+            calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+          };
+        } else if (isMetresRow) {
+          qtyCell.querySelector('.quote-qty-metres-input')?.remove();
+          qtyCell.innerHTML = '';
+          qtyCell.appendChild(stepperWrap);
+          updateStepperValue = () => {
+            const meta = getQuoteLineQuantityMeta(row);
+            const m = meta.value;
+            const s = Number(m) === m && m % 1 !== 0 ? m.toFixed(1) : String(m);
+            valueSpan.textContent = s + ' m';
+          };
+          applyStep = (delta) => {
+            const current = getQuoteLineQuantityMeta(row).value;
+            const nextMetres = Math.max(0, (typeof current === 'number' ? current : parseFloat(current) || 0) + delta);
+            row.dataset.lengthMm = String(mToMm(nextMetres));
+            row.dataset.manualLength = 'true';
+            row.removeAttribute('data-incomplete-measurement');
+            row.classList.remove('quote-row-incomplete-measurement');
+            const metresInput = qtyCell.querySelector('.quote-qty-metres-input');
+            if (metresInput) metresInput.remove();
+            updateStepperValue();
+            calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+          };
+        } else {
+          qtyCell.innerHTML = '';
+          qtyCell.appendChild(stepperWrap);
+          updateStepperValue = () => {
+            const v = getQuoteRowStoredQty(row);
+            valueSpan.textContent = v != null ? formatQuoteQtyDisplay(v) : '0';
+          };
+          applyStep = (delta) => {
+            const current = parseFloat(getQuoteRowStoredQty(row)) || 0;
+            const next = Math.max(0, current + delta);
+            setQuoteRowStoredQty(row, next);
+            updateStepperValue();
+            calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+          };
+        }
         minusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(-step); });
         plusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(step); });
       }
       const valueSpan = stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
-      if (valueSpan) valueSpan.textContent = formatQuoteQtyDisplay(getQuoteRowStoredQty(row) ?? 0);
+      if (valueSpan) {
+        if (isLabourRow) valueSpan.textContent = formatLabourHoursDisplay(qtyMeta.value);
+        else if (isMetresRow) {
+          const m = qtyMeta.value;
+          const s = Number(m) === m && m % 1 !== 0 ? m.toFixed(1) : String(m);
+          valueSpan.textContent = s + ' m';
+        } else valueSpan.textContent = formatQuoteQtyDisplay(getQuoteRowStoredQty(row) ?? 0);
+      }
     }
 
     if (row.dataset.labourRow === 'true' && isMobile) {
@@ -9907,6 +10125,7 @@ function initPanel() {
           if (document.body) document.body.setAttribute('data-viewport-mode', nextMode);
           if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', nextMode);
         }
+        syncMobileOrientationPolicy('orientationchange');
       }, 100);
     }, { passive: true });
     layoutState.resizeListenerBound = true;
@@ -10157,12 +10376,14 @@ function applyViewportMode(mode, options = {}) {
     if (normalizedMode === 'mobile') {
       requestAnimationFrame(() => initDiagramToolbarDragWithApp());
     }
+    syncMobileOrientationPolicy(`applyViewportMode:changed:${normalizedMode}`);
     return;
   }
 
   setPanelExpanded(layoutState.panelExpanded, { resizeCanvas: options.resizeCanvas !== false });
   syncQuoteModalViewportState();
   syncMobileLabourRowSummary();
+  syncMobileOrientationPolicy(`applyViewportMode:stable:${normalizedMode}`);
 }
 
 function handleViewportResize() {
@@ -10792,6 +11013,7 @@ function openAccessibleModal(id, options = {}) {
   cfg.element.removeAttribute('hidden');
   if (typeof cfg.onOpen === 'function') cfg.onOpen(options);
   applyModalInertState();
+  syncMobileOrientationPolicy(`openAccessibleModal:${id}`);
 
   requestAnimationFrame(() => {
     const target = resolveModalInitialFocus(cfg, options);
@@ -10810,6 +11032,7 @@ function closeAccessibleModal(id, options = {}) {
   if (typeof cfg.onClose === 'function') cfg.onClose(options);
 
   applyModalInertState();
+  syncMobileOrientationPolicy(`closeAccessibleModal:${id}`);
 
   if (options.restoreFocus !== false) {
     const restoreTarget = options.restoreFocusEl instanceof HTMLElement
@@ -11318,6 +11541,7 @@ function switchView(viewId, options = {}) {
         focusElementNoScroll(fallbackTarget);
       });
     }
+    syncMobileOrientationPolicy(`switchView:${viewId}`);
   }
 }
 
@@ -11442,6 +11666,8 @@ function init() {
       );
     }
   });
+
+  syncMobileOrientationPolicy('init');
 }
 
 init();
@@ -11468,6 +11694,15 @@ if (typeof window !== 'undefined') {
   };
   window.__quoteAppGetViewportMode = function () {
     return layoutState.viewportMode;
+  };
+  window.__quoteAppGetOrientationPolicyState = function () {
+    return {
+      target: mobileOrientationPolicyState.target,
+      lastAttemptTarget: mobileOrientationPolicyState.lastAttemptTarget,
+      lastAttemptReason: mobileOrientationPolicyState.lastAttemptReason,
+      lastErrorName: mobileOrientationPolicyState.lastErrorName,
+      supported: mobileOrientationPolicyState.supported,
+    };
   };
   window.__quoteAppSetElementRotation = function (id, degrees) {
     const el = state.elements.find((e) => e.id === id);

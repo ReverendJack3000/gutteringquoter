@@ -28,6 +28,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile orientation does not hard-lock to landscape/portrait in every browser – 2026-02
+
+- **Symptom:** On mobile, canvas/quote transitions update app state, but the physical device orientation does not always rotate or lock.
+- **Cause:** The Screen Orientation API (`screen.orientation.lock`) is browser- and context-dependent. Some browsers do not support it, and others reject lock requests (for example outside fullscreen/PWA or due platform policy).
+- **Fix:** This app uses a graceful fallback policy: no blocking prompts, no fullscreen forcing, and no user interruption on lock failure. Verify policy target via `window.__quoteAppGetOrientationPolicyState()` and `data-mobile-orientation-target` on `<html>`/`<body>`. If lock is unsupported/rejected, this is expected behavior.
+
+---
+
 ## Mobile: diagram toolbar collapsed “+” missing or jumpy; can’t re-expand – 2026-02
 
 - **Symptom:** On mobile, after minimising the diagram (canvas) toolbar, the expand control is a blank white circle, the “+” sometimes appears and sometimes doesn’t, or the pill seems to jump off-screen so the user can’t find it to re-expand. No scrolling should be needed inside the toolbar.

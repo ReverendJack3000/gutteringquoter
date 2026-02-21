@@ -75,12 +75,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.49, 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
-| 54 | 54.78.1–54.78.6 | Mobile: vertical diagram toolbar tighter fit + overflow-y in pill; optional drag handle span removal |
-| 54 | 54.80.1–54.80.4.4, 54.80.2.9 | Diagram toolbar auto-collapse (8 triggers + products panel open 54.80.2.9) + position 4 UIs (plan: docs/plans/2026-02-21-diagram-toolbar-auto-collapse-on-element-toolbar-and-dropdowns.md) |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
-| 54 | 54.82.1–54.82.4 | (Mobile-only) Tools within global header #globalToolbar only: Projects/Untitled top-left, collapse after; chevron left of Projects; hide Export/Diagrams/Accessibility. No diagram toolbar or other toolbar changes (plan: docs/plans/2026-02-21-mobile-global-toolbar-reorder-and-declutter.md). |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
-| 54 | 54.93.6, 54.93.7 | Mobile quote: add steppers for measurable products (metres) and labour. Context: app.js syncMobileQuoteLineSummaries ~1296, useQtyStepper 1368, getQuoteLineQuantityMeta 1242–1260, manualOverrides 3529–3541; styles.css .quote-mobile-qty-stepper ~5749–5784. |
+| 54 | 54.93.8.1–54.93.8.4 | Mobile quote: stepper for section-header metres (Gutter/Downpipe length). Plan: docs/plans/2026-02-21-mobile-quote-section-header-metres-stepper.md. Context: app.js syncMobileQuoteLineSummaries 1366+, desktop cleanup 1376–1411, rebuild 3719–3735 / 3776–3792, profileLengthOverride 3654–3670, getElementsFromQuoteTable header read 3002–3022; styles.css .quote-mobile-qty-stepper 5749–5784. |
+| 54 | 54.95.1–54.95.6 | Mobile-only orientation policy (landscape diagram canvas, portrait non-diagram UI, graceful fallback, E2E/docs). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 ---
 

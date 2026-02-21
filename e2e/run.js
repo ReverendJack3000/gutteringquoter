@@ -50,6 +50,13 @@ async function pointerTapSelector(page, selector, options = {}) {
   await page.mouse.up();
 }
 
+async function getOrientationPolicyState(page) {
+  return page.evaluate(() => {
+    if (typeof window.__quoteAppGetOrientationPolicyState !== 'function') return null;
+    return window.__quoteAppGetOrientationPolicyState();
+  });
+}
+
 async function run() {
   const browser = await puppeteer.launch({
     headless: !HEADED,
@@ -163,6 +170,13 @@ async function run() {
       await delay(800);
     }
     console.log('  ✓ App shell and canvas present');
+
+    const desktopOrientationPolicy = await getOrientationPolicyState(page);
+    if (!desktopOrientationPolicy) throw new Error('Orientation policy hook missing on desktop run');
+    if (desktopOrientationPolicy.target !== 'none') {
+      throw new Error(`Desktop orientation policy target should be none, got ${desktopOrientationPolicy.target}`);
+    }
+    console.log('  ✓ Orientation policy (desktop): target none');
 
     // Toolbar
     const uploadZone = await page.$('#uploadZone') || await page.$('#cameraUploadBtn');
@@ -1536,6 +1550,12 @@ async function run() {
       if (!portraitCheck.panelVisible) {
         throw new Error('Mobile viewport regression: products panel toggle not visible in portrait');
       }
+      const mobileCanvasOrientation = await getOrientationPolicyState(mobilePage);
+      if (!mobileCanvasOrientation) throw new Error('Mobile orientation policy hook missing on canvas view');
+      if (mobileCanvasOrientation.target !== 'landscape') {
+        throw new Error(`Mobile orientation policy on canvas should target landscape, got ${mobileCanvasOrientation.target}`);
+      }
+      console.log('  ✓ Mobile orientation policy: canvas targets landscape');
 
       // Section 57: mobile fit inset + pan lock behavior
       const mobileFileInput = await mobilePage.$('#fileInput');
@@ -2028,6 +2048,12 @@ async function run() {
       if (mobileQuoteState.activeIsLabourInput) {
         throw new Error('Mobile quote modal: labour input should not auto-focus on open');
       }
+      const quoteModalOrientation = await getOrientationPolicyState(mobilePage);
+      if (!quoteModalOrientation) throw new Error('Mobile orientation policy hook missing after opening quote modal');
+      if (quoteModalOrientation.target !== 'portrait') {
+        throw new Error(`Mobile orientation policy with quote modal open should target portrait, got ${quoteModalOrientation.target}`);
+      }
+      console.log('  ✓ Mobile orientation policy: quote modal targets portrait');
       const labourTapResult = await mobilePage.evaluate(() => {
         const row = document.querySelector('#quoteTableBody tr[data-labour-row="true"]');
         if (!row) return false;
@@ -2053,6 +2079,12 @@ async function run() {
         throw new Error('Mobile labour editor: expected editable quantity/rate fields');
       }
       if (!labourEditorOpenState.verticalFields) throw new Error('Mobile labour editor: fields should be vertically stacked');
+      const labourEditorOrientation = await getOrientationPolicyState(mobilePage);
+      if (!labourEditorOrientation) throw new Error('Mobile orientation policy hook missing with labour editor open');
+      if (labourEditorOrientation.target !== 'portrait') {
+        throw new Error(`Mobile orientation policy with labour editor open should stay portrait, got ${labourEditorOrientation.target}`);
+      }
+      console.log('  ✓ Mobile orientation policy: labour editor remains portrait');
 
       const labourEditApplied = await mobilePage.evaluate(() => {
         const hoursInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
@@ -2102,6 +2134,11 @@ async function run() {
         return !!modal && modal.hasAttribute('hidden');
       });
       if (!labourEditorClosed) throw new Error('Mobile labour editor: Done should close popup');
+      const afterLabourEditorCloseOrientation = await getOrientationPolicyState(mobilePage);
+      if (!afterLabourEditorCloseOrientation) throw new Error('Mobile orientation policy hook missing after labour editor close');
+      if (afterLabourEditorCloseOrientation.target !== 'portrait') {
+        throw new Error(`Mobile orientation policy should stay portrait while quote modal remains open, got ${afterLabourEditorCloseOrientation.target}`);
+      }
 
       const materialEditorOpenState = await mobilePage.evaluate(() => {
         const row = document.querySelector('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])');
@@ -2161,6 +2198,13 @@ async function run() {
         return !!modal && modal.hasAttribute('hidden');
       });
       if (!mobileQuoteClosed) throw new Error('Mobile quote modal: back button should close the modal');
+      await delay(220);
+      const mobileOrientationAfterQuoteClose = await getOrientationPolicyState(mobilePage);
+      if (!mobileOrientationAfterQuoteClose) throw new Error('Mobile orientation policy hook missing after quote modal close');
+      if (mobileOrientationAfterQuoteClose.target !== 'landscape') {
+        throw new Error(`Mobile orientation policy should return to landscape after closing quote modal, got ${mobileOrientationAfterQuoteClose.target}`);
+      }
+      console.log('  ✓ Mobile orientation policy: returns to landscape after closing quote flow');
       console.log('  ✓ Mobile quote modal: full-screen layout, labour popup editing, hidden controls, and back-close behavior pass');
 
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
