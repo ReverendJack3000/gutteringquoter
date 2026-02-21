@@ -2305,7 +2305,8 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb span {
 }
 
 /* 54.38 / 54.47 / 54.54: Vertical stack on mobile; no scroll; container-first morphing.
- * 54.56–54.60: Always-thin edge-only – add new rules after this block (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md). Do not remove existing rules. */
+ * 54.56–54.60: Always-thin edge-only – add new rules after this block (plan: docs/plans/2026-02-20-mobile-diagram-toolbar-always-thin-edge-only.md). Do not remove existing rules.
+ * 54.79.4: Thumbnail blend – darker background, squircle, mesh gradient, ultraThinMaterial (plan: docs/plans/2026-02-21-mobile-diagram-toolbar-thumbnail-blend.md). */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   position: absolute;
   z-index: 160; /* Keep toolbar interactive above fixed global header in mobile layouts. */
@@ -2320,10 +2321,10 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
   gap: 0.5rem;
   padding: 0.5rem 0.75rem 0.625rem;
   overflow: visible; /* Allow absolutely positioned drag handle on border to show (pill clip via inner tools-wrap). */
-  border-radius: 9999px;
+  border-radius: 16px; /* 54.79.4: squircle-style expanded */
   background: rgba(255, 255, 255, 0.75);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  backdrop-filter: blur(24px) saturate(1.15);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.06);
   transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -2332,7 +2333,34 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar {
               box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               left 0.2s ease, top 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
 }
+/* Expanded only: background on a layer above the drag handle so the handle sits fully behind the pill. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  backdrop-filter: blur(24px) saturate(1.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  z-index: 0;
+  pointer-events: none; /* Clicks pass through to drag handle where they overlap */
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-collapse-btn {
+  position: relative;
+  z-index: 1; /* Above the ::before background so handle stays behind the pill */
+}
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .diagram-toolbar-tools-wrap {
+  position: relative;
+  z-index: 1;
   flex-wrap: nowrap;
   overflow: hidden;
 }
@@ -2347,7 +2375,7 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #zoomInBtn .icon-mob
   display: block;
 }
 
-/* Mobile collapsed: circle slightly larger than the 44px collapse button */
+/* Mobile collapsed: circle slightly larger than the 44px collapse button. */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed {
   padding: 0;
   gap: 0;
@@ -2358,6 +2386,11 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-too
   max-width: 48px;
   max-height: 48px;
   border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 /* Mobile only: collapsed state = + icon → green */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar.diagram-floating-toolbar--collapsed .diagram-toolbar-collapse-btn {
@@ -2555,14 +2588,26 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
 body.a11y-high-contrast .diagram-toolbar-drag-handle {
   color: #111;
 }
-/* Mobile: tab matches toolbar frosted look. */
-body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle {
-  background: rgba(255, 255, 255, 0.78);
+/* 54.79.4: Mobile handle visible when expanded; behind toolbar (z-index), darker so it reads as a handle under the pill. When collapsed, global rule hides handle. Grip SVG hidden below. */
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) .diagram-toolbar-drag-handle {
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  z-index: -1; /* Behind the toolbar pill so the pill paints on top where they overlap */
+  background: rgba(45, 48, 52, 0.88);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border-color: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+/* Hide grip icon only on mobile (handle stays for drag functionality). */
+body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle .diagram-toolbar-grip-icon {
+  display: none;
 }
 
+/* 54.79.4: Squircle-style inner buttons, white fill (preserve 44px touch targets). */
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .toolbar-pill-btn,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .upload-zone,
 body[data-viewport-mode="mobile"] .diagram-floating-toolbar .blueprint-transparency-btn {
@@ -2570,6 +2615,12 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar .blueprint-transpare
   min-height: 44px;
   min-width: 44px;
   scroll-snap-align: start;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+}
+body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floating-toolbar--collapsed) .diagram-toolbar-collapse-btn {
+  border-radius: 12px;
+  background: transparent;
 }
 
 /* 54.72: Placeholder – 44px tap target for icon area (Camera/instruction entry point) */
@@ -4881,7 +4932,7 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   grid-template-columns: 1fr 1fr 1.2fr;
   column-gap: 20px;
   row-gap: 12px;
-  align-items: start;
+  align-items: stretch;
   margin-bottom: 28px;
   padding: 20px 24px;
   background: #fafafa;
@@ -4901,12 +4952,20 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   border: 1px solid transparent;
   border-radius: 8px;
 }
+.job-confirm-financial-col--current {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.job-confirm-financial-col--quote {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
 .job-confirm-financial-col--new {
   background: #f0fdf4;
   border-color: #bbf7d0;
 }
 .job-confirm-financial-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;

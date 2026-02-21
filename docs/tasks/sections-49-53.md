@@ -146,7 +146,8 @@
 **Confirm Job Details popup**
 
 - [x] **51.6** Confirm Job Details popup: Display the job’s **total_invoice_amount** and also show that value **divided by 1.15** with an explicit **"exc gst"** label after both values (e.g. "X inc gst" and "Y exc gst").
-- [ ] **51.7** Confirm Job Details popup: Further refine UI (spacing, alignment, typography, responsive behaviour) as needed.
+- [x] **51.7** Confirm Job Details popup: Further refine UI (spacing, alignment, typography, responsive behaviour) as needed.
+  - [x] **51.7.1** Equalise height of the three job-confirm financial columns (Current Job Total | + This Quote | = New Total). Plan: [docs/plans/2026-02-22-confirm-job-financial-columns-equal-height.md](../plans/2026-02-22-confirm-job-financial-columns-equal-height.md).
 
 ---
 

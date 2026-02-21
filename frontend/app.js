@@ -11605,6 +11605,7 @@ function initModalAccessibilityFramework() {
     let touchStartY = 0;
     let touchInHeader = false;
     let backdropPointerDownHandler = null;
+    let canvasTapOutsideHandler = null;
 
     function handleSheetTouchStart(e) {
       const sheet = document.getElementById('diagramsBottomSheet');
@@ -11644,10 +11645,22 @@ function initModalAccessibilityFramework() {
           };
           backdrop.addEventListener('pointerdown', backdropPointerDownHandler);
         }
+        const viewCanvas = document.getElementById('view-canvas');
+        const sheet = document.getElementById('diagramsBottomSheet');
+        if (viewCanvas && sheet) {
+          canvasTapOutsideHandler = (e) => {
+            if (layoutState.viewportMode !== 'mobile') return;
+            if (sheet.hidden) return;
+            if (sheet.contains(e.target)) return;
+            closeAccessibleModal(SHEET_ID);
+            e.preventDefault();
+            e.stopPropagation();
+          };
+          viewCanvas.addEventListener('pointerdown', canvasTapOutsideHandler, true);
+        }
         document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'true');
         document.getElementById('diagramsDropdownBtn')?.setAttribute('aria-expanded', 'true');
         document.body.classList.add('diagrams-bottom-sheet-open');
-        const sheet = document.getElementById('diagramsBottomSheet');
         if (sheet) {
           sheet.addEventListener('touchstart', handleSheetTouchStart, { passive: true });
           sheet.addEventListener('touchend', handleSheetTouchEnd, { passive: true });
@@ -11658,6 +11671,11 @@ function initModalAccessibilityFramework() {
         if (backdrop && backdropPointerDownHandler) {
           backdrop.removeEventListener('pointerdown', backdropPointerDownHandler);
           backdropPointerDownHandler = null;
+        }
+        const viewCanvas = document.getElementById('view-canvas');
+        if (viewCanvas && canvasTapOutsideHandler) {
+          viewCanvas.removeEventListener('pointerdown', canvasTapOutsideHandler, true);
+          canvasTapOutsideHandler = null;
         }
         if (backdrop) backdrop.setAttribute('hidden', '');
         document.getElementById('toolbarBreadcrumbsNav')?.setAttribute('aria-expanded', 'false');

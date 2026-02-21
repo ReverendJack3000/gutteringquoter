@@ -69,10 +69,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
 | **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
-| 51 | 51.7, 51.8 | Confirm Job popup UI refine; measured materials: any click away should commit length |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-| 54 | 54.49, 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
+| 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend (darker, Squircle, mesh gradient, ultraThinMaterial); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
