@@ -250,7 +250,30 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.87.2** **Add labour editor popup (vertical stacked fields, multi-row support).** Add `#labourEditorModal` with list rendering, add-row/remove-row controls, and touch-friendly vertical hours/rate inputs.
 - [x] **54.87.3** **Wire popup edits to existing labour row model/totals/Add-to-Job logic.** Reuse existing labour row inputs as source of truth; popup edits update row inputs and existing totals/warning/ServiceM8 gating logic without API contract changes.
 - [x] **54.87.4** **Add mobile labour popup E2E + desktop regression + deploy-safety checks.** Extend mobile quote regression in `e2e/run.js` to assert tap-open, vertical popup fields, edit propagation, add/remove row behavior, and close flow while preserving existing desktop assertions.
-- [ ] **54.87.5** **Future: extrapolate popup edit pattern from labour to other quote elements/items.** Track as follow-up task only; no non-labour popup editing changes in this phase.
+- [x] **54.87.5** **Extrapolate popup edit pattern from labour to other quote elements/items.** Extend mobile tap-to-edit popup behavior from labour to material/billing line rows while preserving quote totals and ServiceM8 flow.
+
+**54.88 Mobile panel UI polish (labels, heading, chevrons)**
+
+- [x] **54.88.1** **Mobile filter labels.** Profile filter first option "All" → "All Profiles"; size filter first option "mm" → "All mm". Via `updateProfileFilterLabelForViewport` / `updateSizeFilterLabelForViewport` in applyViewportMode; desktop unchanged.
+- [x] **54.88.2** **Panel header heading.** "Marley products" → "Parts" in `.panel-header h2` (desktop and mobile).
+- [x] **54.88.3** **Mobile chevron direction.** `#panelCollapsed .chevron-icon` rotate(90deg) so it points to top of screen; `#panelClose svg` rotate(90deg) so it points down. CSS under `body[data-viewport-mode="mobile"]` only.
+
+**54.89 Mobile: residual blue focus ring on tap (fix)**
+
+*Plan: docs/plans/2026-02-21-mobile-residual-blue-focus-ring-fix.md. Goal: remove the impression of residual blue borders when tapping many buttons on mobile (viewport=mobile). Keep 54.6 focus ring for accessibility; suppress browser tap highlight and blur when tapping canvas/non-focusable. Mobile-only; desktop and Railway unchanged.*
+
+- [x] **54.89.1** **Mobile: suppress browser tap highlight.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`, add `-webkit-tap-highlight-color: transparent` (and `tap-highlight-color: transparent`) for button, a, input, select, textarea, [tabindex], .product-thumb so only the 54.6 focus ring is visible.
+- [x] **54.89.2** **Mobile: blur on canvas/non-focusable tap.** In `frontend/app.js`, in the canvas pointerdown path (or equivalent), when viewport is mobile and the tap target is non-focusable (canvas/workspace), blur `document.activeElement` if it is a non-input control and no focus-trapping modal is open. Do not blur when activeElement is input/textarea; do not run on desktop.
+
+**54.90 Mobile quote popup regression: duplicate labour helper + qty inflation (`111`)**
+
+*Reference: `docs/plans/2026-02-21-mobile-quote-popup-regression-handoff.md`. Scope: mobile quote modal UI/logic only; preserve desktop behavior and Railway deploy safety.*
+
+- [x] **54.90.1** **Remove duplicate labour helper rendering on mobile rows.** Ensure labour rows render exactly one helper summary line in the product cell (no parallel `.quote-mobile-line-summary` + `.quote-labour-mobile-summary` duplication visible at the same time).
+- [x] **54.90.2** **Harden quantity source-of-truth for editable rows.** For mobile-editable material rows, read/write qty from explicit input/data state only; do not rely on `qtyCell.textContent` parsing when summaries are present.
+- [x] **54.90.3** **Stop summary text from contaminating qty parsing.** Ensure mobile summary spans do not mutate numeric qty parsing paths (including modal init and recalc paths that run before/after `calculateAndDisplayQuote()`).
+- [x] **54.90.4** **Eliminate double-sync side effects in quote modal bootstrapping.** Remove redundant summary sync calls that can run twice during labour-row initialization and inflate displayed/parsing qty from `1` to `111`.
+- [x] **54.90.5** **Add regression coverage and QA guardrails.** Extend E2E/manual checks for mobile quote modal to assert: single labour helper line, stable qty after opening quote/editing/adding one item, no desktop regression, and Railway-safe behavior.
 
 ---
 

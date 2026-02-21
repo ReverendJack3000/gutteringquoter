@@ -477,7 +477,15 @@ let lastQuoteData = null;
 
 /** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
 let cachedLabourRates = [];
-let labourRowIdCounter = 0;
+let quoteRowIdCounter = 0;
+const quoteLineEditorState = {
+  rowUid: '',
+  rowType: '',
+  draftQty: 0,
+  draftUnitPrice: 0,
+  qtyStep: 1,
+  title: '',
+};
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
 let hasPricingChanges = false;
@@ -982,7 +990,19 @@ function recalcQuoteFromEditTable(changedRow, changedField) {
     }
     const qtyCell = row.cells[1];
     const qtyInput = qtyCell?.querySelector('.quote-line-qty-input');
-    const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : (parseFloat(qtyCell?.textContent) || 0);
+    let qty = 0;
+    if (qtyInput) {
+      qty = parseFloat(qtyInput.value) || 0;
+      setQuoteRowStoredQty(row, qty);
+    } else {
+      const storedQty = getQuoteRowStoredQty(row);
+      if (storedQty != null) {
+        qty = storedQty;
+      } else {
+        qty = parseFloat(getQuoteCellTextWithoutSummaries(row)) || 0;
+        setQuoteRowStoredQty(row, qty);
+      }
+    }
     const lineTotal = Math.round(unitPrice * qty * 100) / 100;
     const totalVal = row.cells[5].querySelector('.quote-cell-total-value');
     if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
@@ -1028,6 +1048,7 @@ function recalcQuoteTotalsFromTableBody() {
   if (labourTotalDisplay) labourTotalDisplay.textContent = formatCurrency(labourSubtotal);
   quoteTotalDisplay.textContent = formatCurrency(total);
   updateQuoteTotalWarning();
+  syncMobileQuoteLineSummaries();
 }
 
 /**
@@ -1141,66 +1162,182 @@ function isMobileQuoteViewport() {
   return layoutState.viewportMode === 'mobile';
 }
 
-function ensureLabourRowUid(row) {
-  if (!row) return '';
-  if (!row.dataset.labourRowUid) {
-    labourRowIdCounter += 1;
-    row.dataset.labourRowUid = 'labour-row-' + labourRowIdCounter;
-  }
-  return row.dataset.labourRowUid;
-}
-
 function formatLabourHoursDisplay(hours) {
   if (!Number.isFinite(hours) || hours <= 0) return '0 hrs';
   const rounded = Math.round(hours * 100) / 100;
   return `${rounded} hrs`;
 }
 
-function syncMobileLabourRowSummary() {
+function formatQuoteQtyDisplay(value) {
+  if (!Number.isFinite(value) || value < 0) return '0';
+  const rounded = Math.round(value * 1000) / 1000;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.?0+$/, '');
+}
+
+function parseCurrencyNumber(raw) {
+  return parseFloat(String(raw ?? '').replace(/[^0-9.-]/g, '')) || 0;
+}
+
+function getQuoteRowStoredQty(row) {
+  if (!row) return null;
+  const stored = parseFloat(row.dataset.quoteQtyValue);
+  return Number.isFinite(stored) ? stored : null;
+}
+
+function setQuoteRowStoredQty(row, qty) {
+  if (!row) return;
+  if (!Number.isFinite(qty) || qty < 0) {
+    delete row.dataset.quoteQtyValue;
+    return;
+  }
+  row.dataset.quoteQtyValue = formatQuoteQtyDisplay(qty);
+}
+
+function getQuoteCellTextWithoutSummaries(row) {
+  const qtyCell = row?.cells?.[1];
+  if (!qtyCell) return '';
+  const clone = qtyCell.cloneNode(true);
+  clone.querySelectorAll('.quote-mobile-line-qty-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary').forEach((el) => el.remove());
+  return (clone.textContent || '').trim();
+}
+
+function isEditableQuoteLineRow(row) {
+  if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return false;
+  return row.dataset.labourRow === 'true' || !!row.dataset.assetId;
+}
+
+function ensureQuoteRowUid(row) {
+  if (!row) return '';
+  if (!row.dataset.quoteRowUid) {
+    quoteRowIdCounter += 1;
+    row.dataset.quoteRowUid = 'quote-row-' + quoteRowIdCounter;
+  }
+  return row.dataset.quoteRowUid;
+}
+
+function findQuoteRowByUid(uid) {
+  if (!uid) return null;
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return null;
+  return tableBody.querySelector(`tr[data-quote-row-uid="${CSS.escape(uid)}"]`);
+}
+
+function getQuoteLineProductName(row) {
+  if (!row) return 'Item';
+  if (row.dataset.labourRow === 'true') return 'Labour';
+  const productCell = row.cells[0];
+  if (!productCell) return 'Item';
+  const clone = productCell.cloneNode(true);
+  clone.querySelectorAll(
+    '.quote-mobile-line-summary, .quote-labour-mobile-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-line-qty-summary, .quote-labour-dup-btn'
+  ).forEach((el) => el.remove());
+  const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+  if (text) return text;
+  const product = state.products.find((p) => p.id === row.dataset.assetId);
+  return product?.name || row.dataset.assetId || 'Item';
+}
+
+function getQuoteLineQuantityMeta(row) {
+  if (!row) return { value: 0, step: 1 };
+  if (row.dataset.labourRow === 'true') {
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    return { value: parseFloat(hoursInput?.value) || 0, step: 0.5 };
+  }
+  const qtyInput = row.querySelector('.quote-line-qty-input');
+  if (qtyInput) {
+    const step = parseFloat(qtyInput.step);
+    const value = parseFloat(qtyInput.value) || 0;
+    setQuoteRowStoredQty(row, value);
+    return { value, step: Number.isFinite(step) && step > 0 ? step : 1 };
+  }
+  const storedValue = getQuoteRowStoredQty(row);
+  if (storedValue != null) return { value: storedValue, step: 1 };
+  const qtyCellText = getQuoteCellTextWithoutSummaries(row);
+  const value = parseFloat(qtyCellText) || 0;
+  setQuoteRowStoredQty(row, value);
+  return { value, step: 1 };
+}
+
+function getQuoteLineUnitPrice(row) {
+  if (!row) return 0;
+  if (row.dataset.labourRow === 'true') {
+    return parseFloat(row.querySelector('.quote-labour-unit-price-input')?.value) || 0;
+  }
+  const editableUnitInput = row.querySelector('.quote-input-unit');
+  if (editableUnitInput) return parseFloat(editableUnitInput.value) || 0;
+  return parseCurrencyNumber(row.cells[4]?.textContent);
+}
+
+function getQuoteLineCost(row) {
+  if (!row) return 0;
+  if (row.dataset.labourRow === 'true') return getQuoteLineUnitPrice(row);
+  return parseFloat(row.dataset.costPrice) || 0;
+}
+
+function getQuoteLineMarkup(row) {
+  if (!row || row.dataset.labourRow === 'true') return null;
+  const markupInput = row.querySelector('.quote-input-markup-inline, .quote-input-markup');
+  if (markupInput) {
+    const v = parseFloat(markupInput.value);
+    return Number.isFinite(v) ? v : null;
+  }
+  const ds = parseFloat(row.dataset.markupPct);
+  return Number.isFinite(ds) ? ds : null;
+}
+
+function getQuoteLineTotal(row) {
+  if (!row) return 0;
+  const totalEl = row.cells[5]?.querySelector('.quote-cell-total-value');
+  return parseCurrencyNumber(totalEl ? totalEl.textContent : row.cells[5]?.textContent);
+}
+
+function syncMobileQuoteLineSummaries() {
   const isMobile = isMobileQuoteViewport();
-  const labourRows = getLabourRowsOrdered();
-  labourRows.forEach((row, idx) => {
-    ensureLabourRowUid(row);
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return;
+  const rows = Array.from(tableBody.rows).filter((row) => isEditableQuoteLineRow(row));
+  rows.forEach((row) => {
+    ensureQuoteRowUid(row);
+    row.classList.add('quote-mobile-editable-line');
     const productCell = row.cells[0];
     const qtyCell = row.cells[1];
-    const unitCell = row.cells[4];
-    if (!productCell || !qtyCell || !unitCell) return;
-    let productSummary = productCell.querySelector('.quote-labour-mobile-summary');
-    if (!productSummary) {
-      productSummary = document.createElement('span');
-      productSummary.className = 'quote-labour-mobile-summary';
-      productCell.appendChild(productSummary);
+    if (!productCell || !qtyCell) return;
+    const title = getQuoteLineProductName(row);
+    const qtyMeta = getQuoteLineQuantityMeta(row);
+    const unitPrice = getQuoteLineUnitPrice(row);
+    const qtyLabel = row.dataset.labourRow === 'true'
+      ? formatLabourHoursDisplay(qtyMeta.value)
+      : formatQuoteQtyDisplay(qtyMeta.value);
+    const unitLabel = formatCurrency(unitPrice);
+
+    let lineSummary = productCell.querySelector('.quote-mobile-line-summary');
+    if (!lineSummary) {
+      lineSummary = document.createElement('span');
+      lineSummary.className = 'quote-mobile-line-summary';
+      productCell.appendChild(lineSummary);
     }
-    let qtySummary = qtyCell.querySelector('.quote-labour-mobile-qty-summary');
+    lineSummary.textContent = `${qtyLabel} x ${unitLabel}${row.dataset.labourRow === 'true' ? '/hr' : ''} · Tap to edit`;
+
+    let qtySummary = qtyCell.querySelector('.quote-mobile-line-qty-summary');
     if (!qtySummary) {
       qtySummary = document.createElement('span');
-      qtySummary.className = 'quote-labour-mobile-qty-summary';
+      qtySummary.className = 'quote-mobile-line-qty-summary';
       qtyCell.appendChild(qtySummary);
     }
-    let rateSummary = unitCell.querySelector('.quote-labour-mobile-rate-summary');
-    if (!rateSummary) {
-      rateSummary = document.createElement('span');
-      rateSummary.className = 'quote-labour-mobile-rate-summary';
-      unitCell.appendChild(rateSummary);
-    }
-    const hoursInput = row.querySelector('.quote-labour-hours-input');
-    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
-    const hours = parseFloat(hoursInput?.value) || 0;
-    const unitPrice = parseFloat(unitPriceInput?.value) || 0;
-    productSummary.textContent = `${formatLabourHoursDisplay(hours)} x ${formatCurrency(unitPrice)}/hr \u00b7 Tap to edit`;
-    qtySummary.textContent = formatLabourHoursDisplay(hours);
-    rateSummary.textContent = `${formatCurrency(unitPrice)}/hr`;
+    qtySummary.textContent = qtyLabel;
+
     if (isMobile) {
       row.setAttribute('tabindex', '0');
-      row.setAttribute('aria-label', `Labour line ${idx + 1}. ${formatLabourHoursDisplay(hours)} at ${formatCurrency(unitPrice)} per hour. Tap to edit.`);
+      row.setAttribute('aria-label', `${title}. ${qtyLabel} at ${unitLabel}${row.dataset.labourRow === 'true' ? ' per hour' : ''}. Tap to edit.`);
     } else {
       row.removeAttribute('tabindex');
       row.removeAttribute('aria-label');
     }
   });
+
   if (!isMobile) {
-    const labourEditorModal = document.getElementById('labourEditorModal');
-    if (labourEditorModal && !labourEditorModal.hasAttribute('hidden')) {
+    const editorModal = document.getElementById('labourEditorModal');
+    if (editorModal && !editorModal.hasAttribute('hidden')) {
       closeAccessibleModal('labourEditorModal');
     }
   }
@@ -1212,215 +1349,289 @@ function closeLabourEditorModal() {
 
 function renderLabourEditorRows() {
   const list = document.getElementById('labourEditorList');
+  const addBtn = document.getElementById('labourEditorAddRowBtn');
   if (!list) return;
-  const labourRows = getLabourRowsOrdered();
   list.innerHTML = '';
-  labourRows.forEach((row, idx) => {
-    ensureLabourRowUid(row);
-    const rowId = row.dataset.labourRowUid;
-    const hoursInput = row.querySelector('.quote-labour-hours-input');
-    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
-    if (!hoursInput || !unitPriceInput) return;
-    const initialHours = parseFloat(hoursInput.value) || 0;
-    const initialRate = parseFloat(unitPriceInput.value) || 0;
 
-    const card = document.createElement('div');
-    card.className = 'labour-editor-row';
-    card.dataset.rowId = rowId;
+  const row = findQuoteRowByUid(quoteLineEditorState.rowUid);
+  if (!row || !isEditableQuoteLineRow(row)) {
+    quoteLineEditorState.rowUid = '';
+    quoteLineEditorState.rowType = '';
+    if (addBtn) addBtn.hidden = true;
+    return;
+  }
 
-    const header = document.createElement('div');
-    header.className = 'labour-editor-row-header';
-    const title = document.createElement('h4');
-    title.className = 'labour-editor-row-title';
-    title.textContent = labourRows.length > 1 ? `Labour Line ${idx + 1}` : 'Labour';
-    header.appendChild(title);
+  const isLabour = row.dataset.labourRow === 'true';
+  const qtyStep = Number.isFinite(quoteLineEditorState.qtyStep) && quoteLineEditorState.qtyStep > 0
+    ? quoteLineEditorState.qtyStep
+    : (isLabour ? 0.5 : 1);
 
-    const fields = document.createElement('div');
-    fields.className = 'labour-editor-fields';
+  if (addBtn) addBtn.hidden = !isLabour;
 
-    const quantityRow = document.createElement('div');
-    quantityRow.className = 'labour-editor-group-row';
-    const quantityLabel = document.createElement('span');
-    quantityLabel.className = 'labour-editor-field-label';
-    quantityLabel.textContent = 'Quantity';
-    const stepper = document.createElement('div');
-    stepper.className = 'labour-editor-stepper';
-    const minusBtn = document.createElement('button');
-    minusBtn.type = 'button';
-    minusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--minus';
-    minusBtn.textContent = '−';
-    minusBtn.setAttribute('aria-label', 'Decrease labour quantity');
-    minusBtn.dataset.step = '-0.5';
-    const hoursEditor = document.createElement('input');
-    hoursEditor.type = 'number';
-    hoursEditor.min = '0';
-    hoursEditor.step = '0.5';
-    hoursEditor.value = String(initialHours);
-    hoursEditor.className = 'labour-editor-field-input';
-    hoursEditor.dataset.field = 'hours';
-    hoursEditor.setAttribute('aria-label', 'Labour quantity');
-    const plusBtn = document.createElement('button');
-    plusBtn.type = 'button';
-    plusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--plus';
-    plusBtn.textContent = '+';
-    plusBtn.setAttribute('aria-label', 'Increase labour quantity');
-    plusBtn.dataset.step = '0.5';
-    stepper.appendChild(minusBtn);
-    stepper.appendChild(hoursEditor);
-    stepper.appendChild(plusBtn);
-    quantityRow.appendChild(quantityLabel);
-    quantityRow.appendChild(stepper);
+  const card = document.createElement('div');
+  card.className = 'labour-editor-row';
+  card.dataset.rowId = quoteLineEditorState.rowUid;
 
-    const purchaseRow = document.createElement('div');
-    purchaseRow.className = 'labour-editor-group-row';
-    const purchaseLabel = document.createElement('span');
-    purchaseLabel.className = 'labour-editor-field-label';
-    purchaseLabel.textContent = 'Purchase Cost';
-    const purchaseValue = document.createElement('span');
-    purchaseValue.className = 'labour-editor-field-value';
-    purchaseRow.appendChild(purchaseLabel);
-    purchaseRow.appendChild(purchaseValue);
+  const header = document.createElement('div');
+  header.className = 'labour-editor-row-header';
+  const title = document.createElement('h4');
+  title.className = 'labour-editor-row-title';
+  title.textContent = quoteLineEditorState.title || getQuoteLineProductName(row);
+  header.appendChild(title);
 
-    const markupRow = document.createElement('div');
-    markupRow.className = 'labour-editor-group-row';
-    const markupLabel = document.createElement('span');
-    markupLabel.className = 'labour-editor-field-label';
-    markupLabel.textContent = 'Markup';
-    const markupValue = document.createElement('span');
-    markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
-    markupValue.textContent = '—';
-    markupRow.appendChild(markupLabel);
-    markupRow.appendChild(markupValue);
+  const fields = document.createElement('div');
+  fields.className = 'labour-editor-fields';
 
-    const unitPriceRow = document.createElement('label');
-    unitPriceRow.className = 'labour-editor-group-row labour-editor-field';
-    const rateLabel = document.createElement('span');
-    rateLabel.className = 'labour-editor-field-label';
-    rateLabel.textContent = 'Unit Price';
-    const rateEditor = document.createElement('input');
+  const quantityRow = document.createElement('div');
+  quantityRow.className = 'labour-editor-group-row';
+  const quantityLabel = document.createElement('span');
+  quantityLabel.className = 'labour-editor-field-label';
+  quantityLabel.textContent = 'Quantity';
+  const stepper = document.createElement('div');
+  stepper.className = 'labour-editor-stepper';
+  const minusBtn = document.createElement('button');
+  minusBtn.type = 'button';
+  minusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--minus';
+  minusBtn.textContent = '−';
+  minusBtn.setAttribute('aria-label', 'Decrease quantity');
+  const qtyEditor = document.createElement('input');
+  qtyEditor.type = 'number';
+  qtyEditor.min = '0';
+  qtyEditor.step = String(qtyStep);
+  qtyEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftQty);
+  qtyEditor.className = 'labour-editor-field-input';
+  qtyEditor.dataset.field = 'qty';
+  qtyEditor.setAttribute('aria-label', 'Quantity');
+  const plusBtn = document.createElement('button');
+  plusBtn.type = 'button';
+  plusBtn.className = 'labour-editor-stepper-btn labour-editor-stepper-btn--plus';
+  plusBtn.textContent = '+';
+  plusBtn.setAttribute('aria-label', 'Increase quantity');
+  stepper.appendChild(minusBtn);
+  stepper.appendChild(qtyEditor);
+  stepper.appendChild(plusBtn);
+  quantityRow.appendChild(quantityLabel);
+  quantityRow.appendChild(stepper);
+
+  const purchaseRow = document.createElement('div');
+  purchaseRow.className = 'labour-editor-group-row';
+  const purchaseLabel = document.createElement('span');
+  purchaseLabel.className = 'labour-editor-field-label';
+  purchaseLabel.textContent = 'Purchase Cost';
+  const purchaseValue = document.createElement('span');
+  purchaseValue.className = 'labour-editor-field-value';
+  purchaseValue.textContent = formatCurrency(getQuoteLineCost(row));
+  purchaseRow.appendChild(purchaseLabel);
+  purchaseRow.appendChild(purchaseValue);
+
+  const markupRow = document.createElement('div');
+  markupRow.className = 'labour-editor-group-row';
+  const markupLabel = document.createElement('span');
+  markupLabel.className = 'labour-editor-field-label';
+  markupLabel.textContent = 'Markup';
+  const markupValue = document.createElement('span');
+  markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
+  const markup = getQuoteLineMarkup(row);
+  markupValue.textContent = Number.isFinite(markup) ? `${formatQuoteQtyDisplay(markup)}%` : '—';
+  markupRow.appendChild(markupLabel);
+  markupRow.appendChild(markupValue);
+
+  const unitPriceRow = document.createElement(isLabour ? 'label' : 'div');
+  unitPriceRow.className = 'labour-editor-group-row labour-editor-field';
+  const rateLabel = document.createElement('span');
+  rateLabel.className = 'labour-editor-field-label';
+  rateLabel.textContent = 'Unit Price';
+  unitPriceRow.appendChild(rateLabel);
+  let rateEditor = null;
+  if (isLabour) {
+    rateEditor = document.createElement('input');
     rateEditor.type = 'number';
     rateEditor.min = '0';
     rateEditor.step = '0.01';
-    rateEditor.value = String(initialRate);
+    rateEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftUnitPrice);
     rateEditor.className = 'labour-editor-field-input';
     rateEditor.dataset.field = 'rate';
-    rateEditor.setAttribute('aria-label', 'Unit price per hour');
-    unitPriceRow.appendChild(rateLabel);
+    rateEditor.setAttribute('aria-label', 'Unit price');
     unitPriceRow.appendChild(rateEditor);
+  } else {
+    const unitValue = document.createElement('span');
+    unitValue.className = 'labour-editor-field-value';
+    unitValue.textContent = formatCurrency(quoteLineEditorState.draftUnitPrice);
+    unitPriceRow.appendChild(unitValue);
+  }
 
-    const note = document.createElement('p');
-    note.className = 'labour-editor-note';
-    note.textContent = 'Unit Price Excludes GST';
+  const note = document.createElement('p');
+  note.className = 'labour-editor-note';
+  note.textContent = 'Unit Price Excludes GST';
 
-    const taxRow = document.createElement('div');
-    taxRow.className = 'labour-editor-group-row';
-    const taxLabel = document.createElement('span');
-    taxLabel.className = 'labour-editor-field-label';
-    taxLabel.textContent = 'Tax Rate';
-    const taxValueWrap = document.createElement('span');
-    taxValueWrap.className = 'labour-editor-field-value';
-    taxValueWrap.innerHTML = '15% GST on Income 15% <span class="labour-editor-chevron" aria-hidden="true">›</span>';
-    taxRow.appendChild(taxLabel);
-    taxRow.appendChild(taxValueWrap);
+  const taxRow = document.createElement('div');
+  taxRow.className = 'labour-editor-group-row';
+  const taxLabel = document.createElement('span');
+  taxLabel.className = 'labour-editor-field-label';
+  taxLabel.textContent = 'Tax Rate';
+  const taxValueWrap = document.createElement('span');
+  taxValueWrap.className = 'labour-editor-field-value';
+  taxValueWrap.innerHTML = '15% GST on Income 15% <span class="labour-editor-chevron" aria-hidden="true">›</span>';
+  taxRow.appendChild(taxLabel);
+  taxRow.appendChild(taxValueWrap);
 
-    const totalRow = document.createElement('div');
-    totalRow.className = 'labour-editor-group-row';
-    const totalLabel = document.createElement('span');
-    totalLabel.className = 'labour-editor-field-label';
-    totalLabel.textContent = 'Total Price';
-    const lineTotal = document.createElement('span');
-    lineTotal.className = 'labour-editor-line-total';
-    totalRow.appendChild(totalLabel);
-    totalRow.appendChild(lineTotal);
+  const totalRow = document.createElement('div');
+  totalRow.className = 'labour-editor-group-row';
+  const totalLabel = document.createElement('span');
+  totalLabel.className = 'labour-editor-field-label';
+  totalLabel.textContent = 'Total Price';
+  const lineTotal = document.createElement('span');
+  lineTotal.className = 'labour-editor-line-total';
+  totalRow.appendChild(totalLabel);
+  totalRow.appendChild(lineTotal);
 
-    const rowActions = document.createElement('div');
-    rowActions.className = 'labour-editor-row-actions';
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'labour-editor-remove-btn';
-    removeBtn.textContent = 'Remove Line';
-    removeBtn.disabled = labourRows.length <= 1;
-    rowActions.appendChild(removeBtn);
+  const rowActions = document.createElement('div');
+  rowActions.className = 'labour-editor-row-actions';
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'labour-editor-remove-btn';
+  removeBtn.textContent = 'Remove Line';
+  removeBtn.disabled = isLabour && getLabourRowsOrdered().length <= 1;
+  rowActions.appendChild(removeBtn);
 
-    const taxGroup = document.createElement('div');
-    taxGroup.className = 'labour-editor-fields labour-editor-fields--single';
-    taxGroup.appendChild(taxRow);
+  const taxGroup = document.createElement('div');
+  taxGroup.className = 'labour-editor-fields labour-editor-fields--single';
+  taxGroup.appendChild(taxRow);
 
-    const totalGroup = document.createElement('div');
-    totalGroup.className = 'labour-editor-fields labour-editor-fields--single';
-    totalGroup.appendChild(totalRow);
+  const totalGroup = document.createElement('div');
+  totalGroup.className = 'labour-editor-fields labour-editor-fields--single';
+  totalGroup.appendChild(totalRow);
 
-    fields.appendChild(quantityRow);
-    fields.appendChild(purchaseRow);
-    fields.appendChild(markupRow);
-    fields.appendChild(unitPriceRow);
-    card.appendChild(header);
-    card.appendChild(fields);
-    card.appendChild(note);
-    card.appendChild(taxGroup);
-    card.appendChild(totalGroup);
-    card.appendChild(rowActions);
-    list.appendChild(card);
+  fields.appendChild(quantityRow);
+  fields.appendChild(purchaseRow);
+  fields.appendChild(markupRow);
+  fields.appendChild(unitPriceRow);
+  card.appendChild(header);
+  card.appendChild(fields);
+  card.appendChild(note);
+  card.appendChild(taxGroup);
+  card.appendChild(totalGroup);
+  card.appendChild(rowActions);
+  list.appendChild(card);
 
-    const syncFromPopupInputs = () => {
-      let nextHours = parseFloat(hoursEditor.value);
-      let nextRate = parseFloat(rateEditor.value);
-      if (!Number.isFinite(nextHours) || nextHours < 0) nextHours = 0;
-      if (!Number.isFinite(nextRate) || nextRate < 0) nextRate = 0;
-      nextHours = Math.round(nextHours * 100) / 100;
-      nextRate = Math.round(nextRate * 100) / 100;
-      hoursEditor.value = String(nextHours);
-      rateEditor.value = String(nextRate);
-      hoursInput.value = String(nextHours);
-      unitPriceInput.value = String(nextRate);
-      updateLabourRowTotal(row);
-      syncMobileLabourRowSummary();
-      purchaseValue.textContent = formatCurrency(nextRate);
-      lineTotal.textContent = formatCurrency(nextHours * nextRate);
-      updateQuoteTotalWarning();
+  const rerenderTotals = () => {
+    const qty = Number.isFinite(quoteLineEditorState.draftQty) ? quoteLineEditorState.draftQty : 0;
+    const unitPrice = Number.isFinite(quoteLineEditorState.draftUnitPrice) ? quoteLineEditorState.draftUnitPrice : 0;
+    lineTotal.textContent = formatCurrency(qty * unitPrice);
+  };
+
+  const setQtyDraft = (nextValue) => {
+    let next = parseFloat(nextValue);
+    if (!Number.isFinite(next) || next < 0) next = 0;
+    if (qtyStep >= 1) next = Math.round(next);
+    else next = Math.round(next * 1000) / 1000;
+    quoteLineEditorState.draftQty = next;
+    qtyEditor.value = formatQuoteQtyDisplay(next);
+    if (isLabour) {
+      const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
+      const hoursInput = targetRow?.querySelector('.quote-labour-hours-input');
+      if (hoursInput) hoursInput.value = formatQuoteQtyDisplay(next);
+      if (targetRow) {
+        updateLabourRowTotal(targetRow);
+        updateQuoteTotalWarning();
+      }
+    }
+    rerenderTotals();
+  };
+
+  qtyEditor.addEventListener('input', () => setQtyDraft(qtyEditor.value));
+  qtyEditor.addEventListener('change', () => setQtyDraft(qtyEditor.value));
+  minusBtn.addEventListener('click', () => setQtyDraft(quoteLineEditorState.draftQty - qtyStep));
+  plusBtn.addEventListener('click', () => setQtyDraft(quoteLineEditorState.draftQty + qtyStep));
+
+  if (rateEditor) {
+    const setRateDraft = (nextValue) => {
+      let next = parseFloat(nextValue);
+      if (!Number.isFinite(next) || next < 0) next = 0;
+      next = Math.round(next * 100) / 100;
+      quoteLineEditorState.draftUnitPrice = next;
+      rateEditor.value = formatQuoteQtyDisplay(next);
+      purchaseValue.textContent = formatCurrency(next);
+      const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
+      const unitPriceInput = targetRow?.querySelector('.quote-labour-unit-price-input');
+      if (unitPriceInput) unitPriceInput.value = formatQuoteQtyDisplay(next);
+      if (targetRow) {
+        updateLabourRowTotal(targetRow);
+        updateQuoteTotalWarning();
+      }
+      rerenderTotals();
     };
-    hoursEditor.addEventListener('input', syncFromPopupInputs);
-    hoursEditor.addEventListener('change', syncFromPopupInputs);
-    rateEditor.addEventListener('input', syncFromPopupInputs);
-    rateEditor.addEventListener('change', syncFromPopupInputs);
-    minusBtn.addEventListener('click', () => {
-      const current = parseFloat(hoursEditor.value) || 0;
-      hoursEditor.value = String(Math.max(0, Math.round((current - 0.5) * 100) / 100));
-      syncFromPopupInputs();
-    });
-    plusBtn.addEventListener('click', () => {
-      const current = parseFloat(hoursEditor.value) || 0;
-      hoursEditor.value = String(Math.round((current + 0.5) * 100) / 100);
-      syncFromPopupInputs();
-    });
-    syncFromPopupInputs();
+    rateEditor.addEventListener('input', () => setRateDraft(rateEditor.value));
+    rateEditor.addEventListener('change', () => setRateDraft(rateEditor.value));
+  }
 
-    removeBtn.addEventListener('click', () => {
-      const currentRows = getLabourRowsOrdered();
-      if (currentRows.length <= 1) return;
-      row.remove();
-      ensureLabourRowsExist();
-      recalcQuoteTotalsFromTableBody();
-      updateQuoteTotalWarning();
-      syncMobileLabourRowSummary();
-      renderLabourEditorRows();
-    });
+  removeBtn.addEventListener('click', () => {
+    const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
+    if (!targetRow || !isEditableQuoteLineRow(targetRow)) return;
+    if (targetRow.dataset.labourRow === 'true' && getLabourRowsOrdered().length <= 1) return;
+    targetRow.remove();
+    ensureLabourRowsExist();
+    removeEmptySectionHeaders();
+    recalcQuoteTotalsFromTableBody();
+    syncMobileQuoteLineSummaries();
+    closeLabourEditorModal();
   });
+
+  rerenderTotals();
 }
 
-function openLabourEditorModal(triggerEl) {
-  if (!isMobileQuoteViewport()) return;
+function applyQuoteLineEditorChanges() {
+  const row = findQuoteRowByUid(quoteLineEditorState.rowUid);
+  if (!row || !isEditableQuoteLineRow(row)) {
+    closeLabourEditorModal();
+    return;
+  }
+  if (row.dataset.labourRow === 'true') {
+    const hoursInput = row.querySelector('.quote-labour-hours-input');
+    const unitPriceInput = row.querySelector('.quote-labour-unit-price-input');
+    if (hoursInput) hoursInput.value = formatQuoteQtyDisplay(quoteLineEditorState.draftQty);
+    if (unitPriceInput) unitPriceInput.value = formatQuoteQtyDisplay(quoteLineEditorState.draftUnitPrice);
+    updateLabourRowTotal(row);
+    updateQuoteTotalWarning();
+  } else {
+    const qtyInput = row.querySelector('.quote-line-qty-input');
+    const nextQty = formatQuoteQtyDisplay(quoteLineEditorState.draftQty);
+    setQuoteRowStoredQty(row, parseFloat(nextQty) || 0);
+    if (qtyInput) {
+      qtyInput.value = nextQty;
+      qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (row.cells[1]) {
+      row.cells[1].textContent = nextQty;
+      recalcQuoteTotalsFromTableBody();
+    }
+  }
+  syncMobileQuoteLineSummaries();
+  closeLabourEditorModal();
+}
+
+function openLabourEditorModal(row, triggerEl) {
+  if (!isMobileQuoteViewport() || !isEditableQuoteLineRow(row)) return;
   const modal = document.getElementById('labourEditorModal');
   if (!modal) return;
+  const qtyMeta = getQuoteLineQuantityMeta(row);
+  quoteLineEditorState.rowUid = ensureQuoteRowUid(row);
+  quoteLineEditorState.rowType = row.dataset.labourRow === 'true' ? 'labour' : 'material';
+  quoteLineEditorState.draftQty = qtyMeta.value;
+  quoteLineEditorState.draftUnitPrice = getQuoteLineUnitPrice(row);
+  quoteLineEditorState.qtyStep = qtyMeta.step;
+  quoteLineEditorState.title = getQuoteLineProductName(row);
   renderLabourEditorRows();
-  const firstInput = modal.querySelector('.labour-editor-field-input');
+  const firstInput = modal.querySelector('.labour-editor-field-input[data-field="qty"]');
   openAccessibleModal('labourEditorModal', {
-    triggerEl: triggerEl || document.getElementById('quoteModalBackBtn'),
+    triggerEl: triggerEl || row || document.getElementById('quoteModalBackBtn'),
     initialFocusEl: firstInput || document.getElementById('labourEditorDoneBtn'),
   });
 }
 
-/** Default unit price for labour (from labour product REP-LAB). Used when creating new labour rows. */
+function syncMobileLabourRowSummary() {
+  syncMobileQuoteLineSummaries();
+}
+
 function getDefaultLabourUnitPrice() {
   const rate = cachedLabourRates.find((r) => r.id === 'REP-LAB') || cachedLabourRates[0];
   return rate ? Number(rate.hourlyRate) : 100;
@@ -1441,7 +1652,6 @@ function updateLabourRowTotal(row) {
     else totalCell.textContent = formatCurrency(total);
   }
   recalcQuoteTotalsFromTableBody();
-  syncMobileLabourRowSummary();
 }
 
 /** Create one labour row and insert before insertBefore (Section 50, labour as product). Options: { defaultHours, defaultUnitPrice }. Returns the new row. */
@@ -1595,15 +1805,17 @@ function commitEmptyRow(tr, productId, qty) {
     const isManualLength = GUTTER_PATTERN.test(productId) || (productId && String(productId).toUpperCase().startsWith('DP-'));
     if (isManualLength) {
       const lengthMm = existingRow.dataset.lengthMm != null && existingRow.dataset.lengthMm !== '' ? parseFloat(existingRow.dataset.lengthMm) : null;
-      const existingCellText = (existingRow.cells[1].textContent || '').trim();
+      const existingCellText = getQuoteCellTextWithoutSummaries(existingRow);
       const existingMetres = lengthMm != null ? lengthMm / 1000 : (existingCellText.endsWith('m') ? parseFloat(existingCellText) : parseFloat(existingCellText)) || 0;
       const addedMetres = parseFloat(qty) || 0;
       const newLengthMm = Math.round((existingMetres + addedMetres) * 1000);
       existingRow.dataset.lengthMm = String(newLengthMm);
       existingRow.cells[1].textContent = formatMetres(newLengthMm);
     } else {
-      const currentQty = parseFloat(existingRow.cells[1].textContent) || 0;
-      existingRow.cells[1].textContent = String(currentQty + qtyNum);
+      const currentQty = getQuoteLineQuantityMeta(existingRow).value || 0;
+      const nextQty = currentQty + qtyNum;
+      setQuoteRowStoredQty(existingRow, nextQty);
+      existingRow.cells[1].textContent = formatQuoteQtyDisplay(nextQty);
     }
     tr.remove();
     appendEmptyQuoteRow();
@@ -1626,8 +1838,10 @@ function commitEmptyRow(tr, productId, qty) {
   if (isManualLengthProduct && qtyNum >= 0) {
     const lengthMm = Math.round(qtyNum * 1000);
     tr.dataset.lengthMm = String(lengthMm);
+    delete tr.dataset.quoteQtyValue;
     qtyCell.textContent = formatMetres(lengthMm);
   } else {
+    setQuoteRowStoredQty(tr, qtyNum);
     qtyCell.textContent = String(qtyNum);
   }
 
@@ -1731,12 +1945,11 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
-    if (isMobileQuoteViewport() && row.dataset.labourRow === 'true') return;
+    if (isMobileQuoteViewport() && isEditableQuoteLineRow(row)) return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
-    syncMobileLabourRowSummary();
   });
   tableBody?.addEventListener('keydown', (ev) => {
     const control = ev.target.closest('.quote-row-remove-x');
@@ -1744,28 +1957,27 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
-    if (isMobileQuoteViewport() && row.dataset.labourRow === 'true') return;
+    if (isMobileQuoteViewport() && isEditableQuoteLineRow(row)) return;
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
     recalcQuoteTotalsFromTableBody();
-    syncMobileLabourRowSummary();
   });
 
   tableBody?.addEventListener('click', (ev) => {
     if (!isMobileQuoteViewport()) return;
-    if (ev.target.closest('.quote-row-remove-x')) return;
-    const row = ev.target.closest('tr[data-labour-row="true"]');
-    if (!row) return;
-    openLabourEditorModal(row);
+    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost')) return;
+    const row = ev.target.closest('tr');
+    if (!isEditableQuoteLineRow(row)) return;
+    openLabourEditorModal(row, row);
   });
   tableBody?.addEventListener('keydown', (ev) => {
     if (!isMobileQuoteViewport()) return;
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    const row = ev.target.closest('tr[data-labour-row="true"]');
-    if (!row) return;
+    const row = ev.target.closest('tr');
+    if (!isEditableQuoteLineRow(row)) return;
     ev.preventDefault();
-    openLabourEditorModal(row);
+    openLabourEditorModal(row, row);
   });
 
   document.addEventListener('click', (ev) => {
@@ -1809,6 +2021,7 @@ function initQuoteModal() {
         input.addEventListener('blur', () => commitMetresInput(tr, input));
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(tr, input); input.blur(); } });
       } else {
+        setQuoteRowStoredQty(tr, parseFloat(String(qty)) || 0);
         qtyCell.textContent = String(qty);
       }
       if (tableBody) tableBody.appendChild(tr);
@@ -1850,8 +2063,9 @@ function initQuoteModal() {
     const elements = getElementsFromQuoteTable();
     if (elements.length > 0) {
       await calculateAndDisplayQuote();
+    } else {
+      syncMobileLabourRowSummary();
     }
-    syncMobileLabourRowSummary();
 
     const firstLabourRow = getLabourRowsOrdered()[0];
     const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
@@ -1864,17 +2078,24 @@ function initQuoteModal() {
   const labourEditorAddRowBtn = document.getElementById('labourEditorAddRowBtn');
   labourEditorBackdrop?.addEventListener('click', closeLabourEditorModal);
   labourEditorCloseBtn?.addEventListener('click', closeLabourEditorModal);
-  labourEditorDoneBtn?.addEventListener('click', closeLabourEditorModal);
+  labourEditorDoneBtn?.addEventListener('click', applyQuoteLineEditorChanges);
   labourEditorAddRowBtn?.addEventListener('click', () => {
+    if (quoteLineEditorState.rowType !== 'labour') return;
     const emptyRow = getEmptyRow();
     if (!emptyRow) return;
-    createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
+    const newRow = createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
+    if (!newRow) return;
     recalcQuoteTotalsFromTableBody();
     updateQuoteTotalWarning();
-    syncMobileLabourRowSummary();
+    quoteLineEditorState.rowUid = ensureQuoteRowUid(newRow);
+    quoteLineEditorState.rowType = 'labour';
+    quoteLineEditorState.draftQty = parseFloat(newRow.querySelector('.quote-labour-hours-input')?.value) || 0;
+    quoteLineEditorState.draftUnitPrice = parseFloat(newRow.querySelector('.quote-labour-unit-price-input')?.value) || getDefaultLabourUnitPrice();
+    quoteLineEditorState.qtyStep = 0.5;
+    quoteLineEditorState.title = getQuoteLineProductName(newRow);
     renderLabourEditorRows();
-    const latestHoursInput = document.querySelector('#labourEditorList .labour-editor-row:last-child .labour-editor-field-input[data-field="hours"]');
-    latestHoursInput?.focus();
+    const latestQtyInput = document.querySelector('#labourEditorList .labour-editor-row:last-child .labour-editor-field-input[data-field="qty"]');
+    latestQtyInput?.focus();
   });
 
   // ServiceM8 job number (Task 22.28): 1–5 digits only; placeholder "e.g. 4999" is strictly placeholder, never used as value
@@ -2222,7 +2443,19 @@ function getAddToJobPayload(jobUuid) {
       const name = getQuoteProductDisplayName(assetId, product?.name);
       const qtyCell = row.cells[1];
       const qtyInput = qtyCell?.querySelector('.quote-line-qty-input');
-      const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : (parseFloat(qtyCell?.textContent) || 0);
+      let qty = 0;
+      if (qtyInput) {
+        qty = parseFloat(qtyInput.value) || 0;
+        setQuoteRowStoredQty(row, qty);
+      } else {
+        const storedQty = getQuoteRowStoredQty(row);
+        if (storedQty != null) {
+          qty = storedQty;
+        } else {
+          qty = parseFloat(getQuoteCellTextWithoutSummaries(row)) || 0;
+          setQuoteRowStoredQty(row, qty);
+        }
+      }
       if (qty <= 0) continue;
       elements.push({ name, qty });
       const cost = parseFloat(row.dataset.costPrice) || 0;
@@ -2570,8 +2803,15 @@ function getElementsFromQuoteTable() {
       const qtyInput = qtyCell?.querySelector('.quote-line-qty-input');
       if (qtyInput) {
         qty = parseFloat(qtyInput.value) || 0;
+        setQuoteRowStoredQty(row, qty);
       } else {
-        qty = qtyCell ? parseFloat(qtyCell.textContent?.trim()) || 0 : 0;
+        const storedQty = getQuoteRowStoredQty(row);
+        if (storedQty != null) {
+          qty = storedQty;
+        } else {
+          qty = parseFloat(getQuoteCellTextWithoutSummaries(row)) || 0;
+          setQuoteRowStoredQty(row, qty);
+        }
       }
     }
     // Always send incomplete rows (qty=1, no length_mm) so backend returns inferred items
@@ -2663,8 +2903,8 @@ function printQuote() {
       }
       if (row.dataset.emptyRow === 'true') continue;
       const productCell = row.cells[0];
-      const rawProduct = (productCell?.textContent ?? '').replace(/\s*\+👷\s*/, '').trim();
-const product = row.dataset.labourRow === 'true' ? 'Labour' : (rawProduct || (productCell?.textContent ?? ''));
+      const rawProduct = getQuoteLineProductName(row);
+      const product = row.dataset.labourRow === 'true' ? 'Labour' : (rawProduct || (productCell?.textContent ?? ''));
       const qtyCell = row.cells[1];
       const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
       const qtyLineInput = qtyCell?.querySelector('.quote-line-qty-input');
@@ -2762,7 +3002,7 @@ function copyQuoteToClipboard() {
     for (const row of tableBody.rows) {
       if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true' || row.dataset.labourRow === 'true') continue;
       if (!row.dataset.assetId) continue;
-      const product = row.cells[0]?.textContent ?? '';
+      const product = getQuoteLineProductName(row);
       const qtyCell = row.cells[1];
       const metresInput = qtyCell?.querySelector('.quote-qty-metres-input');
       const qtyLineInput = qtyCell?.querySelector('.quote-line-qty-input');
@@ -3022,6 +3262,7 @@ async function calculateAndDisplayQuote() {
       row.innerHTML = `<td><span class="${nameClass}">${nameContent}</span></td><td><input type="number" class="quote-line-qty-input" value="${escapeHtml(qtyDisplay)}" min="0" step="1" aria-label="Quantity"></td><td>—</td><td>—</td><td>—</td><td class="quote-cell-total">—</td>`;
       if (insertBefore) tableBody.insertBefore(row, insertBefore);
       else tableBody.appendChild(row);
+      setQuoteRowStoredQty(row, parseFloat(qtyDisplay));
       row.dataset.costPrice = String(line.cost_price);
       row.dataset.markupPct = String(line.markup_percentage);
       row.cells[2].textContent = formatCurrency(line.cost_price);
@@ -3065,6 +3306,7 @@ async function calculateAndDisplayQuote() {
       const qtyInput = row.querySelector('.quote-line-qty-input');
       if (qtyInput) {
         qtyInput.addEventListener('change', () => {
+          setQuoteRowStoredQty(row, parseFloat(qtyInput.value) || 0);
           if (row.dataset.inferred === 'true') {
             delete row.dataset.inferred;
             row.removeAttribute('data-inferred');
@@ -6242,6 +6484,17 @@ function initCanvas() {
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
+    // 54.89.2 Mobile: blur focused control when tapping canvas so residual blue ring doesn't persist
+    if (layoutState.viewportMode === 'mobile' && modalA11yState.stack.length === 0) {
+      const tapTarget = e.target;
+      if (!tapTarget.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])')) {
+        const el = document.activeElement;
+        if (el && el !== document.body) {
+          const tag = el.tagName;
+          if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') el.blur();
+        }
+      }
+    }
     e.preventDefault();
     cancelBboxRecalcDebounce();
     canvas.setPointerCapture(e.pointerId);
@@ -9574,8 +9827,13 @@ function setPanelExpanded(expanded, options = {}) {
     const announcer = document.getElementById('appAnnouncer');
     if (announcer) announcer.textContent = isExpanded ? 'Products panel opened.' : 'Products panel closed.';
     requestAnimationFrame(() => {
-      if (isExpanded && panelClose) panelClose.focus();
-      else if (!isExpanded && panelCollapsed) panelCollapsed.focus();
+      if (isExpanded) {
+        // 54.89: Focus panel container so close button doesn't show blue ring on open
+        if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
+        panel.focus();
+      } else if (panelCollapsed) {
+        panelCollapsed.focus();
+      }
     });
   }
 
@@ -9604,6 +9862,24 @@ function updatePanelTipForViewport(mode) {
       : 'Drag items onto the blueprint to add them.';
 }
 
+/** Mobile-only: profile filter dropdown first option label "All" → "All Profiles". Desktop unchanged. */
+function updateProfileFilterLabelForViewport(mode) {
+  const select = document.getElementById('profileFilter');
+  if (!select) return;
+  const firstOption = select.querySelector('option[value=""]');
+  if (!firstOption) return;
+  firstOption.textContent = mode === 'mobile' ? 'All Profiles' : 'All';
+}
+
+/** Mobile-only: size filter dropdown first option label "mm" → "All mm". Desktop unchanged. */
+function updateSizeFilterLabelForViewport(mode) {
+  const select = document.getElementById('sizeFilter');
+  if (!select) return;
+  const firstOption = select.querySelector('option[value=""]');
+  if (!firstOption) return;
+  firstOption.textContent = mode === 'mobile' ? 'All mm' : 'mm';
+}
+
 function applyViewportMode(mode, options = {}) {
   const normalizedMode = mode === 'mobile' ? 'mobile' : 'desktop';
   const previousMode = layoutState.viewportMode;
@@ -9616,6 +9892,8 @@ function applyViewportMode(mode, options = {}) {
     if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', normalizedMode);
     updatePlaceholderStepsForViewport(normalizedMode);
     updatePanelTipForViewport(normalizedMode);
+    updateProfileFilterLabelForViewport(normalizedMode);
+    updateSizeFilterLabelForViewport(normalizedMode);
     /* 54.67: Mobile header theme-color blue (#54B3D9); desktop stays green (#71C43C) */
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
     const themeColorValue = normalizedMode === 'mobile' ? '#54B3D9' : '#71C43C';
@@ -10228,7 +10506,14 @@ function resolveModalInitialFocus(cfg, options = {}) {
   }
   if (cfg.initialFocus instanceof HTMLElement) return cfg.initialFocus;
   const focusable = getFocusableElements(cfg.element);
-  if (focusable.length > 0) return focusable[0];
+  if (focusable.length > 0) {
+    // 54.89: On mobile, focus modal container so first button doesn't show blue ring on open
+    if (layoutState.viewportMode === 'mobile' && cfg.element instanceof HTMLElement) {
+      if (!cfg.element.hasAttribute('tabindex')) cfg.element.setAttribute('tabindex', '-1');
+      return cfg.element;
+    }
+    return focusable[0];
+  }
   if (cfg.element instanceof HTMLElement) {
     if (!cfg.element.hasAttribute('tabindex')) cfg.element.setAttribute('tabindex', '-1');
     return cfg.element;

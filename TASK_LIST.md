@@ -81,7 +81,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.82.1–54.82.4 | (Mobile-only) Tools within global header #globalToolbar only: Projects/Untitled top-left, collapse after; chevron left of Projects; hide Export/Diagrams/Accessibility. No diagram toolbar or other toolbar changes (plan: docs/plans/2026-02-21-mobile-global-toolbar-reorder-and-declutter.md). |
 | 54 | 54.84.3 | Auto collapse global toolbar when products panel opened (mobile-only). |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
-| 54 | 54.87.5 | (Mobile quote) Future follow-up: extrapolate line-item popup edit pattern from labour to other quote elements/items. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 ---
 

@@ -1791,7 +1791,28 @@ async function run() {
         const labourRow = tableBody ? tableBody.querySelector('tr[data-labour-row="true"]') : null;
         const labourHoursInput = labourRow ? labourRow.querySelector('.quote-labour-hours-input') : null;
         const labourRateInput = labourRow ? labourRow.querySelector('.quote-labour-unit-price-input') : null;
-        const labourSummary = labourRow ? labourRow.querySelector('.quote-labour-mobile-summary') : null;
+        const labourSummary = labourRow ? labourRow.querySelector('.quote-mobile-line-summary') : null;
+        const labourLegacySummary = labourRow ? labourRow.querySelector('.quote-labour-mobile-summary') : null;
+        const labourSummaryCount = labourRow ? labourRow.querySelectorAll('.quote-mobile-line-summary, .quote-labour-mobile-summary').length : 0;
+        const materialRows = tableBody
+          ? Array.from(tableBody.querySelectorAll('tr[data-asset-id]:not([data-labour-row="true"])'))
+          : [];
+        const materialQtyState = materialRows.map((row) => {
+          const qtyInput = row.querySelector('.quote-line-qty-input');
+          const qtySummary = row.querySelector('.quote-mobile-line-qty-summary');
+          const inputRaw = qtyInput ? qtyInput.value : '';
+          const summaryRaw = qtySummary ? qtySummary.textContent || '' : '';
+          const storedRaw = row.dataset.quoteQtyValue || '';
+          const inputNum = parseFloat(String(inputRaw).trim());
+          const summaryNum = parseFloat(String(summaryRaw).trim());
+          return {
+            inputRaw: String(inputRaw).trim(),
+            summaryRaw: String(summaryRaw).trim(),
+            storedRaw: String(storedRaw).trim(),
+            inputNum,
+            summaryNum,
+          };
+        });
         const quoteOpen = !!modal && !modal.hasAttribute('hidden');
         const vw = window.innerWidth;
         const vh = window.innerHeight;
@@ -1816,10 +1837,13 @@ async function run() {
           backButtonVisible: !!backBtn && window.getComputedStyle(backBtn).display !== 'none',
           hasServiceM8: !!servicem8Section,
           rowCount: tableBody ? tableBody.querySelectorAll('tr').length : 0,
+          materialRowCount: materialRows.length,
           labourRowExists: !!labourRow,
           labourHoursInlineHidden: !!labourHoursInput && window.getComputedStyle(labourHoursInput).display === 'none',
           labourRateInlineHidden: !!labourRateInput && window.getComputedStyle(labourRateInput).display === 'none',
           labourSummaryVisible: !!labourSummary && window.getComputedStyle(labourSummary).display !== 'none',
+          labourLegacySummaryVisible: !!labourLegacySummary && window.getComputedStyle(labourLegacySummary).display !== 'none',
+          labourSummaryCount,
           editPricingHidden: isHidden('editPricingBtn'),
           savePricingHidden: isHidden('savePricingBtn'),
           printHidden: isHidden('quotePrintBtn'),
@@ -1828,6 +1852,10 @@ async function run() {
           gstLabelsHidden,
           gstFinancialHidden,
           activeIsLabourInput: !!active && active.classList?.contains('quote-labour-hours-input'),
+          hasQty111: materialQtyState.some((entry) => entry.inputRaw === '111' || entry.summaryRaw === '111' || entry.storedRaw === '111'),
+          hasQtyMismatch: materialQtyState.some((entry) =>
+            Number.isFinite(entry.inputNum) && Number.isFinite(entry.summaryNum) && Math.abs(entry.inputNum - entry.summaryNum) > 0.001
+          ),
         };
       });
       if (!mobileQuoteState.quoteOpen) throw new Error('Mobile quote modal: modal did not open');
@@ -1853,8 +1881,17 @@ async function run() {
       if (!mobileQuoteState.labourHoursInlineHidden || !mobileQuoteState.labourRateInlineHidden || !mobileQuoteState.labourSummaryVisible) {
         throw new Error('Mobile quote modal: labour row should be summary-only in-table on mobile');
       }
+      if (mobileQuoteState.labourSummaryCount !== 1 || mobileQuoteState.labourLegacySummaryVisible) {
+        throw new Error('Mobile quote modal: labour row should show exactly one helper summary line');
+      }
       if (mobileQuoteState.rowCount < 1) {
         throw new Error('Mobile quote modal: expected at least one quote table row');
+      }
+      if (mobileQuoteState.materialRowCount > 0 && mobileQuoteState.hasQty111) {
+        throw new Error('Mobile quote modal: quantity inflated to 111 after mobile summary sync');
+      }
+      if (mobileQuoteState.materialRowCount > 0 && mobileQuoteState.hasQtyMismatch) {
+        throw new Error('Mobile quote modal: material qty summary and qty input should stay in sync');
       }
       if (!mobileQuoteState.editPricingHidden || !mobileQuoteState.savePricingHidden) {
         throw new Error('Mobile quote modal: pricing admin controls should be hidden');
@@ -1883,19 +1920,19 @@ async function run() {
         return {
           open: !!modal && !modal.hasAttribute('hidden'),
           cardCount: list ? list.querySelectorAll('.labour-editor-row').length : 0,
-          hasHoursInput: !!list && !!list.querySelector('.labour-editor-field-input[data-field="hours"]'),
+          hasQtyInput: !!list && !!list.querySelector('.labour-editor-field-input[data-field="qty"]'),
           hasRateInput: !!list && !!list.querySelector('.labour-editor-field-input[data-field="rate"]'),
           verticalFields: !!firstFields && window.getComputedStyle(firstFields).display === 'flex' && window.getComputedStyle(firstFields).flexDirection === 'column',
         };
       });
       if (!labourEditorOpenState.open) throw new Error('Mobile labour editor: tap on labour row should open popup');
-      if (labourEditorOpenState.cardCount < 1 || !labourEditorOpenState.hasHoursInput || !labourEditorOpenState.hasRateInput) {
-        throw new Error('Mobile labour editor: expected editable hours/rate fields');
+      if (labourEditorOpenState.cardCount < 1 || !labourEditorOpenState.hasQtyInput || !labourEditorOpenState.hasRateInput) {
+        throw new Error('Mobile labour editor: expected editable quantity/rate fields');
       }
       if (!labourEditorOpenState.verticalFields) throw new Error('Mobile labour editor: fields should be vertically stacked');
 
       const labourEditApplied = await mobilePage.evaluate(() => {
-        const hoursInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="hours"]');
+        const hoursInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
         const rateInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="rate"]');
         if (!hoursInput || !rateInput) return false;
         hoursInput.value = '2';
@@ -1926,12 +1963,12 @@ async function run() {
       const labourAfterAdd = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
       if (labourAfterAdd < 2) throw new Error('Mobile labour editor: add row should create a second labour row');
       const removedExtraRow = await mobilePage.evaluate(() => {
-        const removeButtons = Array.from(document.querySelectorAll('#labourEditorList .labour-editor-remove-btn'));
-        if (removeButtons.length < 2) return false;
-        removeButtons[1].click();
+        const removeButton = document.querySelector('#labourEditorList .labour-editor-remove-btn');
+        if (!removeButton || removeButton.disabled) return false;
+        removeButton.click();
         return true;
       });
-      if (!removedExtraRow) throw new Error('Mobile labour editor: second row remove button not available');
+      if (!removedExtraRow) throw new Error('Mobile labour editor: remove button should be available after adding second row');
       await delay(220);
       const labourAfterRemove = await mobilePage.evaluate(() => document.querySelectorAll('#quoteTableBody tr[data-labour-row="true"]').length);
       if (labourAfterRemove !== 1) throw new Error(`Mobile labour editor: expected 1 labour row after remove, got ${labourAfterRemove}`);
@@ -1942,6 +1979,53 @@ async function run() {
         return !!modal && modal.hasAttribute('hidden');
       });
       if (!labourEditorClosed) throw new Error('Mobile labour editor: Done should close popup');
+
+      const materialEditorOpenState = await mobilePage.evaluate(() => {
+        const row = document.querySelector('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])');
+        if (!row) return { found: false };
+        const assetId = row.dataset.assetId || '';
+        row.click();
+        const modal = document.getElementById('labourEditorModal');
+        const addBtn = document.getElementById('labourEditorAddRowBtn');
+        const qtyInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
+        return {
+          found: true,
+          assetId,
+          open: !!modal && !modal.hasAttribute('hidden'),
+          hasQtyInput: !!qtyInput,
+          addRowHidden: !addBtn || addBtn.hidden || window.getComputedStyle(addBtn).display === 'none',
+        };
+      });
+      if (!materialEditorOpenState.found) throw new Error('Mobile material editor: no material row found to open');
+      if (!materialEditorOpenState.open || !materialEditorOpenState.hasQtyInput) {
+        throw new Error('Mobile material editor: tapping material row should open popup with quantity input');
+      }
+      if (!materialEditorOpenState.addRowHidden) {
+        throw new Error('Mobile material editor: add labour line action should stay hidden for material rows');
+      }
+      const materialEditApplied = await mobilePage.evaluate(() => {
+        const qtyInput = document.querySelector('#labourEditorList .labour-editor-field-input[data-field="qty"]');
+        if (!qtyInput) return false;
+        qtyInput.value = '2';
+        qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+        qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      });
+      if (!materialEditApplied) throw new Error('Mobile material editor: failed to set quantity in popup');
+      await clickSelectorViaDom(mobilePage, '#labourEditorDoneBtn');
+      await delay(900);
+      const materialQtyUpdated = await mobilePage.evaluate((assetId) => {
+        const rows = Array.from(document.querySelectorAll('#quoteTableBody tr[data-asset-id]:not([data-labour-row="true"])'))
+          .filter((row) => row.dataset.assetId === assetId);
+        if (!rows.length) return false;
+        return rows.some((row) => {
+          const qtyInput = row.querySelector('.quote-line-qty-input');
+          if (qtyInput) return Math.abs((parseFloat(qtyInput.value) || 0) - 2) < 0.01;
+          const qtyVal = parseFloat((row.cells[1]?.textContent || '').trim());
+          return Number.isFinite(qtyVal) && Math.abs(qtyVal - 2) < 0.01;
+        });
+      }, materialEditorOpenState.assetId);
+      if (!materialQtyUpdated) throw new Error('Mobile material editor: Save should apply quantity change for material row');
       await clickSelectorViaDom(mobilePage, '#quoteModalBackBtn');
       await delay(260);
       const mobileQuoteClosed = await mobilePage.evaluate(() => {

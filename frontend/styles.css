@@ -144,6 +144,41 @@ body[data-viewport-mode="mobile"] .product-thumb:focus {
   outline-offset: 2px;
 }
 
+/* Mobile: flick on tap (:active), no persistent ring – hide outline for focus unless :focus-visible (keyboard) */
+body[data-viewport-mode="mobile"] button:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] a:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] input:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] select:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] textarea:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] [tabindex]:focus:not(:focus-visible),
+body[data-viewport-mode="mobile"] .product-thumb:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Mobile: show ring only while pressed (flick) so it doesn't persist until next tap */
+body[data-viewport-mode="mobile"] button:active,
+body[data-viewport-mode="mobile"] a:active,
+body[data-viewport-mode="mobile"] input:active,
+body[data-viewport-mode="mobile"] select:active,
+body[data-viewport-mode="mobile"] textarea:active,
+body[data-viewport-mode="mobile"] [tabindex]:active,
+body[data-viewport-mode="mobile"] .product-thumb:active {
+  outline: 2px solid #0b68ff;
+  outline-offset: 2px;
+}
+
+/* 54.89.1 Mobile: suppress browser default tap highlight; we use 54.6 focus ring only */
+body[data-viewport-mode="mobile"] button,
+body[data-viewport-mode="mobile"] a,
+body[data-viewport-mode="mobile"] input,
+body[data-viewport-mode="mobile"] select,
+body[data-viewport-mode="mobile"] textarea,
+body[data-viewport-mode="mobile"] [tabindex],
+body[data-viewport-mode="mobile"] .product-thumb {
+  -webkit-tap-highlight-color: transparent;
+  tap-highlight-color: transparent;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -2109,7 +2144,7 @@ body[data-viewport-mode="mobile"] .panel-collapsed {
 }
 
 body[data-viewport-mode="mobile"] .panel-collapsed .chevron-icon {
-  transform: rotate(-90deg); /* point up when closed (expand upward) */
+  transform: rotate(90deg); /* point to top of screen when closed (expand upward) */
   flex-shrink: 0;
 }
 
@@ -2158,7 +2193,7 @@ body[data-viewport-mode="mobile"] .panel-search {
   flex-shrink: 0;
 }
 body[data-viewport-mode="mobile"] .panel-close svg {
-  transform: rotate(-90deg); /* down chevron for bottom sheet close */
+  transform: rotate(90deg); /* point down for bottom sheet close */
 }
 
 /* 54.85.5: two dropdowns side-by-side on mobile; 54.85.8: search below dropdowns inside .panel-filters */
@@ -4144,6 +4179,8 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   box-sizing: border-box;
 }
 
+.quote-mobile-line-summary,
+.quote-mobile-line-qty-summary,
 .quote-labour-mobile-summary,
 .quote-labour-mobile-qty-summary,
 .quote-labour-mobile-rate-summary {
@@ -5535,23 +5572,25 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
   min-height: 36px;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] {
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line {
   cursor: pointer;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"]:active td {
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line:active td {
   background: #eef5fb;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-hours-input,
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-unit-price-wrap,
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-unit-price-input,
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-dup-btn,
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-row-remove-x {
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-hours-input,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-unit-price-wrap,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-unit-price-input,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-dup-btn,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-line-qty-input,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-qty-metres-input,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-row-remove-x {
   display: none !important;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-mobile-summary {
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-mobile-line-summary {
   display: block;
   margin-top: 3px;
   font-size: 12px;
@@ -5562,8 +5601,9 @@ body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-
   text-overflow: ellipsis;
 }
 
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-mobile-qty-summary,
-body[data-viewport-mode="mobile"] #quoteModal tr[data-labour-row="true"] .quote-labour-mobile-rate-summary {
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-mobile-line-qty-summary,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-mobile-qty-summary,
+body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-labour-mobile-rate-summary {
   display: inline-block;
   font-size: 13px;
   color: #1f2937;
