@@ -44,9 +44,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/desktop-user-invite-remove
-- Based on: main
-- Status: In Progress (invite/remove implemented; merge when verified)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
