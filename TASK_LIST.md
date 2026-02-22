@@ -73,6 +73,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend (darker, Squircle, mesh gradient, ultraThinMaterial); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
+| 54 | 54.103.1–54.103.4 | (Mobile-only) Selection handles: corners-only (hide side pills), with hit-test parity, E2E/debug parity, and desktop guard. |
+| 54 | 54.104.1–54.104.6 | (Mobile-only) Two-finger selected-element transform smoothing: RAF-coalesced updates, angle continuity, no-jump transition, diagnostics hook, regression + manual QA, Railway-safe. |
+| 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |
 | 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |

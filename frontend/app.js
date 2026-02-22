@@ -80,6 +80,10 @@ const state = {
   // 54.61: Mobile selected-element two-finger transform state
   elementTransformPointerIds: null, // [pointerIdA, pointerIdB]
   elementTransformStart: null, // { centerX, centerY, midX, midY, distance, angle, width, height, rotation }
+  elementTransformRafId: null, // RAF id for frame-coalesced two-finger transform updates
+  elementTransformFrameCount: 0, // diagnostics: number of element-transform frames in current gesture
+  elementTransformLastFrameTs: 0, // diagnostics: last RAF timestamp used for element transform
+  elementTransformLastSample: null, // diagnostics: last applied transform sample
   // 54.62: Mobile tap-first move gating (avoid accidental drags on tap)
   movePrimeStartClientX: 0,
   movePrimeStartClientY: 0,
@@ -371,6 +375,52 @@ const SNAP_POP_DURATION_MS = 180;
 const BBOX_RECALC_DEBOUNCE_MS = 100;
 const ROTATION_SNAP_DEG = 15;
 const ROTATION_MAGNETIC_DEG = 8; // pull toward 0/90/180/270 when within this
+
+/** 54.103: Mobile-only corner handles. Desktop keeps side pills. */
+function shouldShowSelectionSideHandles() {
+  return layoutState.viewportMode !== 'mobile';
+}
+
+function getSelectionResizeHandles(paddedSx, paddedSy, paddedSw, paddedSh, includeSideHandles = true) {
+  const handles = [
+    { id: 'nw', x: paddedSx, y: paddedSy, pill: null },
+    { id: 'ne', x: paddedSx + paddedSw, y: paddedSy, pill: null },
+    { id: 'se', x: paddedSx + paddedSw, y: paddedSy + paddedSh, pill: null },
+    { id: 'sw', x: paddedSx, y: paddedSy + paddedSh, pill: null },
+  ];
+  if (includeSideHandles) {
+    handles.push(
+      { id: 'n', x: paddedSx + paddedSw / 2, y: paddedSy, pill: 'horizontal' },
+      { id: 'e', x: paddedSx + paddedSw, y: paddedSy + paddedSh / 2, pill: 'vertical' },
+      { id: 's', x: paddedSx + paddedSw / 2, y: paddedSy + paddedSh, pill: 'horizontal' },
+      { id: 'w', x: paddedSx, y: paddedSy + paddedSh / 2, pill: 'vertical' },
+    );
+  }
+  return handles;
+}
+
+function getSelectionHandlePoints(paddedSx, paddedSy, paddedSw, paddedSh, options = {}) {
+  const includeSideHandles = options.includeSideHandles !== false;
+  const includeRotate = options.includeRotate !== false;
+  const handles = getSelectionResizeHandles(paddedSx, paddedSy, paddedSw, paddedSh, includeSideHandles);
+  if (includeRotate) {
+    handles.push({
+      id: 'rotate',
+      x: paddedSx + paddedSw / 2,
+      y: paddedSy - ROTATE_HANDLE_OFFSET,
+      pill: null,
+    });
+  }
+  return handles;
+}
+
+/** Return shortest signed angular delta in radians (target - start), normalized to [-PI, PI]. */
+function shortestAngleDeltaRad(startAngle, targetAngle) {
+  let delta = targetAngle - startAngle;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
 
 /** Rotation constraints per asset type. Gutter: cannot rotate between forbiddenMin and forbiddenMax; snap to nearest boundary (hysteresis via mid). Hold Alt to override. */
 const ROTATION_CONSTRAINTS = {
@@ -4636,6 +4686,47 @@ function getFloatingToolbarMinTopPx() {
   return Math.max(8, wrap.getBoundingClientRect().bottom + 8);
 }
 
+function clampFloatingToolbarLeftForCanvasAndViewport(desiredLeft, toolbarWidth, canvasRect) {
+  const viewportMin = 8;
+  const viewportMaxRaw = window.innerWidth - toolbarWidth - 8;
+  const viewportMax = Math.max(viewportMin, viewportMaxRaw);
+  const canvasMin = canvasRect.left + 8;
+  const canvasMax = canvasRect.right - toolbarWidth - 8;
+  let left = desiredLeft;
+  if (canvasMax >= canvasMin) {
+    left = Math.max(canvasMin, Math.min(canvasMax, left));
+  }
+  return Math.max(viewportMin, Math.min(viewportMax, left));
+}
+
+function doesFloatingToolbarOverlapX(rotateHandleX, toolbarLeft, toolbarWidth, pad) {
+  if (!Number.isFinite(rotateHandleX) || !Number.isFinite(toolbarLeft) || !Number.isFinite(toolbarWidth)) return false;
+  return rotateHandleX >= (toolbarLeft - pad) && rotateHandleX <= (toolbarLeft + toolbarWidth + pad);
+}
+
+function getSelectedRotateHandleScreenX(rect, selected, pos, scale) {
+  if (!rect || !selected || !pos) return null;
+  const padding = CANVAS_PORTER_VISUAL_PADDING * scale;
+  const sx = state.offsetX + pos.x * scale;
+  const sy = state.offsetY + pos.y * scale;
+  const sw = selected.width * scale;
+  const sh = selected.height * scale;
+  const paddedSx = sx - padding;
+  const paddedSy = sy - padding;
+  const paddedSw = sw + padding * 2;
+  const paddedSh = sh + padding * 2;
+  const paddedCx = paddedSx + paddedSw / 2;
+  const paddedCy = paddedSy + paddedSh / 2;
+  const rotY = paddedSy - ROTATE_HANDLE_OFFSET;
+  const rad = ((selected.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = 0;
+  const dy = rotY - paddedCy;
+  const rotatedDisplayX = paddedCx + dx * cos - dy * sin;
+  return rect.left + rotatedDisplayX;
+}
+
 /** 54.80.4: Mobile-only – diagram toolbar rect when expanded (for positioning popovers away from it). */
 function getDiagramToolbarExpandRect() {
   if (layoutState.viewportMode !== 'mobile') return null;
@@ -5023,10 +5114,29 @@ function getSelectedElementForMobileTransform() {
 
 /** Clear transient mobile pointer gesture state (move-prime + two-finger element transform). */
 function clearMobilePointerGestureState() {
+  if (state.elementTransformRafId != null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(state.elementTransformRafId);
+  }
+  state.elementTransformRafId = null;
   state.elementTransformPointerIds = null;
   state.elementTransformStart = null;
   state.movePrimeStartClientX = 0;
   state.movePrimeStartClientY = 0;
+}
+
+function queueMobileElementTransformFrame() {
+  if (state.elementTransformRafId != null) return;
+  if (typeof requestAnimationFrame !== 'function') {
+    if (applyMobileElementTransformFromActivePointers()) draw();
+    return;
+  }
+  state.elementTransformRafId = requestAnimationFrame((rafTs) => {
+    state.elementTransformRafId = null;
+    if (state.mode !== 'element-transform') return;
+    if (applyMobileElementTransformFromActivePointers(rafTs)) {
+      draw();
+    }
+  });
 }
 
 /**
@@ -5053,6 +5163,10 @@ function beginMobileElementTransformFromActivePointers() {
     state.snapshotAtActionStart = cloneStateForUndo();
   }
 
+  const visualPos = getElementDrawPosition(selected);
+  const visualCenterX = visualPos.x + selected.width / 2;
+  const visualCenterY = visualPos.y + selected.height / 2;
+
   // Cancel pending one-finger drag preview so two-finger transform starts from committed values.
   state.previewDragX = null;
   state.previewDragY = null;
@@ -5066,8 +5180,8 @@ function beginMobileElementTransformFromActivePointers() {
   state.mode = 'element-transform';
   state.elementTransformPointerIds = [idA, idB];
   state.elementTransformStart = {
-    centerX: selected.x + selected.width / 2,
-    centerY: selected.y + selected.height / 2,
+    centerX: visualCenterX,
+    centerY: visualCenterY,
     midX: midCanvas.x,
     midY: midCanvas.y,
     distance,
@@ -5076,11 +5190,13 @@ function beginMobileElementTransformFromActivePointers() {
     height: selected.height,
     rotation: selected.rotation || 0,
   };
+  state.elementTransformFrameCount = 0;
+  state.elementTransformLastFrameTs = 0;
   return true;
 }
 
 /** 54.61: Apply two-finger transform (translate + uniform resize + rotate) to selected element on mobile. */
-function applyMobileElementTransformFromActivePointers() {
+function applyMobileElementTransformFromActivePointers(frameTs) {
   if (state.mode !== 'element-transform') return false;
   const ids = state.elementTransformPointerIds;
   const start = state.elementTransformStart;
@@ -5102,7 +5218,7 @@ function applyMobileElementTransformFromActivePointers() {
   const scaleFactor = currentDistance / start.distance;
   const nextW = Math.max(MIN_ELEMENT_DIMENSION_PX, start.width * scaleFactor);
   const nextH = Math.max(MIN_ELEMENT_DIMENSION_PX, start.height * scaleFactor);
-  const deltaRotationDeg = ((currentAngle - start.angle) * 180) / Math.PI;
+  const deltaRotationDeg = (shortestAngleDeltaRad(start.angle, currentAngle) * 180) / Math.PI;
   let nextRotation = normalizeAngleDeg(start.rotation + deltaRotationDeg);
   nextRotation = constrainGutterRotation(nextRotation, selected).degrees;
 
@@ -5116,6 +5232,21 @@ function applyMobileElementTransformFromActivePointers() {
   selected.rotation = nextRotation;
 
   invalidateElementRenderCache(selected);
+  const ts = Number.isFinite(frameTs)
+    ? frameTs
+    : (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now());
+  state.elementTransformFrameCount += 1;
+  state.elementTransformLastFrameTs = ts;
+  state.elementTransformLastSample = {
+    frameTs: ts,
+    pointerDistance: currentDistance,
+    scaleFactor,
+    centerX: nextCenterX,
+    centerY: nextCenterY,
+    rotation: nextRotation,
+    width: nextW,
+    height: nextH,
+  };
   return true;
 }
 
@@ -6658,17 +6789,14 @@ function draw() {
       ctx.strokeRect(paddedSx, paddedSy, paddedSw, paddedSh);
       ctx.setLineDash([]);
 
-    // Corner handles (squares): circles. Side handles (n/s/e/w): thin pills for "Canva" look.
-    const handles = [
-      { id: 'nw', x: paddedSx, y: paddedSy, pill: null },
-      { id: 'n', x: paddedSx + paddedSw / 2, y: paddedSy, pill: 'horizontal' },
-      { id: 'ne', x: paddedSx + paddedSw, y: paddedSy, pill: null },
-      { id: 'e', x: paddedSx + paddedSw, y: paddedSy + paddedSh / 2, pill: 'vertical' },
-      { id: 'se', x: paddedSx + paddedSw, y: paddedSy + paddedSh, pill: null },
-      { id: 's', x: paddedSx + paddedSw / 2, y: paddedSy + paddedSh, pill: 'horizontal' },
-      { id: 'sw', x: paddedSx, y: paddedSy + paddedSh, pill: null },
-      { id: 'w', x: paddedSx, y: paddedSy + paddedSh / 2, pill: 'vertical' },
-    ];
+    // 54.103: Mobile = corner-only resize handles; desktop keeps side pill handles.
+    const handles = getSelectionResizeHandles(
+      paddedSx,
+      paddedSy,
+      paddedSw,
+      paddedSh,
+      shouldShowSelectionSideHandles()
+    );
     const handleStrokeWidth = Math.max(0.5, strokeLineWidth);
     handles.forEach((h) => {
       const isHovered = state.hoveredHandleId === h.id;
@@ -6822,7 +6950,7 @@ function draw() {
     ctx.restore();
   }
 
-  // Floating toolbar: position above selection (single element or blueprint), centered
+  // Floating toolbar: desktop = above selection; mobile = top-docked within canvas (still draggable once user moves it).
   const rect = getCanvasRect();
   const toolbarEl = document.getElementById('floatingToolbar');
   const hasSingleSelection = (state.selectedId && selectedElements.length === 1) || state.selectedBlueprint;
@@ -6842,14 +6970,51 @@ function draw() {
           centerScreenX = rect.left + rect.width / 2;
           topScreenY = rect.top + rect.height / 2;
         }
-        const toolbarHeight = 44;
-        const gapAbove = 12;
-        const toolbarLeft = centerScreenX - (toolbarEl.offsetWidth || 200) / 2;
-        const toolbarTop = topScreenY - toolbarHeight - gapAbove;
-        const toolbarMinTop = getFloatingToolbarMinTopPx();
         if (!state.floatingToolbarUserMoved) {
-          toolbarEl.style.left = Math.max(8, Math.min(window.innerWidth - (toolbarEl.offsetWidth || 200) - 8, toolbarLeft)) + 'px';
-          toolbarEl.style.top = Math.max(toolbarMinTop, toolbarTop) + 'px';
+          const toolbarWidth = toolbarEl.offsetWidth || 200;
+          if (layoutState.viewportMode === 'mobile') {
+            const topSafe = Math.max(getFloatingToolbarMinTopPx(), rect.top + 8);
+            const desiredLeft = rect.left + (rect.width - toolbarWidth) / 2;
+            let nextLeft = clampFloatingToolbarLeftForCanvasAndViewport(desiredLeft, toolbarWidth, rect);
+
+            // Optional anti-overlap nudge: avoid covering selected rotate handle when top-docked.
+            if (selected && selectedElements.length === 1 && !state.selectedBlueprint) {
+              const rotateHandleX = getSelectedRotateHandleScreenX(rect, selected, getElementDrawPosition(selected), scale);
+              const overlapPad = 12;
+              if (doesFloatingToolbarOverlapX(rotateHandleX, nextLeft, toolbarWidth, overlapPad)) {
+                const leftCandidate = clampFloatingToolbarLeftForCanvasAndViewport(
+                  rotateHandleX - toolbarWidth - overlapPad,
+                  toolbarWidth,
+                  rect
+                );
+                const rightCandidate = clampFloatingToolbarLeftForCanvasAndViewport(
+                  rotateHandleX + overlapPad,
+                  toolbarWidth,
+                  rect
+                );
+                const candidates = [leftCandidate, rightCandidate].filter((candidateLeft) => !doesFloatingToolbarOverlapX(
+                  rotateHandleX,
+                  candidateLeft,
+                  toolbarWidth,
+                  overlapPad
+                ));
+                if (candidates.length > 0) {
+                  candidates.sort((a, b) => Math.abs(a - desiredLeft) - Math.abs(b - desiredLeft));
+                  nextLeft = candidates[0];
+                }
+              }
+            }
+
+            toolbarEl.style.left = nextLeft + 'px';
+            toolbarEl.style.top = topSafe + 'px';
+          } else {
+            const toolbarHeight = 44;
+            const gapAbove = 12;
+            const toolbarLeft = centerScreenX - toolbarWidth / 2;
+            const toolbarTop = topScreenY - toolbarHeight - gapAbove;
+            toolbarEl.style.left = Math.max(8, Math.min(window.innerWidth - toolbarWidth - 8, toolbarLeft)) + 'px';
+            toolbarEl.style.top = Math.max(getFloatingToolbarMinTopPx(), toolbarTop) + 'px';
+          }
         }
         toolbarEl.removeAttribute('hidden');
         if (wasHidden) collapseDiagramToolbarIfExpanded();
@@ -7039,17 +7204,13 @@ function hitTestHandle(clientX, clientY) {
   const paddedCy = paddedSy + paddedSh / 2;
   const rotY = paddedSy - ROTATE_HANDLE_OFFSET;
 
-  const handles = [
-    { id: 'nw', x: paddedSx, y: paddedSy, pill: null },
-    { id: 'n', x: paddedSx + paddedSw / 2, y: paddedSy, pill: 'horizontal' },
-    { id: 'ne', x: paddedSx + paddedSw, y: paddedSy, pill: null },
-    { id: 'e', x: paddedSx + paddedSw, y: paddedSy + paddedSh / 2, pill: 'vertical' },
-    { id: 'se', x: paddedSx + paddedSw, y: paddedSy + paddedSh, pill: null },
-    { id: 's', x: paddedSx + paddedSw / 2, y: paddedSy + paddedSh, pill: 'horizontal' },
-    { id: 'sw', x: paddedSx, y: paddedSy + paddedSh, pill: null },
-    { id: 'w', x: paddedSx, y: paddedSy + paddedSh / 2, pill: 'vertical' },
-    { id: 'rotate', x: paddedCx, y: rotY, pill: null },
-  ];
+  const handles = getSelectionHandlePoints(
+    paddedSx,
+    paddedSy,
+    paddedSw,
+    paddedSh,
+    { includeSideHandles: shouldShowSelectionSideHandles(), includeRotate: true }
+  );
 
   const display = clientToCanvasDisplay(clientX, clientY);
   if (!display) return null;
@@ -7548,9 +7709,7 @@ function initCanvas() {
       const ptrIds = state.elementTransformPointerIds;
       if (ptrIds && ptrIds.length === 2 && state.activePointers[ptrIds[0]] && state.activePointers[ptrIds[1]]) {
         e.preventDefault();
-        if (applyMobileElementTransformFromActivePointers()) {
-          draw();
-        }
+        queueMobileElementTransformFrame();
       }
       return;
     }
@@ -10413,7 +10572,7 @@ function initGlobalToolbar() {
     const setAriaHidden = () => {
       const mobile = isMobile();
       if (mobileUndoRedoWrap) mobileUndoRedoWrap.setAttribute('aria-hidden', mobile ? 'false' : 'true');
-      if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'false' : 'true');
+      if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'true' : 'false');
     };
     setAriaHidden();
     const observer = new MutationObserver(setAriaHidden);
@@ -12260,6 +12419,23 @@ if (typeof window !== 'undefined') {
       supported: mobileOrientationPolicyState.supported,
     };
   };
+  window.__quoteAppGetMobileGestureDiagnostics = function () {
+    const activePointerCount = Object.keys(state.activePointers || {}).length;
+    return {
+      viewportMode: layoutState.viewportMode,
+      mode: state.mode,
+      activePointerCount,
+      elementTransform: {
+        running: state.mode === 'element-transform',
+        hasStartState: !!state.elementTransformStart,
+        pointerIds: state.elementTransformPointerIds ? state.elementTransformPointerIds.slice() : [],
+        rafPending: state.elementTransformRafId != null,
+        frameCount: state.elementTransformFrameCount || 0,
+        lastFrameTs: state.elementTransformLastFrameTs || 0,
+        lastSample: state.elementTransformLastSample || null,
+      },
+    };
+  };
   window.__quoteAppSetElementRotation = function (id, degrees) {
     const el = state.elements.find((e) => e.id === id);
     if (el) {
@@ -12549,7 +12725,6 @@ if (typeof window !== 'undefined') {
     const paddedSh = sh + padding * 2;
     const paddedCx = paddedSx + paddedSw / 2;
     const paddedCy = paddedSy + paddedSh / 2;
-    const rotY = paddedSy - ROTATE_HANDLE_OFFSET;
     const rotation = selected.rotation || 0;
     const rad = (rotation * Math.PI) / 180;
     const cos = Math.cos(rad);
@@ -12559,20 +12734,16 @@ if (typeof window !== 'undefined') {
       const dy = hy - paddedCy;
       return { x: paddedCx + dx * cos - dy * sin, y: paddedCy + dx * sin + dy * cos };
     };
-    const unrotated = {
-      nw: { x: paddedSx, y: paddedSy },
-      n: { x: paddedSx + paddedSw / 2, y: paddedSy },
-      ne: { x: paddedSx + paddedSw, y: paddedSy },
-      e: { x: paddedSx + paddedSw, y: paddedSy + paddedSh / 2 },
-      se: { x: paddedSx + paddedSw, y: paddedSy + paddedSh },
-      s: { x: paddedSx + paddedSw / 2, y: paddedSy + paddedSh },
-      sw: { x: paddedSx, y: paddedSy + paddedSh },
-      w: { x: paddedSx, y: paddedSy + paddedSh / 2 },
-      rotate: { x: paddedCx, y: rotY },
-    };
+    const handlePoints = getSelectionHandlePoints(
+      paddedSx,
+      paddedSy,
+      paddedSw,
+      paddedSh,
+      { includeSideHandles: shouldShowSelectionSideHandles(), includeRotate: true }
+    );
     const handles = {};
-    for (const [k, v] of Object.entries(unrotated)) {
-      handles[k] = rotateHandlePos(v.x, v.y);
+    for (const handlePoint of handlePoints) {
+      handles[handlePoint.id] = rotateHandlePos(handlePoint.x, handlePoint.y);
     }
     return {
       box: { left: paddedSx, top: paddedSy, width: paddedSw, height: paddedSh },

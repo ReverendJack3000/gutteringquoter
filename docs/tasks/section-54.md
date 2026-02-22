@@ -287,6 +287,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.91.3** **CSS: prevent page scroll and viewport overflow.** In `frontend/styles.css`, add `body[data-viewport-mode="mobile"].products-panel-open { overflow: hidden; }` and optionally `height: 100%; min-height: 100dvh; max-height: 100dvh;` so no white space below viewport.
 - [x] **54.91.4** **Panel-internal (if needed).** If screenshots show white inside the panel below the product strip, ensure `.panel-content` has no extra bottom gap (e.g. justify-content: flex-start, no stray margin/padding).
 - [x] **54.91.5** **Verify.** Manual mobile QA at narrow widths (e.g. 320px, 360px, 390px) with panel open; confirm no white under scroll bar; confirm desktop unchanged; run `npm test`; Railway-safe.
+- [x] **54.91.6** **Mobile: panel height content-sized when expanded.** So no whitespace under product grid; keep max-height cap and inner scroll when content exceeds cap.
 
 **54.92 Mobile: Quote modal UX tidy (grid → dividers, hierarchy, labour, footer, error state)**  
 *Plan: docs/plans/2026-02-21-mobile-quote-modal-ux-tidy.md. Scope: mobile-only full-screen Quote modal; desktop quote modal and all calculation/API unchanged; Railway-safe.*
@@ -405,6 +406,32 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.102.2** **Mobile-only Fit view in global toolbar.** Add a "Fit view" control (same behavior as diagram toolbar Fit) to the global toolbar, visible only when mobile; 44px min touch target, aria-label; desktop hidden/unchanged.
 - [x] **54.102.3** **Mobile double-tap on empty canvas → Fit.** On mobile, detect double-tap on canvas when no badge under tap; trigger Fit (viewZoom = 1, resetMobileFitPanState, draw) and prevent default. Preserve dblclick-on-badge → length popover. Gate by viewportMode === 'mobile'.
 - [ ] **54.102.4** **QA: double-tap and zoom-out.** Manual mobile (iOS Safari, Android Chrome), portrait/landscape, 200% zoom; confirm no double-tap page zoom on canvas, Fit always reachable, double-tap empty canvas fits; no desktop regression; Railway deploy unchanged.
+
+**54.103 Mobile selection handles: corners only (mobile-only, desktop unchanged, Railway-safe)**  
+*Scope: selected-element resize affordances on canvas. Mobile should hide side pills while keeping corners + rotate; desktop keeps current full handle set.*
+
+- [ ] **54.103.1** **Mobile render: corner-only handles.** In `frontend/app.js` draw path, when `layoutState.viewportMode === 'mobile'`, render only `nw/ne/se/sw` resize handles plus rotate handle; hide side handles (`n/e/s/w`) visually.
+- [ ] **54.103.2** **Mobile hit-testing: disable side-handle interactions.** In `frontend/app.js` handle hit-test path, gate side-handle hit targets off on mobile so hidden handles cannot be activated by touch/cursor.
+- [ ] **54.103.3** **E2E/debug parity for handle map.** Ensure mobile `window.__quoteAppGetSelectionBoxInCanvasCoords()` / `window.__quoteAppGetSelectionBoxInScreenCoords()` handle payload matches visible handles (corners + rotate only), while desktop still includes side handles.
+- [ ] **54.103.4** **Regression + QA sign-off.** Verify mobile corner-only behavior and desktop unchanged resize/rotate behavior; keep Railway deploy assumptions unchanged.
+
+**54.104 Mobile two-finger transform smoothing reliability (mobile-only, desktop unchanged, Railway-safe)**  
+*Scope: selected-element two-finger transform (`translate + scale + rotate`) quality improvements in `frontend/app.js`; no backend/API/deploy changes.*
+
+- [ ] **54.104.1** **Frame-coalesced two-finger transform updates (RAF).** Replace raw per-pointermove application with RAF-coalesced updates to reduce jitter and overdraw during active two-finger transform.
+- [ ] **54.104.2** **Rotation continuity across wrap boundary.** Apply shortest-angle delta handling so two-finger rotation remains continuous across ±180° without sudden flips.
+- [ ] **54.104.3** **No-jump one-finger → two-finger transition.** When second finger joins during selected-element one-finger move, initialize transform from current visual position to avoid snap-back/jump.
+- [ ] **54.104.4** **Diagnostics hook for QA verification.** Add a read-only frontend debug hook exposing two-finger transform frame/sample state for manual/E2E diagnostics.
+- [ ] **54.104.5** **Automated regression coverage updates.** Extend `e2e/run.js` to assert mobile side-handle absence and desktop side-handle presence; keep existing desktop resize/rotate assertions intact.
+- [ ] **54.104.6** **Manual mobile QA + Railway safety verification.** Real-device check (iOS Safari + Android Chrome): smooth two-finger behavior, no gesture conflicts, no desktop regressions; run `npm test`; confirm no Railway env/build/config changes.
+
+**54.105 Mobile selection element toolbar: top-docked default (canvas-only, keep drag; desktop unchanged; Railway-safe)**  
+*Scope: `#floatingToolbar` auto-position in `frontend/app.js` for mobile canvas view only. Keep toolbar out of white header while preserving existing user drag behavior.*
+
+- [x] **54.105.1** **Mobile top-docked default placement in canvas safe area.** In `draw()` auto-position path for `#floatingToolbar`, when mobile and `!state.floatingToolbarUserMoved`, place toolbar at `topSafe = max(getFloatingToolbarMinTopPx(), canvasRect.top + 8)` and horizontal center of canvas; clamp to canvas bounds with viewport fallback.
+- [x] **54.105.2** **Preserve existing drag/manual-position semantics.** Do not change `initFloatingToolbar` drag handlers; user drag still sets `floatingToolbarUserMoved` and keeps manual position until selection change.
+- [x] **54.105.3** **Mobile anti-overlap nudge for rotate handle.** On mobile top-docked auto-placement, detect selected element rotate-handle X overlap and nudge toolbar left/right within clamps when possible; fallback to centered top if no non-overlap placement fits.
+- [ ] **54.105.4** **E2E + manual QA + Railway safety verification.** Extend mobile E2E assertion to check top-docked open position near safe top before manual drag; run `npm test`; manual QA on iOS Safari + Android Chrome (portrait/landscape, 200% zoom); confirm no Railway env/build/config changes.
 
 ---
 

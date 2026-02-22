@@ -408,6 +408,11 @@ async function run() {
       }
       const boxScreen = await page.evaluate(() => (window.__quoteAppGetSelectionBoxInScreenCoords && window.__quoteAppGetSelectionBoxInScreenCoords()) || null);
       if (boxScreen && boxScreen.handles && boxScreen.handles.rotate) {
+        for (const sideKey of ['n', 'e', 's', 'w']) {
+          if (!boxScreen.handles[sideKey]) {
+            throw new Error(`Desktop handle regression: expected side handle "${sideKey}" to be present`);
+          }
+        }
         const rotX = Number(boxScreen.handles.rotate.x);
         const rotY = Number(boxScreen.handles.rotate.y);
         const center = await page.evaluate((id) => (window.__quoteAppGetElementScreenCenter && window.__quoteAppGetElementScreenCenter(id)) || null, gutterEl.id);
@@ -1838,6 +1843,24 @@ async function run() {
       if (!measurableCenter) throw new Error('Mobile ruler: could not resolve measurable element screen center');
       await mobilePage.mouse.click(measurableCenter.x, measurableCenter.y);
       await delay(260);
+      const mobileSelectionHandles = await mobilePage.evaluate(() => {
+        if (typeof window.__quoteAppGetSelectionBoxInScreenCoords !== 'function') return null;
+        const box = window.__quoteAppGetSelectionBoxInScreenCoords();
+        return box && box.handles ? Object.keys(box.handles) : null;
+      });
+      if (!mobileSelectionHandles) {
+        throw new Error('Mobile handles: selection box handles unavailable for selected element');
+      }
+      for (const requiredKey of ['nw', 'ne', 'se', 'sw', 'rotate']) {
+        if (!mobileSelectionHandles.includes(requiredKey)) {
+          throw new Error(`Mobile handles: expected "${requiredKey}" handle for corner+rotate mode`);
+        }
+      }
+      for (const sideKey of ['n', 'e', 's', 'w']) {
+        if (mobileSelectionHandles.includes(sideKey)) {
+          throw new Error(`Mobile handles: side handle "${sideKey}" should be hidden in mobile mode`);
+        }
+      }
 
       const noAutoFocusState = await mobilePage.evaluate(() => {
         const popover = document.getElementById('badgeLengthPopover');
@@ -2008,7 +2031,13 @@ async function run() {
           `Mobile floating toolbar: top ${floatingToolbarSafeTop.top.toFixed(2)} should be >= safe min ${floatingToolbarSafeTop.minTop.toFixed(2)}`
         );
       }
-      console.log('  ✓ Mobile floating toolbar respects global header safe top');
+      const topDockDelta = Math.abs(floatingToolbarSafeTop.top - floatingToolbarSafeTop.minTop);
+      if (topDockDelta > 2) {
+        throw new Error(
+          `Mobile floating toolbar: expected top-docked position near safe top, got delta=${topDockDelta.toFixed(2)}`
+        );
+      }
+      console.log('  ✓ Mobile floating toolbar respects global header safe top and opens top-docked');
 
       // Mobile popover coherence: opening Products should close per-element color palette.
       await pointerTapSelector(mobilePage, '#floatingToolbarColor');

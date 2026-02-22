@@ -2102,10 +2102,11 @@ body[data-viewport-mode="mobile"] .panel {
 }
 
 /* Shorter sheet to reduce white space below product thumb strip.
- * 54.91: No padding-bottom when expanded so no white strip under the product-grid horizontal scrollbar. */
+ * 54.91 / 54.91.6: Content-sized height when expanded so no white strip under the product-grid horizontal scrollbar. */
 body[data-viewport-mode="mobile"] .panel.expanded {
-  height: 50vh;
+  height: auto;
   max-height: min(50vh, 420px);
+  overflow: hidden;
   padding-bottom: 0;
 }
 @media (orientation: landscape) {
@@ -2127,7 +2128,8 @@ body[data-viewport-mode="mobile"] .panel-content {
 }
 
 body[data-viewport-mode="mobile"] .panel.expanded .panel-content {
-  flex: 1;
+  flex: 0 0 auto;
+  max-height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -2876,17 +2878,20 @@ body[data-viewport-mode="mobile"] .mobile-redo-btn:disabled {
   cursor: not-allowed;
 }
 
-/* 54.102.2: Mobile-only Fit view in global toolbar (44px touch target) */
+/* 54.102.2: Fit view in global toolbar – desktop only (hidden on mobile; Fit via diagram toolbar + double-tap empty canvas) */
 .mobile-fit-view-btn {
   display: none;
 }
-body[data-viewport-mode="mobile"] .mobile-fit-view-btn {
+body:not([data-viewport-mode="mobile"]) .mobile-fit-view-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
   padding: 10px;
+}
+body[data-viewport-mode="mobile"] .mobile-fit-view-btn {
+  display: none !important;
 }
 
 /* Mobile: 44px minimum touch targets (WCAG 2.5.5) */
