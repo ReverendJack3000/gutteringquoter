@@ -950,9 +950,15 @@ def api_servicem8_authorize(user_id: Any = Depends(get_current_user_id)):
     Frontend must fetch this with Authorization header, then redirect the user to the returned URL.
     (Browser navigation to this endpoint does not send Bearer token, so we return JSON, not a redirect.)
     
+    When SERVICEM8_COMPANY_USER_ID is set, only that user can connect (others get 403).
     redirect_uri in the authorize URL MUST match the Activation URL set in ServiceM8 Store Connect
     exactly: https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
     """
+    if not sm8.can_disconnect_servicem8(str(user_id)):
+        raise HTTPException(
+            403,
+            "Only the organization's ServiceM8 account can connect here.",
+        )
     try:
         state = sm8.generate_state(str(user_id))
         url = sm8.build_authorize_url(state)
@@ -1007,17 +1013,24 @@ def api_servicem8_callback(
 
 @app.get("/api/servicem8/oauth/status")
 def api_servicem8_status(user_id: Any = Depends(get_current_user_id)):
-    """Check if user has connected ServiceM8. Requires Bearer token."""
+    """Check if user has connected ServiceM8. Requires Bearer token. When company mode is on, uses company token for connected; disconnect_allowed only for company user."""
     try:
-        tokens = sm8.get_tokens(str(user_id))
-        return {"connected": tokens is not None}
+        effective_id = sm8.get_effective_servicem8_user_id(str(user_id))
+        tokens = sm8.get_tokens(effective_id)
+        disconnect_allowed = sm8.can_disconnect_servicem8(str(user_id))
+        return {"connected": tokens is not None, "disconnect_allowed": disconnect_allowed}
     except ValueError:
-        return {"connected": False, "config": "ServiceM8 OAuth not configured"}
+        return {"connected": False, "config": "ServiceM8 OAuth not configured", "disconnect_allowed": True}
 
 
 @app.post("/api/servicem8/oauth/disconnect")
 def api_servicem8_disconnect(user_id: Any = Depends(get_current_user_id)):
-    """Disconnect ServiceM8. Remove stored tokens. Requires Bearer token."""
+    """Disconnect ServiceM8. Remove stored tokens. Requires Bearer token. When company mode is on, only the company user can disconnect (others get 403)."""
+    if not sm8.can_disconnect_servicem8(str(user_id)):
+        raise HTTPException(
+            403,
+            "Only the organization's ServiceM8 account can disconnect.",
+        )
     sm8.delete_tokens(str(user_id))
     return {"success": True}
 
@@ -1030,8 +1043,10 @@ def api_servicem8_job_by_generated_id(
     """
     Fetch a ServiceM8 job by generated_job_id (job number).
     Returns job_address, total_invoice_amount, and uuid for confirmation UI.
+    When SERVICEM8_COMPANY_USER_ID is set, uses that user's token for lookup.
     """
-    job = sm8.fetch_job_by_generated_id(str(user_id), generated_job_id)
+    effective_id = sm8.get_effective_servicem8_user_id(str(user_id))
+    job = sm8.fetch_job_by_generated_id(effective_id, generated_job_id)
     if job is None:
         raise HTTPException(404, "Job not found")
     return {
@@ -1050,8 +1065,10 @@ def api_servicem8_add_to_job(
     """
     Add materials and note to a ServiceM8 job.
     POSTs job material (bundled line) and job note via ServiceM8 API.
+    When SERVICEM8_COMPANY_USER_ID is set, uses that user's token.
     """
-    tokens = sm8.get_tokens(str(user_id))
+    effective_id = sm8.get_effective_servicem8_user_id(str(user_id))
+    tokens = sm8.get_tokens(effective_id)
     if not tokens:
         raise HTTPException(401, "ServiceM8 not connected")
     profile_label = "spouting"
@@ -1102,8 +1119,10 @@ def api_servicem8_upload_job_attachment(
     """
     Upload the blueprint + elements PNG as an attachment to a ServiceM8 job.
     Requires OAuth scope manage_attachments. Accepts base64-encoded PNG from the frontend.
+    When SERVICEM8_COMPANY_USER_ID is set, uses that user's token.
     """
-    tokens = sm8.get_tokens(str(user_id))
+    effective_id = sm8.get_effective_servicem8_user_id(str(user_id))
+    tokens = sm8.get_tokens(effective_id)
     if not tokens:
         raise HTTPException(401, "ServiceM8 not connected")
     try:
@@ -1174,8 +1193,10 @@ def api_servicem8_create_new_job(
     Create a new ServiceM8 job from the confirm popup (Create New Job Instead).
     Uses our generated UUID; copies fields from original job; adds materials to new job only;
     adds same note and diagram to both original and new job; copies job contact to new job.
+    When SERVICEM8_COMPANY_USER_ID is set, uses that user's token.
     """
-    tokens = sm8.get_tokens(str(user_id))
+    effective_id = sm8.get_effective_servicem8_user_id(str(user_id))
+    tokens = sm8.get_tokens(effective_id)
     if not tokens:
         raise HTTPException(401, "ServiceM8 not connected")
     access_token = tokens["access_token"]

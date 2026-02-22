@@ -59,6 +59,82 @@ def _get_app_credentials() -> tuple[str, str]:
     return app_id, app_secret
 
 
+# Cache for email -> user_id resolution (avoids repeated list_users calls)
+_company_user_id_by_email_cache: dict[str, Optional[str]] = {}
+
+
+def _resolve_company_email_to_user_id(email: str) -> Optional[str]:
+    """Resolve ServiceM8 company owner email to Supabase auth user id. Cached per process."""
+    email_key = email.strip().lower()
+    if not email_key:
+        return None
+    if email_key in _company_user_id_by_email_cache:
+        return _company_user_id_by_email_cache[email_key]
+    try:
+        supabase = get_supabase()
+        try:
+            resp = supabase.auth.admin.list_users(per_page=1000)
+        except TypeError:
+            resp = supabase.auth.admin.list_users()
+        users = getattr(resp, "users", None) or (resp if isinstance(resp, list) else [])
+        if isinstance(resp, dict):
+            users = resp.get("users")
+            if not users and isinstance(resp.get("data"), dict):
+                users = resp["data"].get("users")
+        if not users and hasattr(resp, "data"):
+            data = getattr(resp, "data", None)
+            if isinstance(data, dict) and isinstance(data.get("users"), list):
+                users = data["users"]
+        for u in users or []:
+            u_email = (getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)) or ""
+            if u_email.strip().lower() == email_key:
+                uid = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
+                if uid:
+                    _company_user_id_by_email_cache[email_key] = str(uid)
+                    return _company_user_id_by_email_cache[email_key]
+        logger.warning("ServiceM8 company email %r not found in auth users.", email.strip())
+        _company_user_id_by_email_cache[email_key] = None
+        return None
+    except Exception as e:
+        logger.warning("Failed to resolve ServiceM8 company email to user id: %s", e)
+        _company_user_id_by_email_cache[email_key] = None
+        return None
+
+
+def _get_company_user_id() -> Optional[str]:
+    """Return company user id from SERVICEM8_COMPANY_USER_ID or by resolving SERVICEM8_COMPANY_EMAIL (e.g. ServiceM8 account owner)."""
+    raw_id = os.environ.get("SERVICEM8_COMPANY_USER_ID", "").strip()
+    if raw_id:
+        return raw_id
+    raw_email = os.environ.get("SERVICEM8_COMPANY_EMAIL", "").strip()
+    if raw_email:
+        return _resolve_company_email_to_user_id(raw_email)
+    return None
+
+
+def get_effective_servicem8_user_id(current_user_id: str) -> str:
+    """
+    Return the user_id whose ServiceM8 tokens should be used for API calls.
+    When SERVICEM8_COMPANY_USER_ID or SERVICEM8_COMPANY_EMAIL is set, that user's tokens are used for everyone.
+    Otherwise the current user's tokens are used.
+    """
+    company_id = _get_company_user_id()
+    if company_id:
+        return company_id
+    return current_user_id
+
+
+def can_disconnect_servicem8(current_user_id: str) -> bool:
+    """
+    True if the current user is allowed to disconnect ServiceM8.
+    When company mode is off, everyone can disconnect their own. When on, only the company user can.
+    """
+    company_id = _get_company_user_id()
+    if not company_id:
+        return True
+    return current_user_id == company_id
+
+
 def get_redirect_uri() -> str:
     """
     Get OAuth callback URL. MUST match ServiceM8 Activation URL exactly.

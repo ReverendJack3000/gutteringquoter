@@ -82,7 +82,15 @@
 
 - [x] **49.27.5** **Job contact for new job.** (1) **Get** job contact info for the original job: `GET https://api.servicem8.com/api_1.0/jobcontact.json?$filter=job_uuid eq 'ORIGINAL_JOB_UUID'` (use the original job’s UUID in the filter). (2) **POST** to create a job contact for the new job: `POST https://api.servicem8.com/api_1.0/jobcontact.json`. Body: `job_uuid` = **new job’s UUID** (the one we generated); `type` = `"BILLING"`. Populate from the GET response and include in the POST: `first`, `last`, `phone`, `mobile`, `email` (copy from the retrieved job contact(s) as appropriate — e.g. primary or first BILLING contact). If no job contact is returned for the original job, skip creating a job contact for the new job (no POST).
 
-*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5). Note formatting complete (49.25). Attachment: 49.26–49.26.3 two-step flow implemented and verified. Create New Job (49.27–49.27.5): create-new-job endpoint and frontend wired; create job, materials, note/diagram to both jobs, job contact. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
+**Company token (extend super admin token to all users)**
+
+- [x] **49.28** Add optional env `SERVICEM8_COMPANY_USER_ID`; when set, use that user's ServiceM8 tokens for all ServiceM8 API operations (job lookup, add-to-job, upload attachment, create-new-job) for any authenticated user.
+- [x] **49.29** Backend: implement `get_effective_servicem8_user_id(current_user_id)` in `servicem8.py`; use it for token lookup in status, jobs, add-to-job, upload-job-attachment, create-new-job.
+- [x] **49.30** Backend: status endpoint returns `disconnect_allowed: false` when company mode is on and current user is not the company user; restrict authorize and disconnect to company user when company mode is on (403 for others).
+- [x] **49.31** Frontend: when status has `disconnect_allowed === false`, show "ServiceM8 connected (organization)" and hide/disable Disconnect; handle 403 from authorize for non-company user.
+- [x] **49.32** Document `SERVICEM8_COMPANY_USER_ID` in `.env.example`, README, and RAILWAY_DEPLOYMENT.md; verify Railway deploy and desktop/mobile unchanged.
+
+*Section 49 status: Add to Job flow implemented (49.20.1, 49.21, 49.22). Job lookup and confirmation overlay working. POST jobmaterial fix complete (49.24, 49.24.1–49.24.5). Note formatting complete (49.25). Attachment: 49.26–49.26.3 two-step flow implemented and verified. Create New Job (49.27–49.27.5): create-new-job endpoint and frontend wired; create job, materials, note/diagram to both jobs, job contact. Company token (49.28–49.32): SERVICEM8_COMPANY_USER_ID extends one user's connection to all users. Docs: [developer.servicem8.com/docs/authentication](https://developer.servicem8.com/docs/authentication).*
 
 ---
 

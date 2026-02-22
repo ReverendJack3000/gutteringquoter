@@ -10099,8 +10099,14 @@ async function checkServiceM8Status() {
     const data = await resp.json();
     const menuText = document.getElementById('servicem8MenuText');
     const menuItem = document.getElementById('menuItemServiceM8');
+    const disconnectAllowed = data.disconnect_allowed !== false;
+    window.servicem8DisconnectAllowed = disconnectAllowed;
     if (menuText) {
-      menuText.textContent = data.connected ? 'Disconnect ServiceM8' : 'Connect ServiceM8';
+      if (data.connected && !disconnectAllowed) {
+        menuText.textContent = 'ServiceM8 connected (organization)';
+      } else {
+        menuText.textContent = data.connected ? 'Disconnect ServiceM8' : 'Connect ServiceM8';
+      }
     }
     if (menuItem) {
       menuItem.style.display = 'block';
@@ -10166,6 +10172,11 @@ function initServiceM8Menu() {
     }
 
     if (window.servicem8Connected) {
+      // When organization connection, user cannot disconnect
+      if (window.servicem8DisconnectAllowed === false) {
+        showMessage('ServiceM8 is connected for your organization. Only the account owner can disconnect.', 'info');
+        return;
+      }
       // Disconnect
       const confirmed = await showAppConfirm('Disconnect ServiceM8 account?', {
         title: 'Disconnect ServiceM8',

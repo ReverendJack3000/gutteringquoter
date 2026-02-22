@@ -57,6 +57,8 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 | `SERVICEM8_APP_ID` | No (ServiceM8) | ServiceM8 App ID from Store Connect (for OAuth 2.0). |
 | `SERVICEM8_APP_SECRET` | No (ServiceM8) | ServiceM8 App Secret from Store Connect (for OAuth 2.0). |
 | `APP_BASE_URL` | No (ServiceM8) | Base URL for OAuth callback, e.g. `https://quote-app-production-7897.up.railway.app`. Defaults to `http://127.0.0.1:8000` for local dev. Must match Return URL in ServiceM8 Store Connect. |
+| `SERVICEM8_COMPANY_EMAIL` | No (ServiceM8) | ServiceM8 account owner email (e.g. `jack@clearstreamguttering.co.nz`). When set, that user's ServiceM8 tokens are used for all users. Only that user can connect or disconnect; others see "ServiceM8 connected (organization)". That user must connect ServiceM8 once. Resolved to user id via Supabase Auth (requires `SUPABASE_SERVICE_ROLE_KEY`). |
+| `SERVICEM8_COMPANY_USER_ID` | No (ServiceM8) | Alternative to `SERVICEM8_COMPANY_EMAIL`: Supabase auth user UUID. When set, that user's ServiceM8 tokens are used for all users. Prefer `SERVICEM8_COMPANY_EMAIL` so you don't have to look up the UUID. |
 
 Do **not** commit `.env` or paste these values into the repo. Railway injects them at runtime.
 
