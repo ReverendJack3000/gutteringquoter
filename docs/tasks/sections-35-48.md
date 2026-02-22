@@ -39,8 +39,14 @@
 - [x] **35.14** Forgot-password / set-password landing: verify Supabase Site URL and app redirect so set-password lands on app and `#authSetPasswordForm` shows; document if needed; fix any hash/query handling gaps.
 - [x] **35.15** Auth error copy: centralise or soften error messages for `#authError` and `#authSetPasswordError` (sign-in, sign-up, set-password) so they are clear and non-technical.
 - [x] **35.16** Regression and desktop-only check: 35.8 and 35.9 verification; ensure new login elements respect mobile 44px/safe-area if any are added; Railway deploy unchanged.
+- [x] **35.17** Debug set-password screen (invite / forgot-password): follow docs/plans/2026-02-set-password-screen-investigation.md and docs/plans/2026-02-set-password-screen-debug-plan.md to find root cause and fix so invitees and forgot-password users see `#authSetPasswordForm` and can set password; document cause/fix in plan or TROUBLESHOOTING.md. Auth is shared (desktop + mobile); Railway-safe.
+  - [x] **35.17.1** Add diagnostic logging: in `onAuthStateChange` log `event` and `session`; after `getSession().then(...)` in initAuth log `authState.token` and `window.location.hash` (per debug plan §4 / H5).
+  - [x] **35.17.2** When `event === 'PASSWORD_RECOVERY'` ensure `switchView('view-login')` then show set-password form so a late event still updates the UI (debug plan §5).
+  - [x] **35.17.3** Surface exact `updateUser` error in `#authSetPasswordError` and console (debug plan §5).
+  - [x] **35.17.4** After `updateUser` success call `setAuthFromSession` with returned session if any, then `switchView('view-canvas')` (debug plan §5).
+  - [x] **35.17.5** Document cause, fix, and verification in plan or TROUBLESHOOTING.md (debug plan §7).
 
-*Section 35 status: 35.1–35.11, 35.12–35.16 complete. View switching, redirect to sign-in, desktop login/account-creation UX (copy, invite messaging, forgot-password doc, auth error copy, regression) done. E2E passed. Refined plan: switchView() + resizeCanvas-on-show + auth-driven init prevent zero-width canvas bug.*
+*Section 35 status: 35.1–35.17 complete. Set-password debug (logging, switchView on PASSWORD_RECOVERY, error console, session refresh, docs) done per debug plan.*
 
 ---
 

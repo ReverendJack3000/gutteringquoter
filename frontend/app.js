@@ -9903,8 +9903,26 @@ function initAuth() {
     const btn = document.getElementById('authSetPasswordBtn');
     if (btn) btn.disabled = true;
     try {
-      const { error } = await authState.supabase.auth.updateUser({ password: newPass });
+      const { data, error } = await authState.supabase.auth.updateUser({ password: newPass });
       if (error) throw error;
+      let session = data?.session ?? null;
+      if (!session) {
+        try {
+          const res = await authState.supabase.auth.getSession();
+          session = res?.data?.session ?? null;
+        } catch (getSessionErr) {
+          console.error('[Quote App set-password] getSession after updateUser failed', getSessionErr);
+          if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = 'Password was set. Sign in with your new password.'; }
+          if (authForm) authForm.hidden = false;
+          authSetPasswordForm.hidden = true;
+          authNewPassword.value = '';
+          authNewPasswordConfirm.value = '';
+          setAuthUI();
+          if (btn) btn.disabled = false;
+          return;
+        }
+      }
+      if (session) setAuthFromSession(session, session.user ?? null);
       if (authForm) authForm.hidden = false;
       authSetPasswordForm.hidden = true;
       authNewPassword.value = '';
@@ -9912,6 +9930,7 @@ function initAuth() {
       setAuthUI();
       switchView('view-canvas');
     } catch (err) {
+      console.error('[Quote App set-password] updateUser failed', err);
       if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = getAuthErrorMessage(err, 'setpassword', 'Could not set password. Please try again.'); }
     }
     if (btn) btn.disabled = false;
@@ -9947,6 +9966,7 @@ function initAuth() {
           loadPanelProducts();
           checkServiceM8Status();
           if (event === 'PASSWORD_RECOVERY') {
+            switchView('view-login');
             const authFormEl = document.getElementById('authForm');
             const setPasswordForm = document.getElementById('authSetPasswordForm');
             const authUserSection = document.getElementById('authUserSection');
