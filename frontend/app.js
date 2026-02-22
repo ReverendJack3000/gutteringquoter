@@ -94,7 +94,7 @@ const state = {
 };
 
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
-const authState = { token: null, email: null, user: null, role: 'viewer', supabase: null };
+const authState = { token: null, email: null, user: null, role: 'viewer', supabase: null, recoveryLandingFromHash: false };
 
 const APP_ALLOWED_ROLES = new Set(['viewer', 'editor', 'admin']);
 
@@ -9604,6 +9604,9 @@ async function restoreStateFromApiSnapshot(apiSnapshot) {
 }
 
 function initAuth() {
+  const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+  const search = typeof window !== 'undefined' ? (window.location.search || '') : '';
+  authState.recoveryLandingFromHash = /type=recovery|type=invite/i.test(hash + search);
   const authForm = document.getElementById('authForm');
   const authEmail = document.getElementById('authEmail');
   const authPassword = document.getElementById('authPassword');
@@ -9965,7 +9968,9 @@ function initAuth() {
           }
           loadPanelProducts();
           checkServiceM8Status();
-          if (event === 'PASSWORD_RECOVERY') {
+          const showSetPassword = event === 'PASSWORD_RECOVERY' || authState.recoveryLandingFromHash;
+          if (showSetPassword) {
+            authState.recoveryLandingFromHash = false;
             switchView('view-login');
             const authFormEl = document.getElementById('authForm');
             const setPasswordForm = document.getElementById('authSetPasswordForm');
@@ -13490,6 +13495,27 @@ function init() {
   const authPromise = initAuth();
   const authReady = authPromise && typeof authPromise.then === 'function' ? authPromise : Promise.resolve();
   authReady.then(() => {
+    const setPasswordFormEl = document.getElementById('authSetPasswordForm');
+    if (authState.token && setPasswordFormEl && !setPasswordFormEl.hidden) {
+      loadPanelProducts();
+      checkOAuthCallback();
+      return;
+    }
+    if (authState.token && authState.recoveryLandingFromHash) {
+      authState.recoveryLandingFromHash = false;
+      switchView('view-login');
+      const authFormEl = document.getElementById('authForm');
+      const setPasswordForm = document.getElementById('authSetPasswordForm');
+      const authUserSection = document.getElementById('authUserSection');
+      const authFormHintEl = document.getElementById('authFormHint');
+      if (authFormEl) authFormEl.hidden = true;
+      if (authUserSection) authUserSection.hidden = true;
+      if (authFormHintEl) authFormHintEl.hidden = true;
+      if (setPasswordForm) { setPasswordForm.hidden = false; document.getElementById('authNewPassword')?.focus(); }
+      loadPanelProducts();
+      checkOAuthCallback();
+      return;
+    }
     if (authState.token) {
       switchView('view-canvas');
       updateServicem8ToolbarWarning();
