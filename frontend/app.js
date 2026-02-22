@@ -3372,7 +3372,16 @@ function initJobConfirmationOverlay() {
         return;
       }
       const jobUuidForAttachment = payload.job_uuid;
-      const dataUrl = getExportCanvasDataURL();
+      let dataUrl = null;
+      try {
+        dataUrl = getExportCanvasDataURLCropped() ?? getExportCanvasDataURL();
+      } catch (_) {
+        try {
+          dataUrl = getExportCanvasDataURL();
+        } catch (_) {
+          dataUrl = null;
+        }
+      }
       let feedbackMsg = 'Added to job successfully.';
       if (dataUrl && jobUuidForAttachment) {
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
@@ -3421,7 +3430,16 @@ function initJobConfirmationOverlay() {
       return;
     }
     let imageBase64 = null;
-    const dataUrl = getExportCanvasDataURL();
+    let dataUrl = null;
+    try {
+      dataUrl = getExportCanvasDataURLCropped() ?? getExportCanvasDataURL();
+    } catch (_) {
+      try {
+        dataUrl = getExportCanvasDataURL();
+      } catch (_) {
+        dataUrl = null;
+      }
+    }
     if (dataUrl && dataUrl.startsWith('data:image/png;base64,')) {
       imageBase64 = dataUrl.replace(/^data:image\/png;base64,/, '');
     }
@@ -8858,6 +8876,47 @@ function initExport() {
 }
 
 /**
+ * Content bounding box in logical (diagram) coordinates for export.
+ * Matches draw() fit-to-content logic: blueprint + elements, or elements only.
+ * @returns {{ minX: number, minY: number, bboxW: number, bboxH: number } | null}
+ */
+function getExportContentBounds() {
+  const { blueprintImage, blueprintTransform, elements } = state;
+  if (blueprintImage && blueprintTransform) {
+    const bt = blueprintTransform;
+    let bbox = rotatedRectBbox(bt.x, bt.y, bt.w, bt.h, bt.rotation || 0);
+    let minX = bbox.x;
+    let maxX = bbox.x + bbox.width;
+    let minY = bbox.y;
+    let maxY = bbox.y + bbox.height;
+    elements.forEach((el) => {
+      const eb = rotatedRectBbox(el.x, el.y, el.width, el.height, el.rotation || 0);
+      if (eb.x < minX) minX = eb.x;
+      if (eb.x + eb.width > maxX) maxX = eb.x + eb.width;
+      if (eb.y < minY) minY = eb.y;
+      if (eb.y + eb.height > maxY) maxY = eb.y + eb.height;
+    });
+    const bboxW = Math.max(1, maxX - minX);
+    const bboxH = Math.max(1, maxY - minY);
+    return { minX, minY, bboxW, bboxH };
+  }
+  if (elements.length > 0) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    elements.forEach((el) => {
+      const eb = rotatedRectBbox(el.x, el.y, el.width, el.height, el.rotation || 0);
+      if (eb.x < minX) minX = eb.x;
+      if (eb.x + eb.width > maxX) maxX = eb.x + eb.width;
+      if (eb.y < minY) minY = eb.y;
+      if (eb.y + eb.height > maxY) maxY = eb.y + eb.height;
+    });
+    const bboxW = Math.max(1, maxX - minX);
+    const bboxH = Math.max(1, maxY - minY);
+    return { minX, minY, bboxW, bboxH };
+  }
+  return null;
+}
+
+/**
  * Render current blueprint + elements to a PNG and return as data URL, or null if nothing to export.
  * Used for ServiceM8 job attachment upload (same output as Export PNG).
  * @returns {string|null} data URL (data:image/png;base64,...) or null
@@ -8931,6 +8990,87 @@ function getExportCanvasDataURL() {
       }
     }
   });
+  return exportCanvas.toDataURL('image/png');
+}
+
+/** Export scale and padding for cropped ServiceM8 attachment (logical units). */
+const EXPORT_CROP_PAD = 20;
+const EXPORT_CROP_SCALE = 2;
+
+/**
+ * Render blueprint + elements to a PNG cropped to content bounds (for ServiceM8 attachment).
+ * Uses getExportContentBounds() and draws at fixed scale with padding so the image has minimal white space.
+ * @returns {string|null} data URL (data:image/png;base64,...) or null
+ */
+function getExportCanvasDataURLCropped() {
+  const bounds = getExportContentBounds();
+  if (!bounds) return null;
+  const { blueprintImage, blueprintTransform, elements } = state;
+  if (!blueprintImage && elements.length === 0) return null;
+
+  const { minX, minY, bboxW, bboxH } = bounds;
+  const pad = EXPORT_CROP_PAD;
+  const scale = EXPORT_CROP_SCALE;
+  const outW = Math.round((bboxW + 2 * pad) * scale);
+  const outH = Math.round((bboxH + 2 * pad) * scale);
+
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = outW;
+  exportCanvas.height = outH;
+  const ex = exportCanvas.getContext('2d');
+  if (!ex) return null;
+
+  const exportLayers = [];
+  if (blueprintImage && blueprintTransform) {
+    const bt = blueprintTransform;
+    exportLayers.push({ zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX, type: 'blueprint', bt, img: blueprintImage });
+  }
+  elements.forEach((el) => {
+    exportLayers.push({ zIndex: el.zIndex != null ? el.zIndex : 0, type: 'element', element: el });
+  });
+  exportLayers.sort((a, b) => a.zIndex - b.zIndex);
+
+  ex.save();
+  ex.translate((pad - minX) * scale, (pad - minY) * scale);
+  ex.scale(scale, scale);
+
+  exportLayers.forEach((layer) => {
+    if (layer.type === 'blueprint') {
+      const { bt, img } = layer;
+      ex.save();
+      ex.globalAlpha = bt.opacity ?? 1;
+      ex.translate(bt.x + bt.w / 2, bt.y + bt.h / 2);
+      ex.rotate(((bt.rotation || 0) * Math.PI) / 180);
+      ex.translate(-bt.w / 2, -bt.h / 2);
+      ex.drawImage(img, 0, 0, bt.w, bt.h);
+      ex.restore();
+    } else if (layer.type === 'element') {
+      const el = layer.element;
+      const renderImage = getElementRenderImage(el);
+      if (renderImage) {
+        ex.save();
+        ex.translate(el.x + el.width / 2, el.y + el.height / 2);
+        ex.rotate((el.rotation * Math.PI) / 180);
+        ex.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+        const exportUsesCache = isElementRenderFromCanvasCache(el, renderImage);
+        let prevExQe, prevExQq;
+        if (exportUsesCache) {
+          prevExQe = ex.imageSmoothingEnabled;
+          prevExQq = ex.imageSmoothingQuality;
+          ex.imageSmoothingEnabled = true;
+          ex.imageSmoothingQuality = 'high';
+        }
+        ex.drawImage(renderImage, -el.width / 2, -el.height / 2, el.width, el.height);
+        if (exportUsesCache) {
+          ex.imageSmoothingEnabled = prevExQe;
+          ex.imageSmoothingQuality = prevExQq;
+        }
+        ex.restore();
+      }
+    }
+  });
+
+  ex.restore();
   return exportCanvas.toDataURL('image/png');
 }
 
