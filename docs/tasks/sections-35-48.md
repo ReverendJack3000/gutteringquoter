@@ -29,6 +29,7 @@
 
 - [ ] **35.8** Verify that when logged in and `#view-canvas` is visible, behaviour is unchanged: toolbar, panel, canvas, measurement deck, upload, export, quote, auth button, and saved diagrams work as today. No duplicate event listeners; no missing elements.
 - [ ] **35.9** Manual and (if applicable) E2E check: app loads to Login screen when logged out; after logging in, Canvas view is shown and all existing functionality (upload, drag-drop, select, resize, rotate, export, quote, save/load diagrams) works without regression. Confirm no zero-width canvas (e.g. resize never needed to "fix" the canvas).
+- [x] **35.10** Fix desktop profile menu navigation to Product Management and User Permissions: from profile dropdown, "Product Management" must switch to #view-products and "User Permissions" (admin) to #view-user-permissions. Implement per plan: docs/plans/2026-02-22-desktop-profile-menu-products-user-permissions-navigation-fix.md (menu item handlers: e.stopPropagation(); document handler: skip close if profileDropdown.contains(e.target); .profile-dropdown z-index 1000; initAuth: ensure profile/menu listeners attached even when authForm missing). Desktop-only; mobile unchanged; Railway-safe.
 
 *Section 35 status: Not started. To be implemented in a feature branch; main branch remains stable. Refined plan: switchView() + resizeCanvas-on-show + auth-driven init prevent zero-width canvas bug.*
 

@@ -4796,7 +4796,7 @@ function initFloatingToolbar() {
       if (transparencyBtn) transparencyBtn.setAttribute('aria-expanded', 'false');
       shouldDraw = true;
     }
-    if (profileDropdown && !profileDropdown.hidden && userProfileWrap && !userProfileWrap.contains(e.target)) {
+    if (profileDropdown && !profileDropdown.hidden && userProfileWrap && !userProfileWrap.contains(e.target) && !profileDropdown.contains(e.target)) {
       profileDropdown.hidden = true;
       const userAvatar = document.getElementById('userAvatar');
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
@@ -9561,7 +9561,6 @@ function initAuth() {
   const productsProfileWrap = document.getElementById('productsProfileWrap');
   const productsUserAvatar = document.getElementById('productsUserAvatar');
   let passkeyAvailable = false;
-  if (!authForm) return Promise.resolve();
 
   function setPasswordAutocompleteMode(mode) {
     if (authEmail) {
@@ -9651,16 +9650,18 @@ function initAuth() {
     });
   }
   if (menuItemProducts) {
-    menuItemProducts.addEventListener('click', () => {
+    menuItemProducts.addEventListener('click', (e) => {
       if (profileDropdown) profileDropdown.hidden = true;
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      e.stopPropagation();
       switchView('view-products', { triggerEl: userAvatar || menuItemProducts });
     });
   }
   if (menuItemUserPermissions) {
-    menuItemUserPermissions.addEventListener('click', () => {
+    menuItemUserPermissions.addEventListener('click', (e) => {
       if (profileDropdown) profileDropdown.hidden = true;
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      e.stopPropagation();
       if (!canAccessDesktopAdminUi()) {
         const msg = isDesktopViewport()
           ? 'Only admin users can access User Permissions.'
@@ -9691,6 +9692,8 @@ function initAuth() {
       loadPanelProducts();
     });
   }
+
+  if (!authForm) return Promise.resolve();
 
   authForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
