@@ -111,6 +111,8 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `GET /api/diagrams/{id}` – load diagram (requires Bearer token)
 - `GET /api/admin/user-permissions` – list users + roles for admin permissions management (requires Bearer token, role `admin`, and backend `SUPABASE_SERVICE_ROLE_KEY`)
 - `PATCH /api/admin/user-permissions/{user_id}` – update a user role (`viewer|editor|admin`) in `public.profiles` (requires Bearer token and role `admin`)
+- `POST /api/admin/user-permissions/invite` – invite user by email with optional default role (requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
+- `DELETE /api/admin/user-permissions/{user_id}` – remove user (cannot remove self or last admin; requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
 - `GET /manifest.webmanifest` – PWA manifest (static)
 - `GET /service-worker.js` – service worker script (static)
 

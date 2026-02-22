@@ -3562,6 +3562,9 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 
 .permissions-header-right {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .permissions-main {
@@ -3711,6 +3714,22 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 .permissions-save-btn:not(:disabled):hover {
   background: #dbeafe;
   border-color: #93c5fd;
+}
+
+.permissions-remove-btn {
+  margin-left: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.permissions-remove-btn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 .permissions-row-status {

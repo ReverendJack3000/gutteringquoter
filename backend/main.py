@@ -244,6 +244,25 @@ def _ensure_not_demoting_last_admin(
         )
 
 
+def _ensure_not_removing_last_admin(supabase: Any, target_user_id: str) -> None:
+    """Raise 403 if target is an admin and is the only admin."""
+    try:
+        resp = supabase.table("profiles").select("user_id").eq("role", "admin").execute()
+    except Exception as e:
+        logger.exception("Failed to count admins before delete for %s: %s", target_user_id, e)
+        raise
+    admin_user_ids = {
+        str((row or {}).get("user_id") or "").strip()
+        for row in (resp.data or [])
+        if str((row or {}).get("user_id") or "").strip()
+    }
+    if target_user_id in admin_user_ids and len(admin_user_ids) <= 1:
+        raise HTTPException(
+            403,
+            "Cannot remove the last admin. At least one admin must remain.",
+        )
+
+
 class QuoteElement(BaseModel):
     assetId: str = Field(..., min_length=1, description="Product ID (e.g. gutter, bracket)")
     quantity: float = Field(..., ge=0, description="Quantity for this product")
@@ -263,6 +282,11 @@ class UpdatePricingItem(BaseModel):
 
 class UpdateUserPermissionRoleRequest(BaseModel):
     role: str = Field(..., min_length=1, description="Role: viewer | editor | admin")
+
+
+class InviteUserRequest(BaseModel):
+    email: str = Field(..., min_length=1, description="Email address to invite")
+    role: Optional[str] = Field("viewer", description="Default role: viewer | editor | admin")
 
 
 class SaveDiagramRequest(BaseModel):
@@ -448,6 +472,65 @@ def api_admin_user_permissions(
         raise HTTPException(500, "Failed to list user permissions")
 
 
+@app.post("/api/admin/user-permissions/invite")
+def api_admin_invite_user(
+    body: InviteUserRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """
+    Invite a user by email. Creates auth user (invited) and profile row with role.
+    Admin only. Requires SUPABASE_SERVICE_ROLE_KEY.
+    """
+    _ = user_id
+    email = (body.email or "").strip()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email is required")
+    requested_role = _normalize_app_role(body.role or "viewer")
+
+    try:
+        supabase = get_supabase()
+        _require_service_role_for_admin_permissions()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to initialize Supabase for invite: %s", e)
+        raise HTTPException(500, "Failed to initialize invite")
+
+    try:
+        invite_resp = supabase.auth.admin.invite_user_by_email(email)
+        invited_user = getattr(invite_resp, "user", None)
+        if invited_user is None and isinstance(invite_resp, dict):
+            invited_user = invite_resp.get("user")
+        invited_uid = _extract_auth_user_field(invited_user, "id") if invited_user else None
+        if invited_uid:
+            invited_uid = str(invited_uid).strip()
+        if invited_uid:
+            (
+                supabase.table("profiles")
+                .upsert({"user_id": invited_uid, "role": requested_role}, on_conflict="user_id")
+                .execute()
+            )
+        return {
+            "message": "Invite sent.",
+            "user": _serialize_auth_user_for_permissions(invited_user, requested_role)
+            if invited_user
+            else {"email": email, "user_id": invited_uid or "", "role": requested_role},
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "already" in err_msg or "exists" in err_msg or "duplicate" in err_msg:
+            raise HTTPException(400, "A user with this email already exists.") from e
+        if _is_admin_api_unavailable_error(e):
+            raise HTTPException(
+                503,
+                "Invite is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
+            ) from e
+        logger.exception("Failed to invite user by email %s: %s", email, e)
+        raise HTTPException(500, "Failed to send invite")
+
+
 @app.patch("/api/admin/user-permissions/{target_user_id}")
 def api_update_admin_user_permission(
     target_user_id: str,
@@ -518,6 +601,86 @@ def api_update_admin_user_permission(
         raise HTTPException(500, "Failed to update user role")
 
     return {"user": _serialize_auth_user_for_permissions(auth_user, requested_role)}
+
+
+@app.delete("/api/admin/user-permissions/{target_user_id}")
+def api_admin_remove_user(
+    target_user_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """
+    Remove a user (delete from auth and optionally profiles). Cannot remove self or last admin.
+    Admin only. Requires SUPABASE_SERVICE_ROLE_KEY.
+    """
+    caller_uid = str(user_id).strip() if user_id else ""
+    target_uid = target_user_id.strip()
+    if caller_uid and target_uid and caller_uid == target_uid:
+        raise HTTPException(400, "You cannot remove yourself.")
+
+    try:
+        target_uuid = uuid_lib.UUID(target_uid)
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id UUID")
+    target_uid = str(target_uuid)
+
+    try:
+        supabase = get_supabase()
+        _require_service_role_for_admin_permissions()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to initialize Supabase for remove user: %s", e)
+        raise HTTPException(500, "Failed to initialize remove user")
+
+    auth_user = None
+    try:
+        auth_user_resp = supabase.auth.admin.get_user_by_id(target_uid)
+        auth_user = getattr(auth_user_resp, "user", None)
+        if auth_user is None and isinstance(auth_user_resp, dict):
+            auth_user = auth_user_resp.get("user")
+        if auth_user is None:
+            raise HTTPException(404, "User not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_auth_user_not_found_error(e):
+            raise HTTPException(404, "User not found") from e
+        if _is_admin_api_unavailable_error(e):
+            raise HTTPException(
+                503,
+                "User lookup is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
+            ) from e
+        logger.exception("Failed to verify target user %s before remove: %s", target_uid, e)
+        raise HTTPException(500, "Failed to verify user")
+
+    try:
+        current_role = _get_profile_role_for_user(supabase, target_uid)
+        _ensure_not_removing_last_admin(supabase, target_uid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to check last-admin before remove %s: %s", target_uid, e)
+        raise HTTPException(500, "Cannot remove user")
+
+    try:
+        supabase.auth.admin.delete_user(target_uid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_admin_api_unavailable_error(e):
+            raise HTTPException(
+                503,
+                "Remove user is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
+            ) from e
+        logger.exception("Failed to delete user %s: %s", target_uid, e)
+        raise HTTPException(500, "Failed to remove user")
+
+    try:
+        supabase.table("profiles").delete().eq("user_id", target_uid).execute()
+    except Exception as e:
+        logger.warning("Failed to delete profile row for %s (auth user already removed): %s", target_uid, e)
+
+    return {"message": "User removed."}
 
 
 @app.get("/api/labour-rates")

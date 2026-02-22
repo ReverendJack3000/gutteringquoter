@@ -80,7 +80,13 @@
 - [x] **36.17** Quote permissions parity: ensure desktop pricing-admin actions use Bearer auth and are shown only to admin role; non-admins remain read-only (mobile behavior unchanged).
 - [x] **36.18** Regression and safety validation: verify desktop-only scope, no mobile UI regressions, and Railway-safe deploy behavior (required env vars, API responses, auth failures).
 
-*Section 36 status: In progress. 36.1–36.10 and 36.12–36.18 complete. 36.11 remains optional/open (localProducts migration).*
+**Desktop user invite and remove (per plan 2026-02-22):**
+
+- [x] **36.19** Invite user (desktop): UI "Invite user" button + modal (email, optional role); backend POST invite endpoint using `auth.admin.invite_user_by_email`; profile upsert for role; success/error handling; no mobile changes; Railway-safe.
+- [x] **36.20** Remove user (desktop): per-row Remove button (hidden for self); confirm via `showAppConfirm`; backend DELETE endpoint with self-remove and optional last-admin guards; `auth.admin.delete_user`; remove from state and re-render; no mobile changes; Railway-safe.
+- [x] **36.21** Regression and safety: checklist from plan (list/search/role/Save, Back/Refresh, profile menu navigation, desktop gate, no new env, E2E profile menu passes).
+
+*Section 36 status: In progress. 36.1–36.10, 36.12–36.21 complete. 36.11 remains optional/open (localProducts migration).*
 
 ---
 

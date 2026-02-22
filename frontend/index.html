@@ -565,6 +565,10 @@
           </div>
           <div class="permissions-header-title">User Permissions</div>
           <div class="permissions-header-right">
+            <button type="button" id="btnInviteUser" class="btn-text-icon" aria-label="Invite user">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              Invite user
+            </button>
             <button type="button" id="btnRefreshUserPermissions" class="btn-text-icon" aria-label="Refresh users">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.65-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.65 3.36L1 14"/></svg>
               Refresh
@@ -594,6 +598,27 @@
             <div id="userPermissionsEmpty" class="permissions-empty" hidden>No users found.</div>
           </div>
         </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invite user modal (desktop admin only) -->
+  <div class="auth-modal" id="inviteUserModal" role="dialog" aria-labelledby="inviteUserModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="inviteUserModalBackdrop"></div>
+    <div class="auth-modal-content">
+      <h2 id="inviteUserModalTitle" class="auth-modal-title">Invite user</h2>
+      <label for="inviteUserEmail">Email</label>
+      <input type="email" id="inviteUserEmail" placeholder="user@example.com" required aria-required="true" />
+      <label for="inviteUserRole">Default role</label>
+      <select id="inviteUserRole" aria-label="Default role for invited user">
+        <option value="viewer">viewer</option>
+        <option value="editor">editor</option>
+        <option value="admin">admin</option>
+      </select>
+      <div id="inviteUserError" class="auth-error" role="alert" hidden></div>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="inviteUserSubmitBtn">Send invite</button>
+        <button type="button" class="btn" id="inviteUserCancelBtn">Cancel</button>
       </div>
     </div>
   </div>

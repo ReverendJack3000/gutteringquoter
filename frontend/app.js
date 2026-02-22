@@ -12312,6 +12312,26 @@ function renderUserPermissionsList() {
     statusSpan.textContent = rowMessage?.text || '';
     actionTd.appendChild(statusSpan);
 
+    const isCurrentUser = authState.user?.id === userId;
+    if (!isCurrentUser) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'permissions-remove-btn btn-text-icon';
+      removeBtn.setAttribute('aria-label', 'Remove user');
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', async () => {
+        const email = user?.email || userId;
+        const confirmed = await showAppConfirm(`Remove ${email}? They will lose access.`, {
+          title: 'Remove user',
+          confirmText: 'Remove',
+          destructive: true,
+          triggerEl: removeBtn,
+        });
+        if (confirmed) void removeUserPermission(userId);
+      });
+      actionTd.appendChild(removeBtn);
+    }
+
     tr.appendChild(actionTd);
     tableBody.appendChild(tr);
   });
@@ -12440,6 +12460,39 @@ async function saveUserPermissionRole(userId, role) {
   }
 }
 
+async function removeUserPermission(userId) {
+  if (!canAccessDesktopAdminUi()) {
+    setUserPermissionsStatus('Only admin users can remove users.', 'error');
+    return;
+  }
+  if (!userId) return;
+  try {
+    const resp = await fetch(`/api/admin/user-permissions/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (resp.status === 401) {
+      setUserPermissionsStatus('Session expired. Please sign in again.', 'error');
+      return;
+    }
+    if (!resp.ok) {
+      const detail = typeof payload?.detail === 'string' ? payload.detail : (payload?.detail?.msg || 'Failed to remove user.');
+      throw new Error(detail);
+    }
+    userPermissionsState.users = userPermissionsState.users.filter((u) => u.user_id !== userId);
+    userPermissionsState.filteredUsers = userPermissionsState.filteredUsers.filter((u) => u.user_id !== userId);
+    userPermissionsState.draftRoles.delete(userId);
+    userPermissionsState.rowMessages.delete(userId);
+    filterUserPermissions();
+    renderUserPermissionsList();
+    setUserPermissionsStatus('User removed.', 'success');
+  } catch (err) {
+    console.error('Remove user failed', err);
+    setUserPermissionsStatus(err?.message || 'Failed to remove user.', 'error');
+  }
+}
+
 function initUserPermissionsView() {
   if (userPermissionsState.initialized) return;
   userPermissionsState.initialized = true;
@@ -12447,6 +12500,14 @@ function initUserPermissionsView() {
   const backBtn = document.getElementById('btnPermissionsBackToCanvas');
   const refreshBtn = document.getElementById('btnRefreshUserPermissions');
   const searchInput = document.getElementById('userPermissionsSearch');
+  const inviteBtn = document.getElementById('btnInviteUser');
+  const inviteEmail = document.getElementById('inviteUserEmail');
+  const inviteRole = document.getElementById('inviteUserRole');
+  const inviteError = document.getElementById('inviteUserError');
+  const inviteSubmitBtn = document.getElementById('inviteUserSubmitBtn');
+  const inviteCancelBtn = document.getElementById('inviteUserCancelBtn');
+
+  if (inviteBtn) inviteBtn.hidden = !canAccessDesktopAdminUi();
 
   backBtn?.addEventListener('click', () => {
     switchView('view-canvas', { triggerEl: backBtn });
@@ -12459,6 +12520,53 @@ function initUserPermissionsView() {
   searchInput?.addEventListener('input', () => {
     userPermissionsState.searchTerm = searchInput.value || '';
     filterUserPermissions();
+  });
+
+  inviteBtn?.addEventListener('click', () => {
+    if (!canAccessDesktopAdminUi()) return;
+    if (inviteError) { inviteError.hidden = true; inviteError.textContent = ''; }
+    if (inviteEmail) { inviteEmail.value = ''; inviteEmail.setCustomValidity(''); }
+    if (inviteRole) inviteRole.value = 'viewer';
+    openAccessibleModal('inviteUserModal', { triggerEl: inviteBtn, initialFocusEl: inviteEmail });
+  });
+
+  inviteCancelBtn?.addEventListener('click', () => {
+    closeAccessibleModal('inviteUserModal');
+  });
+
+  inviteSubmitBtn?.addEventListener('click', async () => {
+    const email = (inviteEmail?.value || '').trim();
+    if (!email) {
+      if (inviteError) { inviteError.hidden = false; inviteError.textContent = 'Enter an email address.'; }
+      return;
+    }
+    if (!email.includes('@')) {
+      if (inviteError) { inviteError.hidden = false; inviteError.textContent = 'Enter a valid email address.'; }
+      return;
+    }
+    if (inviteError) { inviteError.hidden = true; inviteError.textContent = ''; }
+    const role = normalizeAppRole(inviteRole?.value || 'viewer');
+    inviteSubmitBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/admin/user-permissions/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ email, role }),
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const detail = typeof payload?.detail === 'string' ? payload.detail : (payload?.detail?.msg || 'Failed to send invite.');
+        throw new Error(detail);
+      }
+      setUserPermissionsStatus(`Invite sent to ${email}.`, 'success');
+      closeAccessibleModal('inviteUserModal');
+      void fetchUserPermissions();
+    } catch (err) {
+      console.error('Invite user failed', err);
+      if (inviteError) { inviteError.hidden = false; inviteError.textContent = err?.message || 'Failed to send invite.'; }
+    } finally {
+      inviteSubmitBtn.disabled = false;
+    }
   });
 }
 
@@ -12873,6 +12981,13 @@ function initModalAccessibilityFramework() {
       appAlertDialogState.destructive = false;
       appAlertDialogState.dismissResult = false;
     },
+  });
+  registerAccessibleModal({
+    id: 'inviteUserModal',
+    element: document.getElementById('inviteUserModal'),
+    backdrop: document.getElementById('inviteUserModalBackdrop'),
+    closeOnEscape: true,
+    initialFocus: () => document.getElementById('inviteUserEmail'),
   });
   (function registerDiagramsBottomSheetModal() {
     const SHEET_ID = 'diagramsBottomSheet';
