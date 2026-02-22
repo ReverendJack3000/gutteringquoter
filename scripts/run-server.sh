@@ -21,10 +21,10 @@ fi
 
 echo "Starting Quote App at http://$HOST:$PORT/"
 echo "Health check: GET http://$HOST:$PORT/api/health"
-if [ "${PWA_ENABLED:-false}" = "true" ]; then
-  echo "PWA rollout: ENABLED (PWA_ENABLED=true)"
+if [ "${PWA_ENABLED:-true}" = "true" ]; then
+  echo "PWA rollout: ENABLED (PWA_ENABLED=true or unset)"
 else
-  echo "PWA rollout: disabled (set PWA_ENABLED=true to enable)"
+  echo "PWA rollout: disabled (PWA_ENABLED=false)"
 fi
 echo ""
 exec python3 -m uvicorn main:app --reload --host "$HOST" --port "$PORT"

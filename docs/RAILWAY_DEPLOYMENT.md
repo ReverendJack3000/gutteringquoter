@@ -41,7 +41,7 @@ The repo already includes:
 
 No extra build step is needed; the frontend is static and served by FastAPI from `frontend/`.
 
-PWA support is rollout-gated by `PWA_ENABLED` and defaults to off for desktop safety.
+PWA is enabled by default (service worker, Add to Home Screen, cached shell). Set `PWA_ENABLED=false` to disable.
 
 ## 4. Environment variables
 
@@ -53,7 +53,7 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key from Supabase (backend API, products, diagrams). |
 | `SUPABASE_ANON_KEY` | Yes | Anon/public key (frontend auth; exposed via `GET /api/config`). |
 | `SUPABASE_JWT_SECRET` | No | Only if your Supabase project uses legacy HS256 JWT secret; leave unset if using ECC (P-256). |
-| `PWA_ENABLED` | No | Progressive Web App rollout flag. Default `false` (or unset) keeps current desktop behavior and disables service worker registration. Set `true` to enable PWA. |
+| `PWA_ENABLED` | No | PWA is on by default. Set `false` to disable service worker registration and install behavior. |
 | `SERVICEM8_APP_ID` | No (ServiceM8) | ServiceM8 App ID from Store Connect (for OAuth 2.0). |
 | `SERVICEM8_APP_SECRET` | No (ServiceM8) | ServiceM8 App Secret from Store Connect (for OAuth 2.0). |
 | `APP_BASE_URL` | No (ServiceM8) | Base URL for OAuth callback, e.g. `https://quote-app-production-7897.up.railway.app`. Defaults to `http://127.0.0.1:8000` for local dev. Must match Return URL in ServiceM8 Store Connect. |

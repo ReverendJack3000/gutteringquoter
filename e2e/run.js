@@ -12,7 +12,8 @@ const puppeteer = require('puppeteer');
 
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8000';
 const HEADED = process.env.HEADED === '1' || process.env.HEADED === 'true';
-const PWA_ENABLED = process.env.PWA_ENABLED === '1' || process.env.PWA_ENABLED === 'true';
+// Match server default: PWA on unless explicitly disabled
+const PWA_ENABLED = process.env.PWA_ENABLED !== '0' && process.env.PWA_ENABLED !== 'false';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

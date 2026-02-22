@@ -1,6 +1,6 @@
 # Quote App – Repair Blueprint MVP
 
-Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG. Optional PWA support is available behind a server flag (`PWA_ENABLED`) and is disabled by default. The same deployment now serves both desktop and mobile layouts automatically.
+Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG. PWA support is enabled by default (service worker, Add to Home Screen, cached shell); set `PWA_ENABLED=false` to disable. The same deployment serves both desktop and mobile layouts automatically.
 
 ## Stack
 
@@ -28,7 +28,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    cd backend
    cp .env.example .env
    # Edit .env: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from Supabase dashboard → Settings → API
-   # Optional PWA rollout flag (default-off safety): PWA_ENABLED=false
+   # Optional: set PWA_ENABLED=false to disable PWA (enabled by default)
    ```
 
 3. **Run the local server (single command)**
@@ -45,7 +45,8 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    Optional overrides:
 
    ```bash
-   HOST=0.0.0.0 PORT=8000 PWA_ENABLED=true ./scripts/run-server.sh
+   HOST=0.0.0.0 PORT=8000 ./scripts/run-server.sh
+   # To disable PWA: PWA_ENABLED=false ./scripts/run-server.sh
    ```
 
    **Alternative (manual):** from the `backend` directory run:
@@ -134,11 +135,10 @@ To deploy to production:
 
 Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)**. After deploy, the live app URL is shown in the Railway dashboard (e.g. `https://quote-app-production.up.railway.app`).
 
-## PWA rollout (default-off)
+## PWA rollout (enabled by default)
 
-- **Default behavior:** `PWA_ENABLED=false` (or unset). No service worker is registered; desktop production behavior stays unchanged.
-- **Enable PWA:** set `PWA_ENABLED=true` in the server environment and redeploy/restart.
-- **Kill switch:** set `PWA_ENABLED=false` and redeploy/restart. On next app load, client logic unregisters service workers and clears Quote App PWA caches.
+- **Default behavior:** PWA is on (service worker registered, Add to Home Screen, cached shell). Same app for desktop and mobile; both benefit from faster repeat loads and optional install.
+- **Disable PWA:** set `PWA_ENABLED=false` in the server environment and redeploy/restart. On next app load, client logic unregisters service workers and clears Quote App PWA caches.
 - **Scope:** app shell/assets are cached for offline load; `/api/*` remains network-only.
 
 ## Phone homescreen testing
@@ -150,7 +150,7 @@ Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/R
 ```
 
 2. Open the printed URL on your phone and add it to your homescreen.
-3. For full PWA behavior (service worker + offline), use an **HTTPS** URL (for example Railway staging) with `PWA_ENABLED=true`.
+3. PWA is enabled by default on Railway (HTTPS); add to home screen for full app-like experience.
 
 **Quick curl test (blueprint pipeline):** with the server running and a small image at `scripts/fixtures/tiny.png`:
 
