@@ -372,6 +372,7 @@
         <img src="/login-logo.png" alt="Quote App" class="view-login-logo" width="240" height="80" />
         <h2 id="authModalTitle" class="auth-modal-title">Sign in</h2>
         <p class="auth-modal-desc">Sign in to save and load your diagrams.</p>
+        <p class="auth-form-hint" id="authFormHint">New here? Click <strong>Create account</strong> below. Already have an account? Use <strong>Sign in</strong>.</p>
         <div id="authError" class="auth-error" role="alert" hidden></div>
         <form id="authForm" class="auth-form">
           <label for="authEmail">Email</label>
@@ -389,7 +390,7 @@
           </p>
         </form>
         <form id="authSetPasswordForm" class="auth-form" hidden>
-          <p class="auth-modal-desc">Choose a new password for your account.</p>
+          <p class="auth-modal-desc auth-set-password-intro">Invited by your team? You used the link in your email to get here. Choose a new password below.</p>
           <div id="authSetPasswordError" class="auth-error" role="alert" hidden></div>
           <label for="authNewPassword">New password</label>
           <input type="password" id="authNewPassword" name="new_password" required minlength="6" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" spellcheck="false" />

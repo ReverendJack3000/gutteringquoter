@@ -103,6 +103,37 @@ function getAuthHeaders() {
   return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
 }
 
+/**
+ * Map Supabase/auth errors to clear, non-technical messages for #authError / #authSetPasswordError.
+ * @param {Error|{ message?: string, code?: string }|null} err
+ * @param {string} context - 'signin' | 'signup' | 'passkey' | 'forgot' | 'setpassword'
+ * @param {string} fallback - default message if no mapping
+ * @returns {string}
+ */
+function getAuthErrorMessage(err, context, fallback) {
+  const msg = (err && (err.message || err.code)) ? String(err.message || err.code) : '';
+  const lower = msg.toLowerCase();
+  if (lower.includes('invalid login') || lower.includes('invalid_credentials') || lower.includes('invalid credentials')) {
+    return context === 'signup' ? 'An account with this email may already exist. Try signing in or use Forgot password.' : 'Email or password is incorrect. Try again or use Forgot password.';
+  }
+  if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) {
+    return 'Please check your email and confirm your account before signing in.';
+  }
+  if (lower.includes('user already registered') || lower.includes('already registered')) {
+    return 'An account with this email already exists. Sign in or use Forgot password.';
+  }
+  if (lower.includes('token') && lower.includes('expired')) {
+    return 'This link has expired. Request a new one from Forgot password or ask your team for a new invite.';
+  }
+  if (lower.includes('new password should be different')) {
+    return 'Please choose a different password from your current one.';
+  }
+  if (context === 'setpassword' && (lower.includes('password') || lower.includes('weak'))) {
+    return 'Password does not meet requirements. Use at least 6 characters.';
+  }
+  return fallback;
+}
+
 function normalizeAppRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
   return APP_ALLOWED_ROLES.has(normalized) ? normalized : 'viewer';
@@ -9652,6 +9683,7 @@ function initAuth() {
       if (productsProfileWrap) productsProfileWrap.hidden = true;
       if (authUserSection) authUserSection.hidden = true;
       if (authForm) authForm.hidden = false;
+      if (authFormHint) authFormHint.hidden = false;
     }
     if (!authState.token) {
       setPasswordAutocompleteMode('signin');
@@ -9746,7 +9778,7 @@ function initAuth() {
         await startServiceM8Connect();
       }
     } catch (err) {
-      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign in failed'; }
+      if (authError) { authError.hidden = false; authError.textContent = getAuthErrorMessage(err, 'signin', 'Sign in failed. Please try again.'); }
     }
     authSubmitBtn.disabled = false;
   });
@@ -9793,7 +9825,7 @@ function initAuth() {
         await startServiceM8Connect();
       }
     } catch (err) {
-      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Passkey sign in failed'; }
+      if (authError) { authError.hidden = false; authError.textContent = getAuthErrorMessage(err, 'passkey', 'Passkey sign in failed. Try signing in with your password.'); }
     } finally {
       authPasskeyBtn.disabled = !passkeyAvailable;
     }
@@ -9813,7 +9845,7 @@ function initAuth() {
       checkServiceM8Status();
       showMessage('Account created. You can sign in and save diagrams.', 'success');
     } catch (err) {
-      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Sign up failed'; }
+      if (authError) { authError.hidden = false; authError.textContent = getAuthErrorMessage(err, 'signup', 'Sign up failed. Please try again.'); }
     }
     authSignUpBtn.disabled = false;
   });
@@ -9832,6 +9864,7 @@ function initAuth() {
   const authNewPassword = document.getElementById('authNewPassword');
   const authNewPasswordConfirm = document.getElementById('authNewPasswordConfirm');
   const authSetPasswordCancelBtn = document.getElementById('authSetPasswordCancelBtn');
+  const authFormHint = document.getElementById('authFormHint');
 
   authForgotPasswordBtn?.addEventListener('click', async () => {
     const email = authEmail?.value?.trim();
@@ -9848,7 +9881,7 @@ function initAuth() {
       if (error) throw error;
       if (authError) { authError.hidden = false; authError.textContent = ''; authError.style.color = ''; authError.textContent = 'Check your email for a link to set your password.'; authError.style.color = '#166534'; }
     } catch (err) {
-      if (authError) { authError.hidden = false; authError.textContent = err.message || 'Could not send reset email.'; }
+      if (authError) { authError.hidden = false; authError.textContent = getAuthErrorMessage(err, 'forgot', 'Could not send reset email. Check the email address and try again.'); }
     }
     authForgotPasswordBtn.disabled = false;
   });
@@ -9879,7 +9912,7 @@ function initAuth() {
       setAuthUI();
       switchView('view-canvas');
     } catch (err) {
-      if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = err.message || 'Could not set password.'; }
+      if (authSetPasswordError) { authSetPasswordError.hidden = false; authSetPasswordError.textContent = getAuthErrorMessage(err, 'setpassword', 'Could not set password. Please try again.'); }
     }
     if (btn) btn.disabled = false;
   });
@@ -9887,6 +9920,7 @@ function initAuth() {
   authSetPasswordCancelBtn?.addEventListener('click', () => {
     authSetPasswordForm.hidden = true;
     if (authForm) authForm.hidden = false;
+    if (authFormHint) authFormHint.hidden = false;
     if (authSetPasswordError) authSetPasswordError.hidden = true;
     authNewPassword.value = '';
     authNewPasswordConfirm.value = '';
@@ -9916,8 +9950,10 @@ function initAuth() {
             const authFormEl = document.getElementById('authForm');
             const setPasswordForm = document.getElementById('authSetPasswordForm');
             const authUserSection = document.getElementById('authUserSection');
+            const authFormHintEl = document.getElementById('authFormHint');
             if (authFormEl) authFormEl.hidden = true;
             if (authUserSection) authUserSection.hidden = true;
+            if (authFormHintEl) authFormHintEl.hidden = true;
             if (setPasswordForm) { setPasswordForm.hidden = false; document.getElementById('authNewPassword')?.focus(); }
           }
         });
@@ -12608,7 +12644,7 @@ function initUserPermissionsView() {
         const detail = typeof payload?.detail === 'string' ? payload.detail : (payload?.detail?.msg || 'Failed to send invite.');
         throw new Error(detail);
       }
-      setUserPermissionsStatus(`Invite sent to ${email}.`, 'success');
+      setUserPermissionsStatus(`Invite sent to ${email}. They'll get an email to set their password.`, 'success');
       closeAccessibleModal('inviteUserModal');
       void fetchUserPermissions();
     } catch (err) {

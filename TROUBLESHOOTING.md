@@ -91,6 +91,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Forgot password / invite: set-password form does not show after clicking link – 2026-02
+
+- **Symptom:** User clicks "Forgot password?" or an invite link from email but lands on the wrong site, or the app loads but the "Set password" form never appears.
+- **Cause:** (1) Supabase **Site URL** (and Redirect URLs) must match the app origin so the magic link opens this app. (2) The app shows `#authSetPasswordForm` only when Supabase fires `PASSWORD_RECOVERY` (or equivalent for invite) in `onAuthStateChange`; the client parses the hash from the URL and restores the session, then the event fires. If the user lands on a different origin, the app never receives the hash.
+- **Fix:** (1) Set **Site URL** and **Redirect URLs** as in "Invite / auth emails send users to localhost:3000" above so the link opens your app (e.g. `https://your-app.up.railway.app`). (2) The app uses `redirectTo = window.location.origin + '/'` for forgot-password (app.js); ensure production is served at the same origin you set in Supabase. (3) No code change needed for hash handling: Supabase JS client exchanges the URL hash for a session and emits `PASSWORD_RECOVERY`; the app then hides the sign-in form and shows `#authSetPasswordForm`.
+
+---
+
 ## Product thumbnails in Marley panel show as unfilled outlines (mobile) – 2026-02
 
 - **Symptom:** On mobile, in the Marley products bottom sheet panel, product thumbnails appear as line-art or wireframe outlines instead of solid/filled icons.

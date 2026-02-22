@@ -3224,6 +3224,14 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   object-fit: contain;
 }
 
+.auth-form-hint,
+.auth-set-password-intro {
+  font-size: 0.9rem;
+  color: #555;
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
 /* 54.70: Mobile login – safe area and 44px touch targets (desktop unchanged) */
 body[data-viewport-mode="mobile"] #view-login {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);

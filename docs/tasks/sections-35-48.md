@@ -23,16 +23,24 @@
 **Login migration**
 
 - [x] **35.6** Move the existing login form into `#view-login`: relocate the auth form content from the current auth modal (`#authModal`: form, email/password inputs, Sign in / Create account / Cancel, and optionally the “Signed in as” / Sign out block) into `#view-login` so the login screen is a full-screen view, not a modal. Remove or repurpose `#authModal` so it is no longer the primary login UI (e.g. keep modal for “Sign in” button from toolbar if desired, or remove and use only view-login).
-- [ ] **35.7** After successful login (from `#view-login`), call `switchView('view-canvas')` so the user sees the Canvas. On Sign out (from canvas), call `switchView('view-login')`. Wire these to the existing auth success/sign-out handlers.
+- [x] **35.7** After successful login (from `#view-login`), call `switchView('view-canvas')` so the user sees the Canvas. On Sign out (from canvas), call `switchView('view-login')`. Wire these to the existing auth success/sign-out handlers.
 
 **No regressions and deliverable**
 
-- [ ] **35.8** Verify that when logged in and `#view-canvas` is visible, behaviour is unchanged: toolbar, panel, canvas, measurement deck, upload, export, quote, auth button, and saved diagrams work as today. No duplicate event listeners; no missing elements.
-- [ ] **35.9** Manual and (if applicable) E2E check: app loads to Login screen when logged out; after logging in, Canvas view is shown and all existing functionality (upload, drag-drop, select, resize, rotate, export, quote, save/load diagrams) works without regression. Confirm no zero-width canvas (e.g. resize never needed to "fix" the canvas).
+- [x] **35.8** Verify that when logged in and `#view-canvas` is visible, behaviour is unchanged: toolbar, panel, canvas, measurement deck, upload, export, quote, auth button, and saved diagrams work as today. No duplicate event listeners; no missing elements.
+- [x] **35.9** Manual and (if applicable) E2E check: app loads to Login screen when logged out; after logging in, Canvas view is shown and all existing functionality (upload, drag-drop, select, resize, rotate, export, quote, save/load diagrams) works without regression. Confirm no zero-width canvas (e.g. resize never needed to "fix" the canvas).
 - [x] **35.10** Fix desktop profile menu navigation to Product Management and User Permissions: from profile dropdown, "Product Management" must switch to #view-products and "User Permissions" (admin) to #view-user-permissions. Implement per plan: docs/plans/2026-02-22-desktop-profile-menu-products-user-permissions-navigation-fix.md (menu item handlers: e.stopPropagation(); document handler: skip close if profileDropdown.contains(e.target); .profile-dropdown z-index 1000; initAuth: ensure profile/menu listeners attached even when authForm missing). Desktop-only; mobile unchanged; Railway-safe.
 - [x] **35.11** Redirect to sign-in when signed out or access removed: when session is invalid (signed out, token invalid, or removed by admin), route user to sign-in immediately. Implement: (1) in `onAuthStateChange` when session becomes null call `switchView('view-login')`; (2) add central 401/403 handler (e.g. `handleAuthFailure(resp)`) and use in all authed API calls (user-permissions fetch/save/remove/invite, diagrams list/load/save/delete and autosave, update-pricing, ServiceM8); (3) in `syncAdminDesktopAccess` when on user-permissions and `!canAccessDesktopAdminUi()` and `!authState.token` redirect to `view-login` (not view-canvas). Plan: docs/plans/2026-02-22-redirect-to-sign-in-when-signed-out-or-access-removed.md. Desktop and mobile; Railway-safe.
 
-*Section 35 status: Not started. To be implemented in a feature branch; main branch remains stable. Refined plan: switchView() + resizeCanvas-on-show + auth-driven init prevent zero-width canvas bug.*
+**Desktop login and account creation UX (35.12–35.16):**
+
+- [x] **35.12** Login view copy and layout (desktop): clarify sign-in vs create account vs "invited? set password" for non-technical staff; desktop-only; no mobile layout change.
+- [x] **35.13** Invite flow messaging (desktop): after "Send invite" success, show clear message that invitee will receive an email to set their password.
+- [x] **35.14** Forgot-password / set-password landing: verify Supabase Site URL and app redirect so set-password lands on app and `#authSetPasswordForm` shows; document if needed; fix any hash/query handling gaps.
+- [x] **35.15** Auth error copy: centralise or soften error messages for `#authError` and `#authSetPasswordError` (sign-in, sign-up, set-password) so they are clear and non-technical.
+- [x] **35.16** Regression and desktop-only check: 35.8 and 35.9 verification; ensure new login elements respect mobile 44px/safe-area if any are added; Railway deploy unchanged.
+
+*Section 35 status: 35.1–35.11, 35.12–35.16 complete. View switching, redirect to sign-in, desktop login/account-creation UX (copy, invite messaging, forgot-password doc, auth error copy, regression) done. E2E passed. Refined plan: switchView() + resizeCanvas-on-show + auth-driven init prevent zero-width canvas bug.*
 
 ---
 
