@@ -44,11 +44,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/desktop-profile-menu-nav-fix
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 35.10 (desktop profile menu → Products/User Permissions navigation fix)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
