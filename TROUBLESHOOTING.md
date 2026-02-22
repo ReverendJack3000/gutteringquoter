@@ -41,6 +41,23 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Invite user shows "Failed to send invite" in production – 2026-02
+
+- **Symptom:** In production (e.g. Railway), clicking "Invite user" and submitting an email shows "Failed to send invite" (or a message starting with that and the real error). User list and role changes may work; only invite fails.
+- **Cause:** The backend calls Supabase `auth.admin.invite_user_by_email()`. A 500 with "Failed to send invite" means an exception occurred that wasn’t "user already exists" or "service role missing". Common causes:
+  - **SUPABASE_SERVICE_ROLE_KEY** missing or invalid in Railway → often results in 503; if you see 500, the key is usually set but the **invite** call or the **profiles.upsert** after it can still fail.
+  - **Supabase Auth / email:** Invites send an email. Supabase project must have email configured (Auth → Email or SMTP). If "Confirm email" is required or SMTP isn’t set, the invite API can fail (e.g. "Email provider not configured" or similar).
+  - **Rate limits:** Supabase Auth rate limits (e.g. emails per hour); the error message may mention rate limit.
+  - **profiles.upsert** after invite: If the invite succeeds but inserting/updating `public.profiles` fails (RLS, constraint, or schema), the backend catches it and returns 500 "Failed to send invite".
+- **Fix:**  
+  1. In **Railway** → your service → **Deployments** → view **Logs**. Reproduce the invite and look for the line `Failed to invite user by email ...:` — the exception message after that is the real cause.  
+  2. In **Supabase Dashboard** → **Authentication** → **Providers** → **Email**: ensure email is enabled and, if you use custom SMTP, that it’s configured. For invite emails, Supabase uses its built-in sender unless SMTP is set.  
+  3. Ensure **SUPABASE_SERVICE_ROLE_KEY** is set in Railway (Settings → Variables) and matches Supabase → Settings → API → `service_role` (secret). Redeploy after changing.  
+  4. If the log shows a profiles/RLS error, check that the service role can insert/update `public.profiles` (e.g. RLS policies or use of service role bypass).  
+  The app now returns the underlying error message in the 500 response so the UI can show it; check the modal or network tab for the full message after redeploying.
+
+---
+
 ## ES module fails to run: window hooks missing, modals/buttons don’t work – 2026-02
 
 - **Symptom:** After switching `app.js` to `type="module"`, the app loads but `window.__quoteAppSwitchView` (and other E2E hooks) is undefined; accessibility modal doesn’t open; canvas view doesn’t switch. Console: `Identifier 'X' has already been declared` (or similar).

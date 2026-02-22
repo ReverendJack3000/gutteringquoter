@@ -528,7 +528,11 @@ def api_admin_invite_user(
                 "Invite is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
             ) from e
         logger.exception("Failed to invite user by email %s: %s", email, e)
-        raise HTTPException(500, "Failed to send invite")
+        safe_msg = (str(e) or "").strip()[:200]
+        raise HTTPException(
+            500,
+            detail=f"Failed to send invite.{f' {safe_msg}' if safe_msg else ''}",
+        )
 
 
 @app.patch("/api/admin/user-permissions/{target_user_id}")
