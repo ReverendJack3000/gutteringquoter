@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile: app glitches after taking/uploading photo until returning to canvas – 2026-02
+
+- **Symptom:** On mobile (production or local), after taking a photo with the camera or choosing one to upload, the app glitches (freeze, heavy jank, or crash) until the user returns to the canvas view. The image may never appear; Add to Job etc. can still work for other data.
+- **Cause:** The crop modal’s `drawCropPreview()` ran immediately after opening. The modal was just unhidden, so `#cropCanvasWrap` had `clientWidth`/`clientHeight` 0. The code then used the full image size (e.g. 4032×3024) for the crop canvas, creating a multi-megapixel canvas and exhausting memory or hitting limits on mobile.
+- **Fix:** (1) In `showCropModal` image `onload`, defer `drawCropPreview()` with `requestAnimationFrame()` so the modal is laid out and the wrap has real dimensions. (2) In `drawCropPreview()`, when `maxW <= 0 || maxH <= 0`, use a capped fallback (e.g. scale image so longer side ≤ 1024) instead of `img.width`/`img.height`. See `frontend/app.js` around `showCropModal` and `drawCropPreview`.
+
+---
+
 ## Desktop profile menu: Product Management / User Permissions does not switch view – 2026-02
 
 - **Symptom:** On desktop, clicking "Product Management" or "User Permissions" in the profile dropdown does nothing: the view stays on canvas. Same in production (Railway) and local server. Console may show `ReferenceError: diagramToolbarDragCleanup is not defined`.

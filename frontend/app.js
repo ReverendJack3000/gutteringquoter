@@ -906,8 +906,11 @@ function drawCropPreview() {
   let maxW = wrap.clientWidth;
   let maxH = wrap.clientHeight;
   if (maxW <= 0 || maxH <= 0) {
-    maxW = img.width;
-    maxH = img.height;
+    // Modal not laid out yet or wrap has no size; use capped fallback to avoid multi-megapixel canvas on mobile.
+    const CROP_FALLBACK_MAX = 1024;
+    const r = Math.min(CROP_FALLBACK_MAX / img.width, CROP_FALLBACK_MAX / img.height);
+    maxW = Math.round(img.width * r);
+    maxH = Math.round(img.height * r);
   }
   const scale = Math.min(maxW / img.width, maxH / img.height);
   const drawW = img.width * scale;
@@ -983,7 +986,8 @@ function showCropModal(file) {
     if (sel) sel.value = 'free';
     const uploadTrigger = document.getElementById('uploadZone') || document.getElementById('fileInput');
     openAccessibleModal('cropModal', { triggerEl: uploadTrigger });
-    drawCropPreview();
+    // Defer so modal is laid out (wrap has clientWidth/Height). Prevents full-resolution canvas on mobile when wrap was 0x0.
+    requestAnimationFrame(() => drawCropPreview());
   };
   img.onerror = () => {
     URL.revokeObjectURL(url);
