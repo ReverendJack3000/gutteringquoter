@@ -44,10 +44,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/desktop-login-account-creation-ux
-- Based on: main
-- Status: In Progress
-- Related Tasks: 35.8, 35.9, 35.12–35.16 (desktop login/account-creation UX)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
