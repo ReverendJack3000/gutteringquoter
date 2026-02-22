@@ -12365,6 +12365,7 @@ function renderUserPermissionsList() {
     const isDirty = draftRole !== currentRole;
     const isSaving = userPermissionsState.savingUserIds.has(userId);
     const rowMessage = userPermissionsState.rowMessages.get(userId);
+    const isSuperAdmin = !!user?.is_super_admin;
 
     const tr = document.createElement('tr');
 
@@ -12379,43 +12380,52 @@ function renderUserPermissionsList() {
     tr.appendChild(userIdTd);
 
     const roleTd = document.createElement('td');
-    const roleSelect = document.createElement('select');
-    roleSelect.className = 'permissions-role-select';
-    roleSelect.setAttribute('aria-label', `Role for ${user?.email || userId}`);
-    ['viewer', 'editor', 'admin'].forEach((roleValue) => {
-      const option = document.createElement('option');
-      option.value = roleValue;
-      option.textContent = roleValue;
-      roleSelect.appendChild(option);
-    });
-    roleSelect.value = draftRole;
-    roleSelect.disabled = isSaving;
-    roleSelect.addEventListener('change', () => {
-      const selectedRole = normalizeAppRole(roleSelect.value);
-      if (selectedRole === currentRole) {
-        userPermissionsState.draftRoles.delete(userId);
-      } else {
-        userPermissionsState.draftRoles.set(userId, selectedRole);
-      }
-      if (rowMessage?.type === 'success') userPermissionsState.rowMessages.delete(userId);
-      filterUserPermissions();
-    });
-    roleTd.appendChild(roleSelect);
+    if (isSuperAdmin) {
+      const superAdminSpan = document.createElement('span');
+      superAdminSpan.className = 'permissions-role-super-admin';
+      superAdminSpan.textContent = 'Super admin';
+      superAdminSpan.setAttribute('aria-label', 'Super admin (cannot be changed)');
+      roleTd.appendChild(superAdminSpan);
+    } else {
+      const roleSelect = document.createElement('select');
+      roleSelect.className = 'permissions-role-select';
+      roleSelect.setAttribute('aria-label', `Role for ${user?.email || userId}`);
+      ['viewer', 'editor', 'admin'].forEach((roleValue) => {
+        const option = document.createElement('option');
+        option.value = roleValue;
+        option.textContent = roleValue;
+        roleSelect.appendChild(option);
+      });
+      roleSelect.value = draftRole;
+      roleSelect.disabled = isSaving;
+      roleSelect.addEventListener('change', () => {
+        const selectedRole = normalizeAppRole(roleSelect.value);
+        if (selectedRole === currentRole) {
+          userPermissionsState.draftRoles.delete(userId);
+        } else {
+          userPermissionsState.draftRoles.set(userId, selectedRole);
+        }
+        if (rowMessage?.type === 'success') userPermissionsState.rowMessages.delete(userId);
+        filterUserPermissions();
+      });
+      roleTd.appendChild(roleSelect);
+    }
     tr.appendChild(roleTd);
 
     const actionTd = document.createElement('td');
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'permissions-save-btn';
-    saveBtn.textContent = isSaving ? 'Saving...' : 'Save';
-    saveBtn.disabled = isSaving || !isDirty;
-    saveBtn.addEventListener('click', () => {
-      const nextRole = normalizeAppRole(userPermissionsState.draftRoles.get(userId));
-      if (!nextRole || nextRole === currentRole) return;
-      void saveUserPermissionRole(userId, nextRole);
-    });
-    actionTd.appendChild(saveBtn);
-
+    if (!isSuperAdmin) {
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'permissions-save-btn';
+      saveBtn.textContent = isSaving ? 'Saving...' : 'Save';
+      saveBtn.disabled = isSaving || !isDirty;
+      saveBtn.addEventListener('click', () => {
+        const nextRole = normalizeAppRole(userPermissionsState.draftRoles.get(userId));
+        if (!nextRole || nextRole === currentRole) return;
+        void saveUserPermissionRole(userId, nextRole);
+      });
+      actionTd.appendChild(saveBtn);
+    }
     const statusSpan = document.createElement('span');
     statusSpan.className = 'permissions-row-status';
     if (rowMessage?.type === 'error') statusSpan.classList.add('permissions-row-status--error');
@@ -12424,7 +12434,7 @@ function renderUserPermissionsList() {
     actionTd.appendChild(statusSpan);
 
     const isCurrentUser = authState.user?.id === userId;
-    if (!isCurrentUser) {
+    if (!isCurrentUser && !isSuperAdmin) {
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'permissions-remove-btn btn-text-icon';

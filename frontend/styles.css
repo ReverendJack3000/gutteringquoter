@@ -3688,6 +3688,11 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   padding: 2px 6px;
 }
 
+.permissions-role-super-admin {
+  font-weight: 600;
+  color: #6b7280;
+}
+
 .permissions-role-select {
   min-width: 130px;
   border: 1px solid #d1d5db;

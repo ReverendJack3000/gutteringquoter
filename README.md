@@ -112,7 +112,12 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `GET /api/admin/user-permissions` – list users + roles for admin permissions management (requires Bearer token, role `admin`, and backend `SUPABASE_SERVICE_ROLE_KEY`)
 - `PATCH /api/admin/user-permissions/{user_id}` – update a user role (`viewer|editor|admin`) in `public.profiles` (requires Bearer token and role `admin`)
 - `POST /api/admin/user-permissions/invite` – invite user by email with optional default role (requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
-- `DELETE /api/admin/user-permissions/{user_id}` – remove user (cannot remove self or last admin; requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
+- `DELETE /api/admin/user-permissions/{user_id}` – remove user (cannot remove self or last admin; requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`). **Super admin:** set `SUPER_ADMIN_EMAIL` in the backend environment to an admin user’s email; that user cannot be modified or removed by anyone.
+
+**Super admin setup (after setting `SUPER_ADMIN_EMAIL` on Railway or in `backend/.env`):** The user with that email must have `role = 'admin'` in `public.profiles`. Option A: from the project root run `python scripts/ensure_super_admin.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`). Option B: in Supabase Dashboard → SQL Editor run  
+`INSERT INTO public.profiles (user_id, role) SELECT id, 'admin' FROM auth.users WHERE LOWER(email) = LOWER('your@email.com') ON CONFLICT (user_id) DO UPDATE SET role = 'admin';`  
+(replace `your@email.com` with your super admin email). Then sign out and sign in again so the JWT includes the admin role.
+
 - `GET /manifest.webmanifest` – PWA manifest (static)
 - `GET /service-worker.js` – service worker script (static)
 
@@ -124,7 +129,7 @@ To deploy to production:
 
 1. Push the repo to GitHub (or GitLab/Bitbucket).
 2. Create a project at [railway.app](https://railway.app) and deploy from the repo.
-3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`, `PWA_ENABLED`).
+3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`, `PWA_ENABLED`, `SUPER_ADMIN_EMAIL`).
 4. The repo includes a **Procfile** and **nixpacks.toml** so Railway runs `uvicorn` from `backend/` and serves the frontend.
 
 Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)**. After deploy, the live app URL is shown in the Railway dashboard (e.g. `https://quote-app-production.up.railway.app`).

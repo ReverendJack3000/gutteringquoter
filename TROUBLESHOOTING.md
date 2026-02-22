@@ -41,6 +41,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Super admin: user not admin or can't access User Permissions – 2026-02
+
+- **Symptom:** You set `SUPER_ADMIN_EMAIL` on Railway (or in `backend/.env`) but that user doesn't see User Permissions, or they're not protected as super admin.
+- **Cause:** The super admin user must have `role = 'admin'` in `public.profiles` so the JWT includes the admin role. `SUPER_ADMIN_EMAIL` only protects that user from being edited/removed; it does not grant admin by itself.
+- **Fix:** (1) From project root run `python scripts/ensure_super_admin.py` (with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPER_ADMIN_EMAIL` in `backend/.env`). (2) Or in Supabase → SQL Editor run: `INSERT INTO public.profiles (user_id, role) SELECT id, 'admin' FROM auth.users WHERE LOWER(email) = LOWER('your@email.com') ON CONFLICT (user_id) DO UPDATE SET role = 'admin';` (replace with your email). (3) Sign out and sign in again so the JWT gets the admin role.
+
+---
+
 ## Invite user shows "Failed to send invite" in production – 2026-02
 
 - **Symptom:** In production (e.g. Railway), clicking "Invite user" and submitting an email shows "Failed to send invite" (or a message starting with that and the real error). User list and role changes may work; only invite fails.

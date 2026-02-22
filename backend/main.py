@@ -113,12 +113,29 @@ def _extract_auth_users_from_list_response(response: Any) -> list[Any]:
     return []
 
 
+def _get_super_admin_email() -> Optional[str]:
+    """Super admin email from env (case-insensitive match). Protected from role change and removal."""
+    raw = os.environ.get("SUPER_ADMIN_EMAIL", "").strip()
+    return raw.lower() if raw else None
+
+
+def _is_super_admin(auth_user: Any) -> bool:
+    super_email = _get_super_admin_email()
+    if not super_email:
+        return False
+    email = _extract_auth_user_field(auth_user, "email")
+    if not email or not isinstance(email, str):
+        return False
+    return email.strip().lower() == super_email
+
+
 def _serialize_auth_user_for_permissions(auth_user: Any, role: str) -> dict[str, Any]:
     user_id = str(_extract_auth_user_field(auth_user, "id") or "").strip()
     return {
         "user_id": user_id,
         "email": _extract_auth_user_field(auth_user, "email"),
         "role": _normalize_app_role(role),
+        "is_super_admin": _is_super_admin(auth_user),
         "created_at": _to_iso8601(_extract_auth_user_field(auth_user, "created_at")),
         "last_sign_in_at": _to_iso8601(_extract_auth_user_field(auth_user, "last_sign_in_at")),
     }
@@ -585,6 +602,9 @@ def api_update_admin_user_permission(
         logger.exception("Failed to verify target user %s before role update: %s", target_uid, e)
         raise HTTPException(500, "Failed to verify target user")
 
+    if _is_super_admin(auth_user):
+        raise HTTPException(403, "Super admin cannot be modified.")
+
     try:
         current_role = _get_profile_role_for_user(supabase, target_uid)
         _ensure_not_demoting_last_admin(
@@ -656,6 +676,9 @@ def api_admin_remove_user(
             ) from e
         logger.exception("Failed to verify target user %s before remove: %s", target_uid, e)
         raise HTTPException(500, "Failed to verify user")
+
+    if _is_super_admin(auth_user):
+        raise HTTPException(403, "Super admin cannot be removed.")
 
     try:
         current_role = _get_profile_role_for_user(supabase, target_uid)
