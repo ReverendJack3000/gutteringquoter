@@ -398,6 +398,14 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.101.5** **Add E2E regression coverage + hook updates.** Update `e2e/run.js` for desktop/mobile assertions (visibility, cycle, wrap, persistence after reselect), add color+lineWeight interop check, and keep existing desktop/mobile ruler guard assertions unchanged. Extend `window.__quoteAppGetElements()` to include `lineWeight` for deterministic checks.
 - [ ] **54.101.6** **Manual QA + Railway safety verification.** Validate desktop/mobile behavior (selection toolbar, undo/redo, save/load, export thumbnail/PNG parity), run `npm test`, and confirm no Railway env/build/deploy changes are required.
 
+**54.102 Mobile: double-tap zoom and graceful zoom-out**  
+*Plan: docs/plans/2026-02-22-mobile-double-tap-zoom-and-graceful-zoom-out.md. Scope: mobile-only; prevent browser double-tap zoom on canvas view, ensure user can always zoom out (Fit) without restarting. Desktop and 54.11 (pinch allowed) unchanged; Railway-safe.*
+
+- [x] **54.102.1** **Prevent double-tap zoom on mobile canvas view.** Under `body[data-viewport-mode="mobile"]`, set `touch-action: none` on `#view-canvas` and `.blueprint-wrap` (or `#blueprintWrap`) so the canvas view area suppresses browser double-tap zoom. Do not change viewport meta (no maximum-scale/user-scalable=no).
+- [x] **54.102.2** **Mobile-only Fit view in global toolbar.** Add a "Fit view" control (same behavior as diagram toolbar Fit) to the global toolbar, visible only when mobile; 44px min touch target, aria-label; desktop hidden/unchanged.
+- [x] **54.102.3** **Mobile double-tap on empty canvas → Fit.** On mobile, detect double-tap on canvas when no badge under tap; trigger Fit (viewZoom = 1, resetMobileFitPanState, draw) and prevent default. Preserve dblclick-on-badge → length popover. Gate by viewportMode === 'mobile'.
+- [ ] **54.102.4** **QA: double-tap and zoom-out.** Manual mobile (iOS Safari, Android Chrome), portrait/landscape, 200% zoom; confirm no double-tap page zoom on canvas, Fit always reachable, double-tap empty canvas fits; no desktop regression; Railway deploy unchanged.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

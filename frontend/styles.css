@@ -2062,8 +2062,13 @@ body[data-viewport-mode="mobile"] .workspace {
   position: relative;
 }
 
+/* 54.102.1: Prevent double-tap zoom on canvas view (mobile only); viewport meta unchanged. */
+body[data-viewport-mode="mobile"] #view-canvas {
+  touch-action: none;
+}
 body[data-viewport-mode="mobile"] .blueprint-wrap {
   min-width: 0;
+  touch-action: none;
 }
 
 body[data-viewport-mode="mobile"] .resizer {
@@ -2869,6 +2874,19 @@ body[data-viewport-mode="mobile"] .mobile-undo-btn:disabled,
 body[data-viewport-mode="mobile"] .mobile-redo-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 54.102.2: Mobile-only Fit view in global toolbar (44px touch target) */
+.mobile-fit-view-btn {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .mobile-fit-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
 }
 
 /* Mobile: 44px minimum touch targets (WCAG 2.5.5) */

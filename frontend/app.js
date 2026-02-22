@@ -341,6 +341,9 @@ const MOBILE_FIT_PAN_BOUNCE_DECAY = 0.78;
 const MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON = 0.05;
 /** 54.62: Mobile one-finger move starts only after crossing this threshold (tap remains select-only). */
 const MOBILE_MOVE_START_THRESHOLD_PX = 8;
+/** 54.102.3: Double-tap on empty canvas → Fit: time and distance thresholds. */
+const MOBILE_DOUBLE_TAP_WINDOW_MS = 400;
+const MOBILE_DOUBLE_TAP_DISTANCE_PX = 20;
 const ZOOM_WHEEL_FACTOR = 0.92;
 const ZOOM_BUTTON_FACTOR = 1.25;
 const VIEW_PAD = 48; // max padding from content edge to viewport when panning (canvas not limitless)
@@ -7259,8 +7262,31 @@ function initCanvas() {
   
   initDiagramToolbarDragWithApp();
 
+  /* 54.102.3: Mobile double-tap on empty canvas → Fit (preserve dblclick-on-badge → length popover). */
+  let mobileDoubleTapLast = { time: 0, clientX: 0, clientY: 0 };
+
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
+    if (layoutState.viewportMode === 'mobile' && modalA11yState.stack.length === 0) {
+      const now = Date.now();
+      if (mobileDoubleTapLast.time > 0 && now - mobileDoubleTapLast.time < MOBILE_DOUBLE_TAP_WINDOW_MS) {
+        const dx = e.clientX - mobileDoubleTapLast.clientX;
+        const dy = e.clientY - mobileDoubleTapLast.clientY;
+        if (Math.hypot(dx, dy) < MOBILE_DOUBLE_TAP_DISTANCE_PX) {
+          const badge = hitTestBadge(e.clientX, e.clientY);
+          if (!badge) {
+            state.viewZoom = 1;
+            resetMobileFitPanState();
+            draw();
+            e.preventDefault();
+            e.stopPropagation();
+            mobileDoubleTapLast.time = 0;
+            return;
+          }
+          mobileDoubleTapLast.time = 0;
+        }
+      }
+    }
     // 54.89.2 Mobile: blur focused control when tapping canvas so residual blue ring doesn't persist
     if (layoutState.viewportMode === 'mobile' && modalA11yState.stack.length === 0) {
       const tapTarget = e.target;
@@ -7715,6 +7741,7 @@ function initCanvas() {
   });
 
   canvas.addEventListener('pointerup', (e) => {
+    const wasSimpleTap = layoutState.viewportMode === 'mobile' && (state.mode === null || state.mode === 'move-primed');
     if (e.target && e.target.releasePointerCapture && e.pointerId != null) {
       try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
     }
@@ -7812,6 +7839,9 @@ function initCanvas() {
     state.mode = null;
     state.resizeHandle = null;
     updateCanvasTooltip(null);
+    if (wasSimpleTap) {
+      mobileDoubleTapLast = { time: Date.now(), clientX: e.clientX, clientY: e.clientY };
+    }
   });
 
   canvas.addEventListener('pointerleave', (e) => {
@@ -8374,6 +8404,16 @@ function initZoomControls() {
   });
   zoomFitBtn?.addEventListener('click', (e) => {
     stopAndPrevent(e);
+    state.viewZoom = 1;
+    resetMobileFitPanState();
+    draw();
+  });
+
+  /* 54.102.2: Mobile-only Fit view in global toolbar – same behavior as diagram toolbar Fit */
+  const mobileFitViewBtn = document.getElementById('mobileFitViewBtn');
+  mobileFitViewBtn?.addEventListener('click', (e) => {
+    stopAndPrevent(e);
+    if (layoutState.viewportMode !== 'mobile') return;
     state.viewZoom = 1;
     resetMobileFitPanState();
     draw();
@@ -10363,14 +10403,17 @@ function initGlobalToolbar() {
   const mobileUndoBtn = document.getElementById('mobileUndoBtn');
   const mobileRedoBtn = document.getElementById('mobileRedoBtn');
   const mobileUndoRedoWrap = document.querySelector('.mobile-undo-redo-wrap');
-  if (mobileUndoRedoWrap) {
+  const mobileFitViewBtn = document.getElementById('mobileFitViewBtn');
+  if (mobileUndoRedoWrap || mobileFitViewBtn) {
     if (globalToolbarUndoRedoAriaObserver) {
       globalToolbarUndoRedoAriaObserver.disconnect();
       globalToolbarUndoRedoAriaObserver = null;
     }
     const isMobile = () => document.body?.getAttribute('data-viewport-mode') === 'mobile';
     const setAriaHidden = () => {
-      mobileUndoRedoWrap.setAttribute('aria-hidden', isMobile() ? 'false' : 'true');
+      const mobile = isMobile();
+      if (mobileUndoRedoWrap) mobileUndoRedoWrap.setAttribute('aria-hidden', mobile ? 'false' : 'true');
+      if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'false' : 'true');
     };
     setAriaHidden();
     const observer = new MutationObserver(setAriaHidden);
