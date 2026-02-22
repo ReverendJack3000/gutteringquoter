@@ -12496,6 +12496,7 @@ async function fetchUserPermissions(options = {}) {
         user_id: String(user?.user_id || '').trim(),
         email: String(user?.email || '').trim(),
         role: normalizeAppRole(user?.role),
+        is_super_admin: !!user?.is_super_admin,
         created_at: user?.created_at || null,
         last_sign_in_at: user?.last_sign_in_at || null,
       }))

@@ -100,8 +100,9 @@
 - [x] **36.19** Invite user (desktop): UI "Invite user" button + modal (email, optional role); backend POST invite endpoint using `auth.admin.invite_user_by_email`; profile upsert for role; success/error handling; no mobile changes; Railway-safe.
 - [x] **36.20** Remove user (desktop): per-row Remove button (hidden for self); confirm via `showAppConfirm`; backend DELETE endpoint with self-remove and optional last-admin guards; `auth.admin.delete_user`; remove from state and re-render; no mobile changes; Railway-safe.
 - [x] **36.21** Regression and safety: checklist from plan (list/search/role/Save, Back/Refresh, profile menu navigation, desktop gate, no new env, E2E profile menu passes).
+- [x] **36.22** Super admin label display (desktop): fix User Permissions so the row for the user matching `SUPER_ADMIN_EMAIL` shows the label "Super admin" (plain text, no dropdown). Preserve `is_super_admin` from API response in frontend state in `fetchUserPermissions`; styling and aria-label already implemented. Plan: docs/plans/2026-02-22-super-admin-label-display-fix.md. Desktop-only; Railway-safe.
 
-*Section 36 status: In progress. 36.1–36.10, 36.12–36.21 complete. 36.11 remains optional/open (localProducts migration).*
+*Section 36 status: In progress. 36.1–36.10, 36.12–36.22 complete. 36.11 remains optional/open (localProducts migration).*
 
 ---
 
