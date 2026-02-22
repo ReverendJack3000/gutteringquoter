@@ -1,14 +1,14 @@
 """
 Optional JWT auth for Quote App. Validates Supabase access token and returns user_id (auth.users.id).
-Used by /api/diagrams endpoints.
-
+Used by /api/diagrams endpoints. Role-based permissions (task 34.3): role from JWT app_metadata.role
+(via Supabase Custom Access Token Hook from public.profiles); require_role() for protected routes.
 Supports:
 - Legacy: SUPABASE_JWT_SECRET (HS256) if set.
 - ECC (P-256): JWKS from SUPABASE_URL/auth/v1/.well-known/jwks.json (ES256). No secret needed.
 """
 import logging
 import os
-from typing import Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 import jwt
@@ -53,12 +53,12 @@ def get_jwt_secret() -> Optional[str]:
     return os.environ.get("SUPABASE_JWT_SECRET", "").strip() or None
 
 
-def get_current_user_id(
+def get_validated_payload(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTP_BEARER),
-) -> UUID:
+) -> dict:
     """
-    Verify Supabase JWT and return user_id. Raises 401 if missing or invalid.
-    Uses SUPABASE_JWT_SECRET (HS256) if set, else JWKS (ES256) from SUPABASE_URL.
+    Verify Supabase JWT and return the decoded payload. Raises 401 if missing or invalid.
+    Used by get_current_user_id and get_current_user_id_and_role so we decode once per request.
     """
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Authorization required (Bearer token)")
@@ -104,6 +104,53 @@ def get_current_user_id(
     if not sub:
         raise HTTPException(status_code=401, detail="Invalid token (no sub)")
     try:
-        return UUID(sub)
+        UUID(sub)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid token (invalid user id)") from None
+    return payload
+
+
+def get_current_user_id(
+    payload: dict = Depends(get_validated_payload),
+) -> UUID:
+    """Return user_id from validated JWT payload. Raises 401 if missing or invalid."""
+    return UUID(payload["sub"])
+
+
+def get_current_user_id_and_role(
+    payload: dict = Depends(get_validated_payload),
+) -> Tuple[UUID, str]:
+    """
+    Return (user_id, role) from validated JWT. Role from app_metadata.role (set by
+    Custom Access Token Hook from public.profiles); defaults to 'viewer' if missing.
+    """
+    user_id = UUID(payload["sub"])
+    role = (payload.get("app_metadata") or {}).get("role")
+    if not role or not isinstance(role, str):
+        role = "viewer"
+    else:
+        role = role.strip().lower()
+    return (user_id, role)
+
+
+def require_role(allowed_roles: List[str]):
+    """
+    Dependency: require the current user's role to be in allowed_roles.
+    Use after auth (Bearer). Raises 403 if role not allowed. Returns user_id.
+    """
+
+    def _require(
+        user_id_and_role: Tuple[UUID, str] = Depends(get_current_user_id_and_role),
+    ) -> UUID:
+        user_id, role = user_id_and_role
+        normalized_allowed_roles = [str(r).strip().lower() for r in allowed_roles]
+        if role not in normalized_allowed_roles:
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions (required role: one of {})".format(
+                    ", ".join(normalized_allowed_roles),
+                ),
+            )
+        return user_id
+
+    return _require

@@ -69,7 +69,17 @@
 - [x] **36.10** Handle “not logged in” in the Add Product flow: disable or hide “Create Product” and show “Sign in to add products,” or redirect to the login view and return to the modal after login.
 - [ ] **36.11** Optional: migration path for existing `localProducts` (e.g. one-time “Upload my local products to Supabase” or leave localStorage as legacy and only show Supabase products in the grid).
 
-*Section 36 status: Implementation complete. 36.1–36.10 done. 36.11: localStorage commented out; Supabase is source of truth.*
+**Admin role-permissions management follow-up (desktop-only):**
+
+- [x] **36.12** Backend: add admin-only endpoint to list users and roles for permissions management (merge `auth.users` + `public.profiles`; include email, user_id, role). Require Bearer + `require_role(["admin"])`; return clear error if service-role key is unavailable.
+- [x] **36.13** Backend: add admin-only endpoint to update a user's role in `public.profiles` (`viewer` | `editor` | `admin`) with strict validation and clear API errors. Require Bearer + `require_role(["admin"])`.
+- [x] **36.14** Frontend auth state: derive current role from JWT/user metadata and gate admin-only UI with desktop guard (`layoutState.viewportMode !== "mobile"`).
+- [x] **36.15** Desktop UI: add an admin-only "User Permissions" option in the existing profile dropdown and open a new desktop-only management view styled to match Product Library patterns.
+- [x] **36.16** Desktop permissions view: render searchable user rows with role selectors and explicit save/update action per row; wire load/refresh/error/empty states without impacting existing Product Library or canvas flows.
+- [x] **36.17** Quote permissions parity: ensure desktop pricing-admin actions use Bearer auth and are shown only to admin role; non-admins remain read-only (mobile behavior unchanged).
+- [x] **36.18** Regression and safety validation: verify desktop-only scope, no mobile UI regressions, and Railway-safe deploy behavior (required env vars, API responses, auth failures).
+
+*Section 36 status: In progress. 36.1–36.10 and 36.12–36.18 complete. 36.11 remains optional/open (localProducts migration).*
 
 ---
 
@@ -328,4 +338,3 @@
 *Section 48 status: Railway deployment complete (48.1–48.20, 48.24). Production URL: https://quote-app-production-7897.up.railway.app. Remaining: 48.21–48.23 (manual auth/blueprint tests, optional custom domain).*
 
 ---
-

@@ -93,12 +93,65 @@ const state = {
   floatingToolbarUserMoved: false, // 54.20: when true, draw() does not reposition the element toolbar
 };
 
-/** Auth: token, user, and Supabase client for saved diagrams and product uploads. */
-const authState = { token: null, email: null, user: null, supabase: null };
+/** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
+const authState = { token: null, email: null, user: null, role: 'viewer', supabase: null };
+
+const APP_ALLOWED_ROLES = new Set(['viewer', 'editor', 'admin']);
 
 /** Shared Authorization header helper for signed-in API calls. */
 function getAuthHeaders() {
   return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
+}
+
+function normalizeAppRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return APP_ALLOWED_ROLES.has(normalized) ? normalized : 'viewer';
+}
+
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = base64.length % 4;
+    const padded = pad ? base64 + '='.repeat(4 - pad) : base64;
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch (_) {
+    return null;
+  }
+}
+
+function deriveAuthRole(session, explicitUser, token) {
+  const tokenPayload = decodeJwtPayload(token);
+  const candidates = [
+    explicitUser?.app_metadata?.role,
+    session?.user?.app_metadata?.role,
+    tokenPayload?.app_metadata?.role,
+    tokenPayload?.role,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return normalizeAppRole(candidate);
+    }
+  }
+  return 'viewer';
+}
+
+function setAuthFromSession(session, explicitUser = null) {
+  const user = explicitUser || session?.user || null;
+  authState.token = session?.access_token ?? null;
+  authState.email = user?.email ?? null;
+  authState.user = user ?? null;
+  authState.role = deriveAuthRole(session, user, authState.token);
+}
+
+function clearAuthState() {
+  authState.token = null;
+  authState.email = null;
+  authState.user = null;
+  authState.role = 'viewer';
 }
 
 const AUTOSAVE_NAME_PREFIX = '__quote_app_autosave__::';
@@ -138,6 +191,17 @@ let openProductModal = null;
 
 /** Full list of products fetched for the Product Library; used for search/filter without re-fetching. */
 let allLibraryProducts = [];
+
+const userPermissionsState = {
+  initialized: false,
+  loading: false,
+  users: [],
+  filteredUsers: [],
+  searchTerm: '',
+  draftRoles: new Map(),
+  rowMessages: new Map(),
+  savingUserIds: new Set(),
+};
 
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
@@ -983,10 +1047,21 @@ function syncQuoteModalViewportState() {
 }
 
 function updateSavePricingButtonState() {
+  const editBtn = document.getElementById('editPricingBtn');
   const saveBtn = document.getElementById('savePricingBtn');
   const table = document.getElementById('quotePartsTable');
   const inEditMode = table?.classList.contains('quote-parts-table--editing');
+  const canAdmin = canUsePricingAdminControls();
+  if (editBtn) {
+    editBtn.hidden = !canAdmin;
+    editBtn.disabled = !canAdmin;
+  }
   if (!saveBtn) return;
+  if (!canAdmin) {
+    saveBtn.setAttribute('hidden', '');
+    saveBtn.disabled = true;
+    return;
+  }
   if (inEditMode) {
     saveBtn.removeAttribute('hidden');
     saveBtn.disabled = !hasPricingChanges;
@@ -1045,6 +1120,10 @@ function setQuoteEditMode(editing) {
   const btn = document.getElementById('editPricingBtn');
   const tableBody = document.getElementById('quoteTableBody');
   if (!table || !btn) return;
+  if (editing && !canUsePricingAdminControls()) {
+    showMessage('Admin role required to edit pricing.', 'error');
+    return;
+  }
 
   if (editing) {
     hasPricingChanges = false;
@@ -1085,6 +1164,7 @@ function setQuoteEditMode(editing) {
           inlineMarkup.step = '0.01';
           inlineMarkup.value = markupVal;
           inlineMarkup.setAttribute('aria-label', 'Markup percentage');
+          inlineMarkup.disabled = !canUsePricingAdminControls();
           inlineMarkup.addEventListener('change', () => {
             const cost = parseFloat(row.dataset.costPrice) || 0;
             let markup = parseFloat(inlineMarkup.value);
@@ -1339,6 +1419,22 @@ function isMobileQuoteViewport() {
   return layoutState.viewportMode === 'mobile';
 }
 
+function isDesktopViewport() {
+  return layoutState.viewportMode !== 'mobile';
+}
+
+function isAdminRole() {
+  return normalizeAppRole(authState.role) === 'admin';
+}
+
+function canAccessDesktopAdminUi() {
+  return !!authState.token && isAdminRole() && isDesktopViewport();
+}
+
+function canUsePricingAdminControls() {
+  return canAccessDesktopAdminUi();
+}
+
 function formatLabourHoursDisplay(hours) {
   if (!Number.isFinite(hours) || hours <= 0) return '0 hrs';
   const rounded = Math.round(hours * 100) / 100;
@@ -1406,7 +1502,7 @@ function getQuoteLineProductName(row) {
   if (!productCell) return 'Item';
   const clone = productCell.cloneNode(true);
   clone.querySelectorAll(
-    '.quote-mobile-line-summary, .quote-labour-mobile-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-line-qty-summary, .quote-labour-dup-btn'
+    '.quote-mobile-line-summary, .quote-labour-mobile-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-line-qty-summary, .quote-labour-dup-btn, .quote-row-remove-x'
   ).forEach((el) => el.remove());
   const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
   if (text) return text;
@@ -1994,6 +2090,7 @@ function renderLabourEditorRows() {
   unitPriceRow.appendChild(rateLabel);
   let rateEditor = null;
   let unitPriceSuffix = null;
+  let unitValue = null;
   if (isLabour) {
     rateEditor = document.createElement('input');
     rateEditor.type = 'number';
@@ -2008,7 +2105,7 @@ function renderLabourEditorRows() {
     unitPriceSuffix.className = 'labour-editor-unit-price-suffix';
     unitPriceRow.appendChild(unitPriceSuffix);
   } else {
-    const unitValue = document.createElement('span');
+    unitValue = document.createElement('span');
     unitValue.className = 'labour-editor-field-value';
     unitValue.textContent = formatCurrency(quoteLineEditorState.draftUnitPrice);
     unitPriceRow.appendChild(unitValue);
@@ -2093,8 +2190,22 @@ function renderLabourEditorRows() {
         ? 'Unit price and total include 15% GST.'
         : 'Unit Price Excludes GST';
     } else {
-      purchaseValue.textContent = formatCurrency(getQuoteLineCost(row));
-      note.textContent = 'Unit Price Excludes GST';
+      const cost = getQuoteLineCost(row);
+      const costNum = Number.isFinite(cost) ? cost : 0;
+      const incCost = Math.round(costNum * 1.15 * 100) / 100;
+      purchaseValue.textContent = quoteLineEditorState.isTaxApplicable
+        ? `${formatCurrency(incCost)} inc GST`
+        : `${formatCurrency(costNum)} exc GST`;
+      if (unitValue) {
+        const unitExc = Number.isFinite(quoteLineEditorState.draftUnitPrice) ? quoteLineEditorState.draftUnitPrice : 0;
+        const unitInc = Math.round(unitExc * 1.15 * 100) / 100;
+        unitValue.textContent = quoteLineEditorState.isTaxApplicable
+          ? `${formatCurrency(unitInc)} inc GST`
+          : `${formatCurrency(unitExc)} exc GST`;
+      }
+      note.textContent = quoteLineEditorState.isTaxApplicable
+        ? 'Unit price and total include 15% GST.'
+        : 'Unit Price Excludes GST';
     }
   };
 
@@ -2822,6 +2933,10 @@ function initQuoteModal() {
   savePricingBtn?.addEventListener('click', async () => {
     const tableBody = document.getElementById('quoteTableBody');
     const table = document.getElementById('quotePartsTable');
+    if (!canUsePricingAdminControls()) {
+      showMessage('Admin role required to save pricing updates.', 'error');
+      return;
+    }
     if (!table?.classList.contains('quote-parts-table--editing') || !tableBody) return;
     const updates = [];
     for (const row of tableBody.rows) {
@@ -2850,7 +2965,7 @@ function initQuoteModal() {
     try {
       const res = await fetch('/api/products/update-pricing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(updates),
       });
       const data = await res.json().catch(() => ({}));
@@ -3948,6 +4063,7 @@ async function calculateAndDisplayQuote() {
       markupInput.step = '0.01';
       markupInput.value = String(line.markup_percentage);
       markupInput.setAttribute('aria-label', 'Markup percentage');
+      markupInput.disabled = !canUsePricingAdminControls();
       markupInput.addEventListener('change', () => {
         const cost = parseFloat(row.dataset.costPrice) || 0;
         let markup = parseFloat(markupInput.value);
@@ -9440,6 +9556,7 @@ function initAuth() {
   const userAvatar = document.getElementById('userAvatar');
   const profileDropdown = document.getElementById('profileDropdown');
   const menuItemProducts = document.getElementById('menuItemProducts');
+  const menuItemUserPermissions = document.getElementById('menuItemUserPermissions');
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
   const productsUserAvatar = document.getElementById('productsUserAvatar');
@@ -9509,6 +9626,7 @@ function initAuth() {
       setPasswordAutocompleteMode('signin');
       refreshPasskeyUi().catch(() => {});
     }
+    syncAdminDesktopAccess({ notify: false, focus: false });
   }
 
   function bindButtonLikeKeyActivation(el) {
@@ -9539,11 +9657,23 @@ function initAuth() {
       switchView('view-products', { triggerEl: userAvatar || menuItemProducts });
     });
   }
+  if (menuItemUserPermissions) {
+    menuItemUserPermissions.addEventListener('click', () => {
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      if (!canAccessDesktopAdminUi()) {
+        const msg = isDesktopViewport()
+          ? 'Only admin users can access User Permissions.'
+          : 'User Permissions is available on desktop only.';
+        showMessage(msg, 'error');
+        return;
+      }
+      switchView('view-user-permissions', { triggerEl: userAvatar || menuItemUserPermissions });
+    });
+  }
   if (menuItemSignOut) {
     menuItemSignOut.addEventListener('click', () => {
-      authState.token = null;
-      authState.email = null;
-      authState.user = null;
+      clearAuthState();
       if (authState.supabase) authState.supabase.auth.signOut();
       setAuthUI();
       if (profileDropdown) profileDropdown.hidden = true;
@@ -9554,9 +9684,7 @@ function initAuth() {
   }
   if (productsUserAvatar) {
     productsUserAvatar.addEventListener('click', () => {
-      authState.token = null;
-      authState.email = null;
-      authState.user = null;
+      clearAuthState();
       if (authState.supabase) authState.supabase.auth.signOut();
       setAuthUI();
       switchView('view-login');
@@ -9573,9 +9701,7 @@ function initAuth() {
     try {
       const { data, error } = await authState.supabase.auth.signInWithPassword({ email: authEmail.value.trim(), password: authPassword.value });
       if (error) throw error;
-      authState.token = data.session?.access_token ?? null;
-      authState.email = data.user?.email ?? null;
-      authState.user = data.user ?? null;
+      setAuthFromSession(data.session, data.user ?? null);
       setAuthUI();
       switchView('view-canvas');
       maybePromptAutosaveRestore();
@@ -9622,9 +9748,7 @@ function initAuth() {
         throw new Error('Passkey sign-in did not complete. Check Supabase passkey settings and try again.');
       }
 
-      authState.token = session.access_token ?? null;
-      authState.email = user?.email ?? null;
-      authState.user = user ?? null;
+      setAuthFromSession(session, user ?? null);
       setAuthUI();
       switchView('view-canvas');
       maybePromptAutosaveRestore();
@@ -9647,9 +9771,7 @@ function initAuth() {
     try {
       const { data, error } = await authState.supabase.auth.signUp({ email: authEmail.value.trim(), password: authPassword.value });
       if (error) throw error;
-      authState.token = data.session?.access_token ?? null;
-      authState.email = data.user?.email ?? null;
-      authState.user = data.user ?? null;
+      setAuthFromSession(data.session, data.user ?? null);
       setAuthUI();
       switchView('view-canvas');
       checkServiceM8Status();
@@ -9661,9 +9783,7 @@ function initAuth() {
   });
 
   authSignOutBtn?.addEventListener('click', () => {
-    authState.token = null;
-    authState.email = null;
-    authState.user = null;
+    clearAuthState();
     if (authState.supabase) authState.supabase.auth.signOut();
     setAuthUI();
     switchView('view-login');
@@ -9748,9 +9868,7 @@ function initAuth() {
         authState.supabase = window.supabase.createClient(resolvedConfig.supabaseUrl, resolvedConfig.anonKey);
         refreshPasskeyUi().catch(() => {});
         authState.supabase.auth.onAuthStateChange((event, session) => {
-          authState.token = session?.access_token ?? null;
-          authState.email = session?.user?.email ?? null;
-          authState.user = session?.user ?? null;
+          setAuthFromSession(session, session?.user ?? null);
           setAuthUI();
           loadPanelProducts();
           checkServiceM8Status();
@@ -9765,12 +9883,10 @@ function initAuth() {
         });
         return authState.supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-          authState.token = session.access_token;
-          authState.email = session.user?.email ?? null;
-          authState.user = session.user ?? null;
-          setAuthUI();
-          checkServiceM8Status();
-        }
+            setAuthFromSession(session, session.user ?? null);
+            setAuthUI();
+            checkServiceM8Status();
+          }
         });
       }
     })
@@ -11385,6 +11501,7 @@ function applyViewportMode(mode, options = {}) {
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
     syncQuoteModalViewportState();
     syncMobileLabourRowSummary();
+    syncAdminDesktopAccess({ notify: true, focus: false });
     if (options.announce !== false) announceViewportMode(normalizedMode);
     // Re-initialize diagram toolbar drag when switching to mobile
     if (normalizedMode === 'mobile') {
@@ -11397,6 +11514,7 @@ function applyViewportMode(mode, options = {}) {
   setPanelExpanded(layoutState.panelExpanded, { resizeCanvas: options.resizeCanvas !== false });
   syncQuoteModalViewportState();
   syncMobileLabourRowSummary();
+  syncAdminDesktopAccess({ notify: true, focus: false });
   syncMobileOrientationPolicy(`applyViewportMode:stable:${normalizedMode}`);
 }
 
@@ -12057,6 +12175,290 @@ function updateUserProfile() {
   if (productsAvatar) productsAvatar.textContent = initial;
 }
 
+function setUserPermissionsStatus(message, tone = 'info') {
+  const el = document.getElementById('userPermissionsStatus');
+  if (!el) return;
+  const text = typeof message === 'string' ? message.trim() : '';
+  if (!text) {
+    el.hidden = true;
+    el.textContent = '';
+    el.classList.remove('permissions-status--error', 'permissions-status--success');
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.toggle('permissions-status--error', tone === 'error');
+  el.classList.toggle('permissions-status--success', tone === 'success');
+}
+
+function updateUserPermissionsMenuVisibility() {
+  const menuItem = document.getElementById('menuItemUserPermissions');
+  if (!menuItem) return;
+  menuItem.hidden = !canAccessDesktopAdminUi();
+}
+
+function syncAdminDesktopAccess(options = {}) {
+  updateUserPermissionsMenuVisibility();
+
+  const quoteTable = document.getElementById('quotePartsTable');
+  if (!canUsePricingAdminControls() && quoteTable?.classList.contains('quote-parts-table--editing')) {
+    setQuoteEditMode(false);
+  }
+  document.querySelectorAll('#quoteTableBody .quote-input-markup-inline').forEach((input) => {
+    if (input instanceof HTMLInputElement) input.disabled = !canUsePricingAdminControls();
+  });
+  updateSavePricingButtonState();
+
+  if (getVisibleViewId() === 'view-user-permissions' && !canAccessDesktopAdminUi()) {
+    switchView('view-canvas', { focus: options.focus !== false });
+    if (options.notify !== false) {
+      const message = isDesktopViewport()
+        ? 'Only admin users can access User Permissions.'
+        : 'User Permissions is available on desktop only.';
+      showMessage(message, 'info');
+    }
+  }
+}
+
+function filterUserPermissions() {
+  const query = userPermissionsState.searchTerm.trim().toLowerCase();
+  const list = Array.isArray(userPermissionsState.users) ? userPermissionsState.users : [];
+  if (!query) {
+    userPermissionsState.filteredUsers = list.slice();
+  } else {
+    userPermissionsState.filteredUsers = list.filter((user) => {
+      const email = String(user?.email || '').toLowerCase();
+      const userId = String(user?.user_id || '').toLowerCase();
+      return email.includes(query) || userId.includes(query);
+    });
+  }
+  renderUserPermissionsList();
+}
+
+function renderUserPermissionsList() {
+  const tableBody = document.getElementById('userPermissionsTableBody');
+  const emptyState = document.getElementById('userPermissionsEmpty');
+  if (!tableBody || !emptyState) return;
+
+  tableBody.innerHTML = '';
+  const rows = Array.isArray(userPermissionsState.filteredUsers) ? userPermissionsState.filteredUsers : [];
+  emptyState.hidden = rows.length !== 0;
+
+  rows.forEach((user) => {
+    const userId = String(user?.user_id || '').trim();
+    const currentRole = normalizeAppRole(user?.role);
+    const draftRole = normalizeAppRole(userPermissionsState.draftRoles.get(userId) || currentRole);
+    const isDirty = draftRole !== currentRole;
+    const isSaving = userPermissionsState.savingUserIds.has(userId);
+    const rowMessage = userPermissionsState.rowMessages.get(userId);
+
+    const tr = document.createElement('tr');
+
+    const emailTd = document.createElement('td');
+    emailTd.textContent = user?.email || 'No email';
+    tr.appendChild(emailTd);
+
+    const userIdTd = document.createElement('td');
+    const userCode = document.createElement('code');
+    userCode.textContent = userId || 'Unknown user';
+    userIdTd.appendChild(userCode);
+    tr.appendChild(userIdTd);
+
+    const roleTd = document.createElement('td');
+    const roleSelect = document.createElement('select');
+    roleSelect.className = 'permissions-role-select';
+    roleSelect.setAttribute('aria-label', `Role for ${user?.email || userId}`);
+    ['viewer', 'editor', 'admin'].forEach((roleValue) => {
+      const option = document.createElement('option');
+      option.value = roleValue;
+      option.textContent = roleValue;
+      roleSelect.appendChild(option);
+    });
+    roleSelect.value = draftRole;
+    roleSelect.disabled = isSaving;
+    roleSelect.addEventListener('change', () => {
+      const selectedRole = normalizeAppRole(roleSelect.value);
+      if (selectedRole === currentRole) {
+        userPermissionsState.draftRoles.delete(userId);
+      } else {
+        userPermissionsState.draftRoles.set(userId, selectedRole);
+      }
+      if (rowMessage?.type === 'success') userPermissionsState.rowMessages.delete(userId);
+      filterUserPermissions();
+    });
+    roleTd.appendChild(roleSelect);
+    tr.appendChild(roleTd);
+
+    const actionTd = document.createElement('td');
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'permissions-save-btn';
+    saveBtn.textContent = isSaving ? 'Saving...' : 'Save';
+    saveBtn.disabled = isSaving || !isDirty;
+    saveBtn.addEventListener('click', () => {
+      const nextRole = normalizeAppRole(userPermissionsState.draftRoles.get(userId));
+      if (!nextRole || nextRole === currentRole) return;
+      void saveUserPermissionRole(userId, nextRole);
+    });
+    actionTd.appendChild(saveBtn);
+
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'permissions-row-status';
+    if (rowMessage?.type === 'error') statusSpan.classList.add('permissions-row-status--error');
+    if (rowMessage?.type === 'success') statusSpan.classList.add('permissions-row-status--success');
+    statusSpan.textContent = rowMessage?.text || '';
+    actionTd.appendChild(statusSpan);
+
+    tr.appendChild(actionTd);
+    tableBody.appendChild(tr);
+  });
+}
+
+async function fetchUserPermissions(options = {}) {
+  if (!canAccessDesktopAdminUi()) {
+    userPermissionsState.users = [];
+    userPermissionsState.filteredUsers = [];
+    userPermissionsState.draftRoles.clear();
+    userPermissionsState.rowMessages.clear();
+    renderUserPermissionsList();
+    setUserPermissionsStatus(
+      isDesktopViewport()
+        ? 'Only admin users can load permissions.'
+        : 'User Permissions is available on desktop only.',
+      'error'
+    );
+    return;
+  }
+
+  userPermissionsState.loading = true;
+  setUserPermissionsStatus('Loading users…');
+
+  try {
+    const resp = await fetch('/api/admin/user-permissions', {
+      headers: { ...getAuthHeaders() },
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const detail = typeof payload?.detail === 'string'
+        ? payload.detail
+        : (payload?.detail?.msg || 'Failed to load user permissions.');
+      throw Object.assign(new Error(detail), { status: resp.status });
+    }
+
+    const users = Array.isArray(payload?.users) ? payload.users : [];
+    userPermissionsState.users = users
+      .map((user) => ({
+        user_id: String(user?.user_id || '').trim(),
+        email: String(user?.email || '').trim(),
+        role: normalizeAppRole(user?.role),
+        created_at: user?.created_at || null,
+        last_sign_in_at: user?.last_sign_in_at || null,
+      }))
+      .filter((user) => user.user_id);
+    userPermissionsState.draftRoles.clear();
+    userPermissionsState.rowMessages.clear();
+    filterUserPermissions();
+
+    if (options.showSuccessToast) {
+      setUserPermissionsStatus(`Loaded ${userPermissionsState.users.length} users.`, 'success');
+    } else {
+      setUserPermissionsStatus('');
+    }
+  } catch (err) {
+    console.error('Failed to fetch user permissions', err);
+    const message = err?.message || 'Failed to load user permissions.';
+    userPermissionsState.users = [];
+    userPermissionsState.filteredUsers = [];
+    userPermissionsState.draftRoles.clear();
+    renderUserPermissionsList();
+    setUserPermissionsStatus(message, 'error');
+  } finally {
+    userPermissionsState.loading = false;
+  }
+}
+
+async function saveUserPermissionRole(userId, role) {
+  if (!canAccessDesktopAdminUi()) {
+    setUserPermissionsStatus('Only admin users can update roles.', 'error');
+    return;
+  }
+  const normalizedRole = normalizeAppRole(role);
+  if (!userId || !normalizedRole) return;
+
+  userPermissionsState.savingUserIds.add(userId);
+  userPermissionsState.rowMessages.set(userId, { type: 'info', text: 'Saving…' });
+  renderUserPermissionsList();
+
+  try {
+    const resp = await fetch(`/api/admin/user-permissions/${encodeURIComponent(userId)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ role: normalizedRole }),
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const detail = typeof payload?.detail === 'string'
+        ? payload.detail
+        : (payload?.detail?.msg || 'Failed to update role.');
+      throw new Error(detail);
+    }
+
+    const updated = payload?.user || {};
+    const index = userPermissionsState.users.findIndex((user) => user.user_id === userId);
+    if (index >= 0) {
+      userPermissionsState.users[index] = {
+        ...userPermissionsState.users[index],
+        ...updated,
+        role: normalizeAppRole(updated?.role || normalizedRole),
+      };
+    }
+    userPermissionsState.draftRoles.delete(userId);
+    userPermissionsState.rowMessages.set(userId, {
+      type: 'success',
+      text: `Updated to ${normalizeAppRole(updated?.role || normalizedRole)}.`,
+    });
+    filterUserPermissions();
+    if (authState.user?.id === userId) {
+      setUserPermissionsStatus('Your role changed. Sign out and sign in again to refresh JWT claims.', 'success');
+    }
+  } catch (err) {
+    console.error('Failed to update user role', err);
+    userPermissionsState.rowMessages.set(userId, {
+      type: 'error',
+      text: err?.message || 'Failed to update role.',
+    });
+    renderUserPermissionsList();
+  } finally {
+    userPermissionsState.savingUserIds.delete(userId);
+    renderUserPermissionsList();
+  }
+}
+
+function initUserPermissionsView() {
+  if (userPermissionsState.initialized) return;
+  userPermissionsState.initialized = true;
+
+  const backBtn = document.getElementById('btnPermissionsBackToCanvas');
+  const refreshBtn = document.getElementById('btnRefreshUserPermissions');
+  const searchInput = document.getElementById('userPermissionsSearch');
+
+  backBtn?.addEventListener('click', () => {
+    switchView('view-canvas', { triggerEl: backBtn });
+  });
+
+  refreshBtn?.addEventListener('click', () => {
+    void fetchUserPermissions({ showSuccessToast: true });
+  });
+
+  searchInput?.addEventListener('input', () => {
+    userPermissionsState.searchTerm = searchInput.value || '';
+    filterUserPermissions();
+  });
+}
+
 const modalA11yState = {
   registry: new Map(),
   stack: [],
@@ -12683,6 +13085,11 @@ function getPrimaryViewFocusTarget(viewId) {
       || document.getElementById('productCardNew')
       || document.getElementById('btnBackToCanvas');
   }
+  if (viewId === 'view-user-permissions') {
+    return document.getElementById('userPermissionsSearch')
+      || document.getElementById('btnRefreshUserPermissions')
+      || document.getElementById('btnPermissionsBackToCanvas');
+  }
   if (viewId === 'view-canvas') {
     return document.getElementById('generateQuoteBtn')
       || document.getElementById('saveDiagramBtn')
@@ -12706,6 +13113,14 @@ function switchView(viewId, options = {}) {
     rememberViewTransition(fromViewId, viewId, triggerForHistory);
   }
 
+  if (viewId === 'view-user-permissions' && !canAccessDesktopAdminUi()) {
+    const message = isDesktopViewport()
+      ? 'Only admin users can access User Permissions.'
+      : 'User Permissions is available on desktop only.';
+    showMessage(message, 'error');
+    return;
+  }
+
   if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
     if (typeof diagramToolbarDragCleanup === 'function') {
       diagramToolbarDragCleanup();
@@ -12725,6 +13140,9 @@ function switchView(viewId, options = {}) {
       initDiagramToolbarDragWithApp();
     } else if (viewId === 'view-products') {
       renderProductLibrary();
+    } else if (viewId === 'view-user-permissions') {
+      initUserPermissionsView();
+      void fetchUserPermissions();
     }
     if (options.focus !== false) {
       const returnTarget = fromViewId && fromViewId !== viewId
@@ -12834,6 +13252,7 @@ function init() {
   }
   initProducts();
   initProductsView();
+  initUserPermissionsView();
 
   const authPromise = initAuth();
   const authReady = authPromise && typeof authPromise.then === 'function' ? authPromise : Promise.resolve();

@@ -4,6 +4,8 @@
 **Scope:** Examine current auth; assess complexity of adding permissions so only certain account types can make database changes.  
 **Constraint:** No code changes in this plan; desktop and mobile both use the same API (permission logic is backend-only; UI may hide actions by role on both).
 
+**Implementation (backend only, 2026-02-22):** Task 34.3 implemented. Supabase: `public.profiles` table (user_id, role: viewer|editor|admin), trigger to create profile with role `editor` on signup, backfill of existing users; Custom Access Token Hook `public.custom_access_token_hook` adds `app_metadata.role` to JWT. Backend: `get_validated_payload`, `get_current_user_id_and_role`, `require_role()` in `app/auth.py`; POST `/api/products/update-pricing` and POST `/api/products/import-csv` require Bearer + role `admin`. Frontend unchanged. **Required:** Enable the hook in Supabase Dashboard → Authentication → Hooks → Customize access token → select `public.custom_access_token_hook`. Assign admin: `UPDATE public.profiles SET role = 'admin' WHERE user_id = '<your-auth-users-id>';`
+
 ---
 
 ## 1. Current Login / Account Creation

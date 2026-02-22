@@ -129,7 +129,7 @@ This feature touches frontend input, data processing, and backend decoding. Do *
 
 - [x] **34.1** Password protection and multi-tenancy: implement auth (e.g. login) and tenant isolation so each tenant’s data is separated.
 - [x] **34.2** Allow each user to have their own saved files (per-user storage for project files; depends on auth and save/load project files).
-- [ ] **34.3** (Optional) Role-based permissions for database-changing endpoints: restrict POST `/api/products/update-pricing` and POST `/api/products/import-csv` (and optionally other writes) to certain account types (e.g. admin/editor). Covers intent of 22.20; plan: [docs/plans/2026-02-22-auth-role-permissions-database-changes.md](../plans/2026-02-22-auth-role-permissions-database-changes.md).
+- [x] **34.3** (Optional) Role-based permissions for database-changing endpoints: restrict POST `/api/products/update-pricing` and POST `/api/products/import-csv` (and optionally other writes) to certain account types (e.g. admin/editor). Covers intent of 22.20; plan: [docs/plans/2026-02-22-auth-role-permissions-database-changes.md](../plans/2026-02-22-auth-role-permissions-database-changes.md). Implemented: Supabase `public.profiles` table + trigger (new users get role `editor`), Custom Access Token Hook `custom_access_token_hook` (adds `app_metadata.role` to JWT); backend `require_role(["admin"])` on update-pricing and import-csv. Frontend unchanged. Enable the hook in Supabase Dashboard: Authentication → Hooks → Customize access token → select `public.custom_access_token_hook`. Assign admin: `UPDATE public.profiles SET role = 'admin' WHERE user_id = '<uuid>';`
 
 ---
 

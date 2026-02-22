@@ -93,6 +93,15 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
               <span>Product Management</span>
             </div>
+            <div class="profile-menu-item" id="menuItemUserPermissions" role="menuitem" hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="8.5" cy="7" r="4"/>
+                <line x1="20" y1="8" x2="20" y2="14"/>
+                <line x1="17" y1="11" x2="23" y2="11"/>
+              </svg>
+              <span>User Permissions</span>
+            </div>
             <div class="profile-menu-item" id="menuItemServiceM8" role="menuitem" style="display: none;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -542,6 +551,49 @@
             </div>
           </form>
         </div>
+      </div>
+    </div>
+
+    <div id="view-user-permissions" class="app-view hidden" role="region" aria-label="User permissions management">
+      <div class="permissions-view-container">
+        <header class="permissions-header">
+          <div class="permissions-header-left">
+            <button type="button" id="btnPermissionsBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="permissions-header-title">User Permissions</div>
+          <div class="permissions-header-right">
+            <button type="button" id="btnRefreshUserPermissions" class="btn-text-icon" aria-label="Refresh users">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.65-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.65 3.36L1 14"/></svg>
+              Refresh
+            </button>
+          </div>
+        </header>
+        <main class="permissions-main">
+          <div class="permissions-search-wrap">
+            <span class="permissions-search-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input type="text" id="userPermissionsSearch" placeholder="Search by email or user ID..." aria-label="Search users" />
+          </div>
+          <div id="userPermissionsStatus" class="permissions-status" role="status" aria-live="polite" hidden></div>
+          <div class="permissions-table-wrap">
+            <table class="permissions-table" aria-label="User permissions table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>User ID</th>
+                  <th>Role</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="userPermissionsTableBody"></tbody>
+            </table>
+            <div id="userPermissionsEmpty" class="permissions-empty" hidden>No users found.</div>
+          </div>
+        </main>
       </div>
     </div>
   </div>

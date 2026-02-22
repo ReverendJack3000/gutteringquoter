@@ -103,10 +103,14 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `GET /api/health` – health check
 - `GET /api/config` – public config (supabaseUrl, anonKey for frontend auth)
 - `GET /api/products?search=&category=` – list products
+- `POST /api/products/update-pricing` – update product pricing (requires `Authorization: Bearer <token>` and role `admin`)
+- `POST /api/products/import-csv` – import/update products from CSV (requires `Authorization: Bearer <token>` and role `admin`)
 - `POST /api/process-blueprint?technical_drawing=true|false` – upload image, returns PNG
 - `GET /api/diagrams` – list saved diagrams (requires `Authorization: Bearer <token>`)
 - `POST /api/diagrams` – save diagram (requires Bearer token)
 - `GET /api/diagrams/{id}` – load diagram (requires Bearer token)
+- `GET /api/admin/user-permissions` – list users + roles for admin permissions management (requires Bearer token, role `admin`, and backend `SUPABASE_SERVICE_ROLE_KEY`)
+- `PATCH /api/admin/user-permissions/{user_id}` – update a user role (`viewer|editor|admin`) in `public.profiles` (requires Bearer token and role `admin`)
 - `GET /manifest.webmanifest` – PWA manifest (static)
 - `GET /service-worker.js` – service worker script (static)
 

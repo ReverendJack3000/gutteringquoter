@@ -6,6 +6,7 @@ import base64
 import logging
 import os
 import uuid as uuid_lib
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,7 +14,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user_id
+from app.auth import get_current_user_id, require_role
 from app.blueprint_processor import process_blueprint
 from app.csv_import import import_products_from_csv
 from app.diagrams import (
@@ -35,6 +36,9 @@ from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_APP_ROLES = {"viewer", "editor", "admin"}
+ADMIN_USERS_PAGE_SIZE = 200
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     """Parse environment flag from common truthy values."""
@@ -42,6 +46,202 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_app_role(role: Any) -> str:
+    value = str(role or "").strip().lower()
+    if value in ALLOWED_APP_ROLES:
+        return value
+    return "viewer"
+
+
+def _require_service_role_for_admin_permissions() -> None:
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if key:
+        return
+    raise HTTPException(
+        503,
+        "Admin user-permissions endpoints require SUPABASE_SERVICE_ROLE_KEY in backend environment.",
+    )
+
+
+def _to_iso8601(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    iso = getattr(value, "isoformat", None)
+    if callable(iso):
+        try:
+            return iso()
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _extract_auth_user_field(user: Any, field: str) -> Any:
+    if user is None:
+        return None
+    if isinstance(user, dict):
+        return user.get(field)
+    return getattr(user, field, None)
+
+
+def _extract_auth_users_from_list_response(response: Any) -> list[Any]:
+    if response is None:
+        return []
+    if isinstance(response, list):
+        return response
+    if isinstance(response, dict):
+        users = response.get("users")
+        if isinstance(users, list):
+            return users
+        data = response.get("data")
+        if isinstance(data, dict) and isinstance(data.get("users"), list):
+            return data.get("users") or []
+    users_attr = getattr(response, "users", None)
+    if isinstance(users_attr, list):
+        return users_attr
+    data_attr = getattr(response, "data", None)
+    if isinstance(data_attr, dict) and isinstance(data_attr.get("users"), list):
+        return data_attr.get("users") or []
+    nested_users = getattr(data_attr, "users", None) if data_attr is not None else None
+    if isinstance(nested_users, list):
+        return nested_users
+    return []
+
+
+def _serialize_auth_user_for_permissions(auth_user: Any, role: str) -> dict[str, Any]:
+    user_id = str(_extract_auth_user_field(auth_user, "id") or "").strip()
+    return {
+        "user_id": user_id,
+        "email": _extract_auth_user_field(auth_user, "email"),
+        "role": _normalize_app_role(role),
+        "created_at": _to_iso8601(_extract_auth_user_field(auth_user, "created_at")),
+        "last_sign_in_at": _to_iso8601(_extract_auth_user_field(auth_user, "last_sign_in_at")),
+    }
+
+
+def _is_admin_api_unavailable_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    return any(
+        marker in msg
+        for marker in (
+            "user not allowed",
+            "not authorized",
+            "insufficient",
+            "service_role",
+            "invalid api key",
+            "permission denied",
+            "forbidden",
+        )
+    )
+
+
+def _is_auth_user_not_found_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    return any(marker in msg for marker in ("not found", "no rows", "does not exist"))
+
+
+def _list_auth_users_via_admin_api(supabase: Any) -> list[Any]:
+    _require_service_role_for_admin_permissions()
+    users: list[Any] = []
+    page = 1
+    use_pagination = True
+    while True:
+        try:
+            if use_pagination:
+                resp = supabase.auth.admin.list_users(
+                    page=page,
+                    per_page=ADMIN_USERS_PAGE_SIZE,
+                )
+            else:
+                resp = supabase.auth.admin.list_users()
+            batch = _extract_auth_users_from_list_response(resp)
+        except TypeError:
+            if not use_pagination:
+                raise
+            # Older client signatures may not accept page/per_page.
+            use_pagination = False
+            continue
+        except Exception as e:
+            if _is_admin_api_unavailable_error(e):
+                raise HTTPException(
+                    503,
+                    "Admin user listing is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
+                ) from e
+            raise
+        users.extend(batch)
+        if not use_pagination:
+            break
+        if len(batch) < ADMIN_USERS_PAGE_SIZE:
+            break
+        page += 1
+        if page > 1000:
+            logger.warning("Stopping auth user pagination at page %s (safety cap).", page)
+            break
+    return users
+
+
+def _load_profile_roles(supabase: Any) -> dict[str, str]:
+    try:
+        resp = supabase.table("profiles").select("user_id, role").execute()
+    except Exception as e:
+        logger.exception("Failed to read profiles for admin permissions listing: %s", e)
+        raise
+    roles: dict[str, str] = {}
+    for row in resp.data or []:
+        uid = str((row or {}).get("user_id") or "").strip()
+        if not uid:
+            continue
+        roles[uid] = _normalize_app_role((row or {}).get("role"))
+    return roles
+
+
+def _get_profile_role_for_user(supabase: Any, user_id: str) -> str:
+    try:
+        resp = (
+            supabase.table("profiles")
+            .select("role")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("Failed to read profile role for user %s: %s", user_id, e)
+        raise
+    rows = resp.data or []
+    if not rows:
+        return "viewer"
+    return _normalize_app_role(rows[0].get("role"))
+
+
+def _ensure_not_demoting_last_admin(
+    supabase: Any,
+    *,
+    target_user_id: str,
+    current_role: str,
+    next_role: str,
+) -> None:
+    if current_role != "admin" or next_role == "admin":
+        return
+    try:
+        resp = supabase.table("profiles").select("user_id").eq("role", "admin").execute()
+    except Exception as e:
+        logger.exception("Failed to count admins while updating role for %s: %s", target_user_id, e)
+        raise
+    admin_user_ids = {
+        str((row or {}).get("user_id") or "").strip()
+        for row in (resp.data or [])
+        if str((row or {}).get("user_id") or "").strip()
+    }
+    if target_user_id in admin_user_ids and len(admin_user_ids) <= 1:
+        raise HTTPException(
+            400,
+            "Cannot change role: at least one admin must remain in public.profiles.",
+        )
 
 
 class QuoteElement(BaseModel):
@@ -59,6 +259,10 @@ class UpdatePricingItem(BaseModel):
     id: str = Field(..., min_length=1, description="Product ID")
     cost_price: float = Field(..., ge=0, description="Cost price (>= 0)")
     markup_percentage: float = Field(..., ge=0, le=1000, description="Markup percentage (0-1000)")
+
+
+class UpdateUserPermissionRoleRequest(BaseModel):
+    role: str = Field(..., min_length=1, description="Role: viewer | editor | admin")
 
 
 class SaveDiagramRequest(BaseModel):
@@ -155,10 +359,13 @@ def api_products(
 
 
 @app.post("/api/products/update-pricing")
-def api_update_pricing(body: list[UpdatePricingItem]):
+def api_update_pricing(
+    body: list[UpdatePricingItem],
+    user_id: Any = Depends(require_role(["admin"])),
+):
     """
     Update cost_price and markup_percentage for products. Accepts array of {id, cost_price, markup_percentage}.
-    Returns {success: true, updated: count}. 400 if validation fails; 500 on DB error.
+    Requires Bearer token and role admin (task 34.3). Returns {success: true, updated: count}. 400 if validation fails; 500 on DB error.
     """
     if not body:
         raise HTTPException(400, "At least one product update is required")
@@ -188,11 +395,14 @@ def api_update_pricing(body: list[UpdatePricingItem]):
 
 
 @app.post("/api/products/import-csv")
-async def api_import_csv(file: UploadFile = File(...)):
+async def api_import_csv(
+    file: UploadFile = File(...),
+    user_id: Any = Depends(require_role(["admin"])),
+):
     """
     Import products from CSV. Expected columns: Item Number, Servicem8 Material_uuid, Item Name,
     Purchase Cost, Price. Profile is derived from item number (SC/CL) or name (Storm Cloud/Classic).
-    Returns {success, imported, failed, errors}.
+    Requires Bearer token and role admin (task 34.3). Returns {success, imported, failed, errors}.
     """
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(400, "File must be a CSV")
@@ -205,6 +415,109 @@ async def api_import_csv(file: UploadFile = File(...)):
     if not result["success"] and result["imported"] == 0 and result["failed"] == 0:
         raise HTTPException(400, "; ".join(result["errors"][:5]))
     return result
+
+
+@app.get("/api/admin/user-permissions")
+def api_admin_user_permissions(
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """
+    List auth users with current app role from public.profiles.
+    Admin only. Requires service-role key for Supabase Auth admin list users.
+    """
+    _ = user_id
+    try:
+        supabase = get_supabase()
+        auth_users = _list_auth_users_via_admin_api(supabase)
+        profile_roles = _load_profile_roles(supabase)
+        users = []
+        seen_user_ids = set()
+        for auth_user in auth_users:
+            uid = str(_extract_auth_user_field(auth_user, "id") or "").strip()
+            if not uid or uid in seen_user_ids:
+                continue
+            seen_user_ids.add(uid)
+            role = profile_roles.get(uid, "viewer")
+            users.append(_serialize_auth_user_for_permissions(auth_user, role))
+        users.sort(key=lambda row: ((row.get("email") or "").lower(), row.get("user_id") or ""))
+        return {"users": users}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to list admin user permissions: %s", e)
+        raise HTTPException(500, "Failed to list user permissions")
+
+
+@app.patch("/api/admin/user-permissions/{target_user_id}")
+def api_update_admin_user_permission(
+    target_user_id: str,
+    body: UpdateUserPermissionRoleRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """
+    Update a user's app role in public.profiles.
+    Admin only. Role must be viewer|editor|admin.
+    """
+    _ = user_id
+    requested_role = str(body.role or "").strip().lower()
+    if requested_role not in ALLOWED_APP_ROLES:
+        raise HTTPException(400, "Invalid role. Allowed roles: viewer, editor, admin")
+    try:
+        target_uuid = uuid_lib.UUID(target_user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id UUID")
+    target_uid = str(target_uuid)
+
+    try:
+        supabase = get_supabase()
+        _require_service_role_for_admin_permissions()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to initialize Supabase client for admin role update: %s", e)
+        raise HTTPException(500, "Failed to initialize role update")
+
+    auth_user = None
+    try:
+        auth_user_resp = supabase.auth.admin.get_user_by_id(target_uid)
+        auth_user = getattr(auth_user_resp, "user", None)
+        if auth_user is None and isinstance(auth_user_resp, dict):
+            auth_user = auth_user_resp.get("user")
+        if auth_user is None:
+            raise HTTPException(404, "User not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_auth_user_not_found_error(e):
+            raise HTTPException(404, "User not found") from e
+        if _is_admin_api_unavailable_error(e):
+            raise HTTPException(
+                503,
+                "User lookup is unavailable. Ensure SUPABASE_SERVICE_ROLE_KEY is set and valid.",
+            ) from e
+        logger.exception("Failed to verify target user %s before role update: %s", target_uid, e)
+        raise HTTPException(500, "Failed to verify target user")
+
+    try:
+        current_role = _get_profile_role_for_user(supabase, target_uid)
+        _ensure_not_demoting_last_admin(
+            supabase,
+            target_user_id=target_uid,
+            current_role=current_role,
+            next_role=requested_role,
+        )
+        (
+            supabase.table("profiles")
+            .upsert({"user_id": target_uid, "role": requested_role}, on_conflict="user_id")
+            .execute()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update role for user %s: %s", target_uid, e)
+        raise HTTPException(500, "Failed to update user role")
+
+    return {"user": _serialize_auth_user_for_permissions(auth_user, requested_role)}
 
 
 @app.get("/api/labour-rates")

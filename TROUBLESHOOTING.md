@@ -4,6 +4,35 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Custom Access Token Hook not in Supabase dropdown – 2026-02
+
+- **Symptom:** In Supabase Dashboard → Authentication → Hooks → Customize access token, the dropdown does not show `public.custom_access_token_hook`.
+- **Cause:** The dashboard often only lists functions with the **suggested** name `custom_access_token` (no `_hook` suffix). Our migration created `custom_access_token_hook`.
+- **Fix:** (1) In **SQL Editor**, run the script **`docs/supabase_custom_access_token_wrapper.sql`** (creates `public.custom_access_token` that calls our hook). (2) Go back to **Authentication → Hooks → Customize access token** and select **`custom_access_token`** from the dropdown, then save. If the dropdown is still empty, hard-refresh the page or try another browser; the function must take one `jsonb` argument and return `jsonb`.
+
+---
+
+## 403 "Insufficient permissions" on Save to Database / Import CSV – 2026-02
+
+- **Symptom:** Signed-in user gets 403 when calling POST `/api/products/update-pricing` or POST `/api/products/import-csv` (e.g. "Save to Database" in quote modal or CSV import). Backend returns "Insufficient permissions (required role: one of admin)".
+- **Cause:** Task 34.3 restricts those endpoints to users with role `admin`. (1) The Custom Access Token Hook may not be enabled, so JWT has no `app_metadata.role`. (2) User's row in `public.profiles` has role `editor` or `viewer`, not `admin`.
+- **Fix:** (1) In Supabase Dashboard → **Authentication → Hooks**, under "Customize access token", select **`custom_access_token`** (or `custom_access_token_hook` if it appears) and save. If neither appears, see "Custom Access Token Hook not in Supabase dropdown" above. (2) Assign admin: in SQL Editor run `UPDATE public.profiles SET role = 'admin' WHERE user_id = '<auth.users.id>';` (get user id from Auth → Users or from JWT `sub`). User must sign out and sign in again to get a new token with the updated role.
+
+---
+
+## Admin user-permissions API returns 403 or 503 – 2026-02
+
+- **Symptom:** Desktop admin screen fails to load users or save a role change; `GET /api/admin/user-permissions` or `PATCH /api/admin/user-permissions/{user_id}` returns 403/503.
+- **Cause:**  
+  - **403:** Caller JWT role is not `admin` (or JWT is stale and still has old role claim).  
+  - **503:** Backend cannot use Supabase Auth Admin API (usually missing/invalid `SUPABASE_SERVICE_ROLE_KEY` in Railway/runtime).
+- **Fix:**  
+  - For **403**: confirm `public.profiles.role = 'admin'` for your user, then **sign out and sign in again** so JWT `app_metadata.role` refreshes.  
+  - For **503**: set a valid `SUPABASE_SERVICE_ROLE_KEY` in Railway/backend env, redeploy, then retry.
+  - If changing your own role, always refresh auth session (sign out/in) before re-testing permissions.
+
+---
+
 ## ES module fails to run: window hooks missing, modals/buttons don’t work – 2026-02
 
 - **Symptom:** After switching `app.js` to `type="module"`, the app loads but `window.__quoteAppSwitchView` (and other E2E hooks) is undefined; accessibility modal doesn’t open; canvas view doesn’t switch. Console: `Identifier 'X' has already been declared` (or similar).
