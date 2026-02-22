@@ -62,7 +62,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 24 | 24.4 | (Optional) product_template_id for CSV diagram mapping |
 | 26 | 26.2 | Manual guttering distance entry UI |
 | 33 | 33.4–33.10 | Signed-in server autosave recovery (prompt restore/discard, strict threshold delete, hidden rolling draft) + job-stamp save-path auth-header fix; desktop/mobile + Railway-safe validation. |
-| 35 | 35.7, 35.8, 35.9 | Auth view switching; no regressions; manual/E2E check |
+| 35 | 35.7, 35.8, 35.9, 35.11 | Auth view switching; no regressions; manual/E2E check; redirect to sign-in when signed out or access removed |
 | 36 | 36.11 | Product Library follow-up: optional localProducts migration only (desktop admin user-permissions management completed in 36.12–36.18; invite/remove in 36.19–36.21). |
 | 41 | 41.1, 41.3 | 65/80 mm filter dropdown in Marley panel |
 | 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |

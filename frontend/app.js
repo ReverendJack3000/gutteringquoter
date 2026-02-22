@@ -154,6 +154,23 @@ function clearAuthState() {
   authState.role = 'viewer';
 }
 
+/** Set by initAuth so handleAuthFailure can refresh login UI when session is invalid. */
+let setAuthUIRef = null;
+
+/**
+ * If response is 401 or 403, clear auth, refresh auth UI, redirect to sign-in, and return true.
+ * Call after any fetch that uses getAuthHeaders() / Bearer; if true, caller should return.
+ */
+function handleAuthFailure(resp) {
+  if (!resp || (resp.status !== 401 && resp.status !== 403)) return false;
+  clearAuthState();
+  closeAllModals({ restoreFocus: false });
+  switchView('view-login');
+  if (setAuthUIRef) setAuthUIRef();
+  showMessage('Session expired. Please sign in again.', 'info');
+  return true;
+}
+
 const AUTOSAVE_NAME_PREFIX = '__quote_app_autosave__::';
 const AUTOSAVE_DRAFT_ID_STORAGE_KEY = 'quote_app_autosave_draft_id_v1';
 const AUTOSAVE_PROMPT_STAMP_STORAGE_KEY = 'quote_app_autosave_prompt_stamp_v1';
@@ -2968,6 +2985,11 @@ function initQuoteModal() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(updates),
       });
+      if (handleAuthFailure(res)) {
+        savePricingBtn.disabled = false;
+        updateSavePricingButtonState();
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to save pricing';
@@ -3097,6 +3119,7 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
       '/api/servicem8/jobs?generated_job_id=' + encodeURIComponent(jobId),
       { headers: { 'Authorization': 'Bearer ' + authState.token } }
     );
+    if (handleAuthFailure(resp)) return;
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       const msg = resp.status === 404
@@ -3308,6 +3331,7 @@ function initJobConfirmationOverlay() {
         },
         body: JSON.stringify(payload),
       });
+      if (handleAuthFailure(resp)) return;
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to add to job.';
@@ -3330,6 +3354,7 @@ function initJobConfirmationOverlay() {
             },
             body: JSON.stringify({ job_uuid: jobUuidForAttachment, image_base64: base64 }),
           });
+          if (handleAuthFailure(attachResp)) return;
           feedbackMsg = attachResp.ok ? 'Added to job successfully. Blueprint attached.' : 'Added to job successfully. Blueprint could not be attached.';
         } catch (_) {
           feedbackMsg = 'Added to job successfully. Blueprint could not be attached.';
@@ -3393,6 +3418,7 @@ function initJobConfirmationOverlay() {
         },
         body: JSON.stringify(body),
       });
+      if (handleAuthFailure(resp)) return;
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         const msg = typeof data.detail === 'string' ? data.detail : data.detail?.msg || 'Failed to create new job.';
@@ -9051,6 +9077,7 @@ function buildAutosaveHash(data, projectName) {
 
 async function fetchAutosaveDraftList() {
   const res = await fetch('/api/diagrams', { headers: getAuthHeaders() });
+  if (handleAuthFailure(res)) throw new Error('Session expired');
   if (!res.ok) throw new Error(`Autosave list failed (${res.status})`);
   const json = await res.json().catch(() => ({}));
   const diagrams = Array.isArray(json.diagrams) ? json.diagrams : [];
@@ -9060,6 +9087,7 @@ async function fetchAutosaveDraftList() {
 async function deleteAutosaveDraftById(draftId) {
   if (!draftId) return true;
   const res = await fetch('/api/diagrams/' + draftId, { method: 'DELETE', headers: getAuthHeaders() });
+  if (handleAuthFailure(res)) throw new Error('Session expired');
   if (res.ok || res.status === 404) return true;
   throw new Error(`Autosave delete failed (${res.status})`);
 }
@@ -9150,6 +9178,7 @@ async function upsertAutosaveDraft() {
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(body),
     });
+    if (handleAuthFailure(updateRes)) return;
     if (updateRes.status === 404) {
       clearAutosaveLocalState();
       return;
@@ -9174,6 +9203,7 @@ async function upsertAutosaveDraft() {
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
+  if (handleAuthFailure(createRes)) return;
   if (!createRes.ok) {
     throw new Error(`Autosave create failed (${createRes.status})`);
   }
@@ -9278,6 +9308,7 @@ async function maybePromptAutosaveRestore() {
     if (!isAutosavePromptStampNewer(stamp)) return;
 
     const res = await fetch('/api/diagrams/' + newestDraft.id, { headers: getAuthHeaders() });
+    if (handleAuthFailure(res)) return;
     if (res.status === 404) {
       clearAutosaveLocalState({ clearPromptStamp: true });
       return;
@@ -9457,6 +9488,7 @@ async function autoSaveDiagramWithJobNumber(jobNumber) {
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(body),
     });
+    if (handleAuthFailure(res)) return;
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}));
       throw new Error(detail?.detail || res.statusText || `HTTP ${res.status}`);
@@ -9627,6 +9659,7 @@ function initAuth() {
     }
     syncAdminDesktopAccess({ notify: false, focus: false });
   }
+  setAuthUIRef = setAuthUI;
 
   function bindButtonLikeKeyActivation(el) {
     if (!el) return;
@@ -9873,6 +9906,10 @@ function initAuth() {
         authState.supabase.auth.onAuthStateChange((event, session) => {
           setAuthFromSession(session, session?.user ?? null);
           setAuthUI();
+          if (!authState.token) {
+            switchView('view-login');
+            return;
+          }
           loadPanelProducts();
           checkServiceM8Status();
           if (event === 'PASSWORD_RECOVERY') {
@@ -9997,6 +10034,7 @@ async function checkServiceM8Status() {
         'Authorization': `Bearer ${authState.token}`,
       },
     });
+    if (handleAuthFailure(resp)) return;
     const data = await resp.json();
     const menuText = document.getElementById('servicem8MenuText');
     const menuItem = document.getElementById('menuItemServiceM8');
@@ -10035,6 +10073,7 @@ async function startServiceM8Connect() {
         'Content-Type': 'application/json',
       },
     });
+    if (handleAuthFailure(resp)) return false;
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to start ServiceM8 connection');
@@ -10081,6 +10120,7 @@ function initServiceM8Menu() {
             'Authorization': `Bearer ${authState.token}`,
           },
         });
+        if (handleAuthFailure(resp)) return;
         if (resp.ok) {
           window.servicem8Connected = false;
           const menuText = document.getElementById('servicem8MenuText');
@@ -10864,6 +10904,7 @@ function initDiagrams() {
         thumbnailBase64: thumbnailBase64 || undefined,
       };
       const res = await fetch('/api/diagrams', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(body) });
+      if (handleAuthFailure(res)) return;
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || 'Save failed');
@@ -11000,6 +11041,7 @@ function initDiagrams() {
       if (!confirmed) return;
       try {
         const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: getAuthHeaders() });
+        if (handleAuthFailure(r)) return;
         if (!r.ok) throw new Error('Delete failed');
         refreshDiagramsList();
         showMessage('Project deleted.', 'success');
@@ -11019,6 +11061,7 @@ function initDiagrams() {
         preLoadSnapshot = capturePreLoadSnapshot();
         updateGoBackButtonVisibility();
         const r = await fetch('/api/diagrams/' + item.id, { headers: getAuthHeaders() });
+        if (handleAuthFailure(r)) return;
         if (!r.ok) throw new Error('Failed to load');
         const diagram = await r.json();
         await restoreStateFromApiSnapshot(diagram);
@@ -11046,6 +11089,7 @@ function initDiagrams() {
     if (listTargets.length === 0) return;
     try {
       const res = await fetch('/api/diagrams', { headers: getAuthHeaders() });
+      if (handleAuthFailure(res)) return;
       if (!res.ok) {
         listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
         return;
@@ -12213,12 +12257,18 @@ function syncAdminDesktopAccess(options = {}) {
   updateSavePricingButtonState();
 
   if (getVisibleViewId() === 'view-user-permissions' && !canAccessDesktopAdminUi()) {
-    switchView('view-canvas', { focus: options.focus !== false });
-    if (options.notify !== false) {
-      const message = isDesktopViewport()
-        ? 'Only admin users can access User Permissions.'
-        : 'User Permissions is available on desktop only.';
-      showMessage(message, 'info');
+    if (!authState.token) {
+      closeAllModals({ restoreFocus: false });
+      switchView('view-login');
+      if (options.notify !== false) showMessage('Session expired. Please sign in again.', 'info');
+    } else {
+      switchView('view-canvas', { focus: options.focus !== false });
+      if (options.notify !== false) {
+        const message = isDesktopViewport()
+          ? 'Only admin users can access User Permissions.'
+          : 'User Permissions is available on desktop only.';
+        showMessage(message, 'info');
+      }
     }
   }
 }
@@ -12360,6 +12410,7 @@ async function fetchUserPermissions(options = {}) {
     const resp = await fetch('/api/admin/user-permissions', {
       headers: { ...getAuthHeaders() },
     });
+    if (handleAuthFailure(resp)) return;
     const payload = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       const detail = typeof payload?.detail === 'string'
@@ -12421,6 +12472,7 @@ async function saveUserPermissionRole(userId, role) {
       },
       body: JSON.stringify({ role: normalizedRole }),
     });
+    if (handleAuthFailure(resp)) return;
     const payload = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       const detail = typeof payload?.detail === 'string'
@@ -12471,11 +12523,8 @@ async function removeUserPermission(userId) {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
+    if (handleAuthFailure(resp)) return;
     const payload = await resp.json().catch(() => ({}));
-    if (resp.status === 401) {
-      setUserPermissionsStatus('Session expired. Please sign in again.', 'error');
-      return;
-    }
     if (!resp.ok) {
       const detail = typeof payload?.detail === 'string' ? payload.detail : (payload?.detail?.msg || 'Failed to remove user.');
       throw new Error(detail);
@@ -12553,6 +12602,7 @@ function initUserPermissionsView() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ email, role }),
       });
+      if (handleAuthFailure(resp)) return;
       const payload = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         const detail = typeof payload?.detail === 'string' ? payload.detail : (payload?.detail?.msg || 'Failed to send invite.');
@@ -12727,6 +12777,18 @@ function closeAccessibleModal(id, options = {}) {
     });
   }
   return true;
+}
+
+/**
+ * Close all open modals (top of stack first). Use before redirecting to sign-in so no overlay remains.
+ * Pass restoreFocus: false so focus is not restored to triggers; the caller will switch view and set focus.
+ */
+function closeAllModals(options = {}) {
+  const restoreFocus = options.restoreFocus !== false;
+  while (modalA11yState.stack.length > 0) {
+    const top = modalA11yState.stack[modalA11yState.stack.length - 1];
+    closeAccessibleModal(top.id, { restoreFocus });
+  }
 }
 
 function initAlertDialogControls() {
