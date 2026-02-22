@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Desktop profile menu: Product Management / User Permissions does not switch view – 2026-02
+
+- **Symptom:** On desktop, clicking "Product Management" or "User Permissions" in the profile dropdown does nothing: the view stays on canvas. Same in production (Railway) and local server. Console may show `ReferenceError: diagramToolbarDragCleanup is not defined`.
+- **Cause:** In `switchView()`, when leaving the canvas view, the code called and assigned `diagramToolbarDragCleanup`, which is defined only inside `frontend/toolbar.js` and was never exported. In `app.js` (ES module, strict mode) that name is undeclared, so the reference throws and the code that hides/shows views never runs.
+- **Fix:** (1) In **toolbar.js**: export a function `diagramToolbarDragCleanupIfNeeded()` that runs the cleanup (if any) and sets the internal variable to null. (2) In **app.js**: import `diagramToolbarDragCleanupIfNeeded` from `./toolbar.js` and call it in `switchView()` instead of referencing `diagramToolbarDragCleanup` directly. (3) Run the E2E test to confirm: `node e2e/profile-menu-navigation.js` (or `BASE_URL=<production-url> node e2e/profile-menu-navigation.js`).
+
+---
+
 ## Custom Access Token Hook not in Supabase dropdown – 2026-02
 
 - **Symptom:** In Supabase Dashboard → Authentication → Hooks → Customize access token, the dropdown does not show `public.custom_access_token_hook`.

@@ -17,6 +17,14 @@ const DIAGRAM_TOOLBAR_COLLAPSE_TAP_SUPPRESS_MS = 260;
 /** 54.33: Cleanup from previous initDiagramToolbarDrag run (listeners + ResizeObserver). Run before re-init to avoid duplicates. */
 let diagramToolbarDragCleanup = null;
 
+/** Run and clear diagram toolbar drag cleanup. Used by app.js switchView when leaving canvas. */
+export function diagramToolbarDragCleanupIfNeeded() {
+  if (typeof diagramToolbarDragCleanup === 'function') {
+    diagramToolbarDragCleanup();
+  }
+  diagramToolbarDragCleanup = null;
+}
+
 function getDiagramToolbarWrap() {
   const toolbar = document.getElementById('diagramFloatingToolbar');
   return toolbar ? toolbar.closest('.blueprint-wrap') : null;
@@ -196,10 +204,7 @@ export function initDiagramToolbarDrag(options = {}) {
   const wrap = getDiagramToolbarWrap();
   if (!toolbar || !dragHandle || !wrap) return { collapseIfExpanded: function () {} };
 
-  if (typeof diagramToolbarDragCleanup === 'function') {
-    diagramToolbarDragCleanup();
-    diagramToolbarDragCleanup = null;
-  }
+  diagramToolbarDragCleanupIfNeeded();
 
   const wrapRect = wrap.getBoundingClientRect();
   const toolRect = toolbar.getBoundingClientRect();

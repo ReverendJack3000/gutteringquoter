@@ -2,7 +2,7 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag } from './toolbar.js';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js';
 
 const state = {
   canvas: null,
@@ -13125,10 +13125,7 @@ function switchView(viewId, options = {}) {
   }
 
   if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
-    if (typeof diagramToolbarDragCleanup === 'function') {
-      diagramToolbarDragCleanup();
-    }
-    diagramToolbarDragCleanup = null;
+    diagramToolbarDragCleanupIfNeeded();
   }
 
   document.querySelectorAll('.app-view').forEach((el) => {
