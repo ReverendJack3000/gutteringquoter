@@ -96,6 +96,27 @@ const state = {
 /** Auth: token, user, and Supabase client for saved diagrams and product uploads. */
 const authState = { token: null, email: null, user: null, supabase: null };
 
+/** Shared Authorization header helper for signed-in API calls. */
+function getAuthHeaders() {
+  return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
+}
+
+const AUTOSAVE_NAME_PREFIX = '__quote_app_autosave__::';
+const AUTOSAVE_DRAFT_ID_STORAGE_KEY = 'quote_app_autosave_draft_id_v1';
+const AUTOSAVE_PROMPT_STAMP_STORAGE_KEY = 'quote_app_autosave_prompt_stamp_v1';
+const AUTOSAVE_CHECK_DEBOUNCE_MS = 1200;
+const AUTOSAVE_META_VERSION = 1;
+
+const autosaveState = {
+  draftId: null,
+  lastSavedHash: '',
+  inFlight: false,
+  pending: false,
+  timerId: null,
+  promptInFlight: false,
+  userKey: null,
+};
+
 /** View transition history for restoring focus when returning between app views (55.2). */
 const viewTransitionHistory = [];
 
@@ -7107,6 +7128,10 @@ function draw() {
   }
 
   updateAccessibilityInspector({ skipActiveField: true });
+  const autosaveDeleteImmediate = !!authState.token
+    && !isAutosaveEligibleCurrentState()
+    && !!(autosaveState.draftId || getStoredAutosaveDraftId());
+  requestAutosaveCheck({ immediate: autosaveDeleteImmediate });
   requestAnimationFrame(draw);
 }
 
@@ -8736,6 +8761,450 @@ function getExportCanvasDataURL() {
   return exportCanvas.toDataURL('image/png');
 }
 
+function hasBlueprintOnScreen() {
+  return !!(state.blueprintImage && state.blueprintTransform);
+}
+
+function isAutosaveEligibleForCounts(elementCount, hasBlueprint) {
+  if (hasBlueprint) return elementCount >= 2;
+  return elementCount >= 3;
+}
+
+function isAutosaveEligibleCurrentState() {
+  return isAutosaveEligibleForCounts(state.elements.length, hasBlueprintOnScreen());
+}
+
+function isAutosaveEligibleSnapshotData(data) {
+  const elementCount = Array.isArray(data?.elements) ? data.elements.length : 0;
+  const hasBlueprint = !!(data?.hasBlueprint && data?.blueprintTransform);
+  return isAutosaveEligibleForCounts(elementCount, hasBlueprint);
+}
+
+function isAutosaveName(name) {
+  return typeof name === 'string' && name.startsWith(AUTOSAVE_NAME_PREFIX);
+}
+
+function buildAutosaveName(projectName) {
+  const normalized = (projectName || '').trim() || 'Untitled';
+  return AUTOSAVE_NAME_PREFIX + normalized;
+}
+
+function extractProjectName(name) {
+  if (!isAutosaveName(name)) return (name || '').trim();
+  const extracted = String(name).slice(AUTOSAVE_NAME_PREFIX.length).trim();
+  return extracted || 'Untitled';
+}
+
+function getCurrentProjectNameForAutosave() {
+  const input = document.getElementById('toolbarProjectNameInput');
+  const raw = (state.projectName || input?.value || '').trim();
+  return raw || 'Untitled';
+}
+
+function getAutosaveStorageUserKey() {
+  const userId = typeof authState.user?.id === 'string' ? authState.user.id.trim() : '';
+  if (userId) return userId;
+  const email = typeof authState.email === 'string' ? authState.email.trim().toLowerCase() : '';
+  return email || 'anonymous';
+}
+
+function safeReadLocalStorageEnvelope(storageKey) {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function safeWriteLocalStorageEnvelope(storageKey, payload) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    if (!payload) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  } catch (_) {}
+}
+
+function getStoredAutosaveDraftId() {
+  const envelope = safeReadLocalStorageEnvelope(AUTOSAVE_DRAFT_ID_STORAGE_KEY);
+  if (!envelope) return null;
+  if (envelope.userKey !== getAutosaveStorageUserKey()) return null;
+  const draftId = typeof envelope.draftId === 'string' ? envelope.draftId.trim() : '';
+  return draftId || null;
+}
+
+function setStoredAutosaveDraftId(draftId) {
+  const normalized = typeof draftId === 'string' ? draftId.trim() : '';
+  if (!normalized) {
+    safeWriteLocalStorageEnvelope(AUTOSAVE_DRAFT_ID_STORAGE_KEY, null);
+    return;
+  }
+  safeWriteLocalStorageEnvelope(AUTOSAVE_DRAFT_ID_STORAGE_KEY, {
+    userKey: getAutosaveStorageUserKey(),
+    draftId: normalized,
+  });
+}
+
+function clearStoredAutosaveDraftId() {
+  safeWriteLocalStorageEnvelope(AUTOSAVE_DRAFT_ID_STORAGE_KEY, null);
+}
+
+function getStoredAutosavePromptStamp() {
+  const envelope = safeReadLocalStorageEnvelope(AUTOSAVE_PROMPT_STAMP_STORAGE_KEY);
+  if (!envelope) return null;
+  if (envelope.userKey !== getAutosaveStorageUserKey()) return null;
+  const stamp = envelope.stamp;
+  if (!stamp || typeof stamp !== 'object') return null;
+  const id = typeof stamp.id === 'string' ? stamp.id.trim() : '';
+  const updatedAt = typeof stamp.updatedAt === 'string' ? stamp.updatedAt : '';
+  if (!id) return null;
+  return { id, updatedAt };
+}
+
+function setStoredAutosavePromptStamp(stamp) {
+  if (!stamp || typeof stamp.id !== 'string' || !stamp.id.trim()) return;
+  safeWriteLocalStorageEnvelope(AUTOSAVE_PROMPT_STAMP_STORAGE_KEY, {
+    userKey: getAutosaveStorageUserKey(),
+    stamp: {
+      id: stamp.id.trim(),
+      updatedAt: typeof stamp.updatedAt === 'string' ? stamp.updatedAt : '',
+    },
+  });
+}
+
+function clearStoredAutosavePromptStamp() {
+  safeWriteLocalStorageEnvelope(AUTOSAVE_PROMPT_STAMP_STORAGE_KEY, null);
+}
+
+function syncAutosaveRuntimeUserScope() {
+  const userKey = getAutosaveStorageUserKey();
+  if (autosaveState.userKey === userKey) return;
+  autosaveState.userKey = userKey;
+  autosaveState.draftId = getStoredAutosaveDraftId();
+  autosaveState.lastSavedHash = '';
+  autosaveState.pending = false;
+}
+
+function clearAutosaveLocalState(options = {}) {
+  autosaveState.draftId = null;
+  autosaveState.lastSavedHash = '';
+  autosaveState.pending = false;
+  clearStoredAutosaveDraftId();
+  if (options.clearPromptStamp) clearStoredAutosavePromptStamp();
+}
+
+function getAutosaveRecencyValue(item) {
+  const value = Date.parse(item?.updatedAt || item?.createdAt || '');
+  return Number.isFinite(value) ? value : 0;
+}
+
+function compareAutosaveDraftsNewestFirst(a, b) {
+  return getAutosaveRecencyValue(b) - getAutosaveRecencyValue(a);
+}
+
+function isAutosavePromptStampNewer(stamp) {
+  if (!stamp || !stamp.id) return false;
+  const seen = getStoredAutosavePromptStamp();
+  if (!seen) return true;
+  return seen.id !== stamp.id || String(seen.updatedAt || '') !== String(stamp.updatedAt || '');
+}
+
+function getAutosavePromptStampFromDiagram(item) {
+  return {
+    id: item?.id || '',
+    updatedAt: item?.updatedAt || item?.createdAt || '',
+  };
+}
+
+function buildAutosaveHash(data, projectName) {
+  return JSON.stringify({
+    version: AUTOSAVE_META_VERSION,
+    projectName: projectName || 'Untitled',
+    hasBlueprint: !!data?.hasBlueprint,
+    blueprintTransform: data?.blueprintTransform || null,
+    elements: Array.isArray(data?.elements) ? data.elements : [],
+    groups: Array.isArray(data?.groups) ? data.groups : [],
+  });
+}
+
+async function fetchAutosaveDraftList() {
+  const res = await fetch('/api/diagrams', { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Autosave list failed (${res.status})`);
+  const json = await res.json().catch(() => ({}));
+  const diagrams = Array.isArray(json.diagrams) ? json.diagrams : [];
+  return diagrams.filter((item) => isAutosaveName(item?.name)).sort(compareAutosaveDraftsNewestFirst);
+}
+
+async function deleteAutosaveDraftById(draftId) {
+  if (!draftId) return true;
+  const res = await fetch('/api/diagrams/' + draftId, { method: 'DELETE', headers: getAuthHeaders() });
+  if (res.ok || res.status === 404) return true;
+  throw new Error(`Autosave delete failed (${res.status})`);
+}
+
+async function cleanupAutosaveDraftDuplicates(autosaveDrafts, keepDraftId) {
+  if (!Array.isArray(autosaveDrafts) || !keepDraftId) return;
+  const duplicates = autosaveDrafts.filter((item) => item?.id && item.id !== keepDraftId);
+  if (duplicates.length === 0) return;
+  await Promise.all(
+    duplicates.map((item) => deleteAutosaveDraftById(item.id).catch((err) => {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('Autosave duplicate cleanup failed for draft', item.id, err);
+      }
+    }))
+  );
+}
+
+async function resolveAutosaveDraftId() {
+  if (!authState.token) return null;
+  syncAutosaveRuntimeUserScope();
+  if (autosaveState.draftId) return autosaveState.draftId;
+
+  const storedDraftId = getStoredAutosaveDraftId();
+  if (storedDraftId) {
+    autosaveState.draftId = storedDraftId;
+    return storedDraftId;
+  }
+
+  const autosaveDrafts = await fetchAutosaveDraftList();
+  if (autosaveDrafts.length === 0) {
+    clearStoredAutosaveDraftId();
+    return null;
+  }
+
+  const newestDraft = autosaveDrafts[0];
+  autosaveState.draftId = newestDraft?.id || null;
+  if (autosaveState.draftId) setStoredAutosaveDraftId(autosaveState.draftId);
+  await cleanupAutosaveDraftDuplicates(autosaveDrafts, autosaveState.draftId);
+  return autosaveState.draftId;
+}
+
+async function deleteAutosaveDraftWhenIneligible() {
+  const draftId = autosaveState.draftId || getStoredAutosaveDraftId();
+  if (!draftId) {
+    autosaveState.lastSavedHash = '';
+    return;
+  }
+  try {
+    await deleteAutosaveDraftById(draftId);
+    clearAutosaveLocalState({ clearPromptStamp: true });
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('Autosave delete failed while below threshold:', err);
+    }
+  }
+}
+
+async function upsertAutosaveDraft() {
+  const projectName = getCurrentProjectNameForAutosave();
+  const { data: baseData, blueprintImageBase64, thumbnailBase64 } = getDiagramDataForSave();
+  const data = {
+    ...baseData,
+    __autosaveMeta: {
+      version: AUTOSAVE_META_VERSION,
+      projectName,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  const nextHash = buildAutosaveHash(data, projectName);
+  if (nextHash === autosaveState.lastSavedHash) return;
+
+  const draftId = await resolveAutosaveDraftId();
+  const needsBlueprintBase64 = !!(state.blueprintImage && state.blueprintTransform && (!draftId || !state.blueprintImageSourceUrl));
+  const body = {
+    name: buildAutosaveName(projectName),
+    data,
+    thumbnailBase64: thumbnailBase64 || undefined,
+  };
+  if (needsBlueprintBase64 && blueprintImageBase64) {
+    body.blueprintImageBase64 = blueprintImageBase64;
+  } else if (state.blueprintImageSourceUrl) {
+    body.blueprintImageUrl = state.blueprintImageSourceUrl;
+  }
+
+  if (draftId) {
+    const updateRes = await fetch('/api/diagrams/' + draftId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(body),
+    });
+    if (updateRes.status === 404) {
+      clearAutosaveLocalState();
+      return;
+    }
+    if (!updateRes.ok) {
+      throw new Error(`Autosave update failed (${updateRes.status})`);
+    }
+    const updated = await updateRes.json().catch(() => ({}));
+    if (updated?.id) {
+      autosaveState.draftId = updated.id;
+      setStoredAutosaveDraftId(updated.id);
+    }
+    if (updated?.blueprintImageUrl) {
+      state.blueprintImageSourceUrl = updated.blueprintImageUrl;
+    }
+    autosaveState.lastSavedHash = nextHash;
+    return;
+  }
+
+  const createRes = await fetch('/api/diagrams', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!createRes.ok) {
+    throw new Error(`Autosave create failed (${createRes.status})`);
+  }
+  const created = await createRes.json().catch(() => ({}));
+  if (created?.id) {
+    autosaveState.draftId = created.id;
+    setStoredAutosaveDraftId(created.id);
+  }
+  if (created?.blueprintImageUrl) {
+    state.blueprintImageSourceUrl = created.blueprintImageUrl;
+  }
+  autosaveState.lastSavedHash = nextHash;
+
+  try {
+    const autosaveDrafts = await fetchAutosaveDraftList();
+    await cleanupAutosaveDraftDuplicates(autosaveDrafts, autosaveState.draftId);
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('Autosave duplicate cleanup after create failed:', err);
+    }
+  }
+}
+
+async function performAutosaveCheck() {
+  if (!authState.token) return;
+  syncAutosaveRuntimeUserScope();
+
+  if (!isAutosaveEligibleCurrentState()) {
+    await deleteAutosaveDraftWhenIneligible();
+    return;
+  }
+
+  await upsertAutosaveDraft();
+}
+
+async function runAutosaveCheck() {
+  if (autosaveState.inFlight) {
+    autosaveState.pending = true;
+    return;
+  }
+  autosaveState.inFlight = true;
+  try {
+    await performAutosaveCheck();
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('Autosave check failed:', err);
+    }
+  } finally {
+    autosaveState.inFlight = false;
+    if (autosaveState.pending) {
+      autosaveState.pending = false;
+      requestAutosaveCheck({ immediate: true });
+    }
+  }
+}
+
+function requestAutosaveCheck(options = {}) {
+  if (typeof window === 'undefined') return;
+  if (!authState.token) return;
+  const immediate = !!options.immediate;
+  if (autosaveState.timerId != null) {
+    if (!immediate) return;
+    clearTimeout(autosaveState.timerId);
+    autosaveState.timerId = null;
+  }
+  autosaveState.timerId = window.setTimeout(() => {
+    autosaveState.timerId = null;
+    runAutosaveCheck();
+  }, immediate ? 0 : AUTOSAVE_CHECK_DEBOUNCE_MS);
+}
+
+function isCanvasEmptyForAutosavePrompt() {
+  return !state.blueprintImage && state.elements.length === 0;
+}
+
+function getAutosaveProjectNameFromSnapshot(snapshot, fallbackAutosaveName) {
+  const meta = snapshot?.data?.__autosaveMeta;
+  if (meta && typeof meta.projectName === 'string' && meta.projectName.trim()) {
+    return meta.projectName.trim();
+  }
+  return extractProjectName(fallbackAutosaveName);
+}
+
+async function maybePromptAutosaveRestore() {
+  if (!authState.token) return;
+  if (autosaveState.promptInFlight) return;
+  if (!isCanvasEmptyForAutosavePrompt()) return;
+
+  autosaveState.promptInFlight = true;
+  try {
+    syncAutosaveRuntimeUserScope();
+    const autosaveDrafts = await fetchAutosaveDraftList();
+    if (autosaveDrafts.length === 0) return;
+
+    const newestDraft = autosaveDrafts[0];
+    if (!newestDraft?.id) return;
+    autosaveState.draftId = newestDraft.id;
+    setStoredAutosaveDraftId(newestDraft.id);
+    await cleanupAutosaveDraftDuplicates(autosaveDrafts, newestDraft.id);
+
+    const stamp = getAutosavePromptStampFromDiagram(newestDraft);
+    if (!isAutosavePromptStampNewer(stamp)) return;
+
+    const res = await fetch('/api/diagrams/' + newestDraft.id, { headers: getAuthHeaders() });
+    if (res.status === 404) {
+      clearAutosaveLocalState({ clearPromptStamp: true });
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`Autosave draft load failed (${res.status})`);
+    }
+    const snapshot = await res.json();
+    if (!isAutosaveEligibleSnapshotData(snapshot?.data || {})) {
+      await deleteAutosaveDraftById(newestDraft.id).catch(() => {});
+      clearAutosaveLocalState({ clearPromptStamp: true });
+      return;
+    }
+
+    const confirmed = await showAppConfirm('A newer autosaved draft was found. Restore it?', {
+      title: 'Restore autosaved draft',
+      confirmText: 'Restore',
+      cancelText: 'Discard',
+    });
+
+    if (confirmed) {
+      await restoreStateFromApiSnapshot(snapshot);
+      const restoredProjectName = getAutosaveProjectNameFromSnapshot(snapshot, newestDraft.name || '');
+      updateToolbarBreadcrumbs(restoredProjectName);
+      autosaveState.lastSavedHash = buildAutosaveHash(snapshot?.data || {}, restoredProjectName);
+      setStoredAutosavePromptStamp(stamp);
+      showMessage('Autosaved draft restored.', 'success');
+      return;
+    }
+
+    await deleteAutosaveDraftById(newestDraft.id);
+    clearAutosaveLocalState();
+    setStoredAutosavePromptStamp(stamp);
+    showMessage('Autosaved draft discarded.', 'info');
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('Autosave restore prompt failed:', err);
+    }
+  } finally {
+    autosaveState.promptInFlight = false;
+  }
+}
+
 /** Serializable diagram payload for API (no blueprintImageRef). */
 function getDiagramDataForSave() {
   const data = {
@@ -8852,7 +9321,7 @@ function getDiagramDataForSave() {
  * Auto-save current diagram with a ServiceM8 Job # stamp (after Add to Job or Create New Job).
  * Creates a new saved project with name "ProjectName (Job #123)" and servicem8JobId set.
  */
-function autoSaveDiagramWithJobNumber(jobNumber) {
+async function autoSaveDiagramWithJobNumber(jobNumber) {
   if (!jobNumber || !authState.token) return;
   const projectNameInput = document.getElementById('toolbarProjectNameInput');
   const projectName = (projectNameInput?.value || '').trim() || 'Untitled';
@@ -8866,18 +9335,30 @@ function autoSaveDiagramWithJobNumber(jobNumber) {
     thumbnailBase64: thumbnailBase64 || undefined,
     servicem8JobId: String(jobNumber),
   };
-  fetch('/api/diagrams', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify(body),
-  })
-    .then((res) => {
-      if (res.ok) {
-        if (typeof window.__quoteAppRefreshDiagramsList === 'function') window.__quoteAppRefreshDiagramsList();
-        showMessage('Project saved with Job #' + jobNumber + '.', 'success');
-      }
-    })
-    .catch(() => {});
+  try {
+    const res = await fetch('/api/diagrams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail?.detail || res.statusText || `HTTP ${res.status}`);
+    }
+    const created = await res.json().catch(() => ({}));
+    if (created?.blueprintImageUrl) {
+      state.blueprintImageSourceUrl = created.blueprintImageUrl;
+    }
+    if (typeof window.__quoteAppRefreshDiagramsList === 'function') {
+      window.__quoteAppRefreshDiagramsList();
+    }
+    showMessage('Project saved with Job #' + jobNumber + '.', 'success');
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('Failed to save project with ServiceM8 job stamp:', err);
+    }
+    showMessage('Could not save project with Job #' + jobNumber + '.', 'error');
+  }
 }
 
 /** Restore canvas from API snapshot (no blueprintImageRef; optional blueprint_image_url). */
@@ -9097,6 +9578,7 @@ function initAuth() {
       authState.user = data.user ?? null;
       setAuthUI();
       switchView('view-canvas');
+      maybePromptAutosaveRestore();
       await checkServiceM8Status();
       if (window.servicem8Connected === false) {
         await startServiceM8Connect();
@@ -9145,6 +9627,7 @@ function initAuth() {
       authState.user = user ?? null;
       setAuthUI();
       switchView('view-canvas');
+      maybePromptAutosaveRestore();
       await checkServiceM8Status();
       if (window.servicem8Connected === false) {
         await startServiceM8Connect();
@@ -10155,6 +10638,7 @@ function initDiagrams() {
       state.projectName = val;
       projectNameInput.value = val;
       projectNameInput.placeholder = 'Untitled';
+      requestAutosaveCheck({ immediate: true });
     };
     projectNameInput.addEventListener('change', commitProjectName);
     projectNameInput.addEventListener('blur', commitProjectName);
@@ -10200,10 +10684,6 @@ function initDiagrams() {
         updateGoBackButtonVisibility();
       }
     });
-  }
-
-  function authHeaders() {
-    return authState.token ? { Authorization: `Bearer ${authState.token}` } : {};
   }
 
   function closeDropdown() {
@@ -10264,7 +10744,7 @@ function initDiagrams() {
         blueprintImageUrl: (!blueprintImageBase64 && state.blueprintImageSourceUrl) ? state.blueprintImageSourceUrl : undefined,
         thumbnailBase64: thumbnailBase64 || undefined,
       };
-      const res = await fetch('/api/diagrams', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
+      const res = await fetch('/api/diagrams', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || 'Save failed');
@@ -10400,7 +10880,7 @@ function initDiagrams() {
       });
       if (!confirmed) return;
       try {
-        const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: authHeaders() });
+        const r = await fetch('/api/diagrams/' + item.id, { method: 'DELETE', headers: getAuthHeaders() });
         if (!r.ok) throw new Error('Delete failed');
         refreshDiagramsList();
         showMessage('Project deleted.', 'success');
@@ -10419,7 +10899,7 @@ function initDiagrams() {
       try {
         preLoadSnapshot = capturePreLoadSnapshot();
         updateGoBackButtonVisibility();
-        const r = await fetch('/api/diagrams/' + item.id, { headers: authHeaders() });
+        const r = await fetch('/api/diagrams/' + item.id, { headers: getAuthHeaders() });
         if (!r.ok) throw new Error('Failed to load');
         const diagram = await r.json();
         await restoreStateFromApiSnapshot(diagram);
@@ -10446,13 +10926,13 @@ function initDiagrams() {
     }
     if (listTargets.length === 0) return;
     try {
-      const res = await fetch('/api/diagrams', { headers: authHeaders() });
+      const res = await fetch('/api/diagrams', { headers: getAuthHeaders() });
       if (!res.ok) {
         listTargets.forEach(({ list, empty }) => { list.innerHTML = ''; empty.hidden = false; });
         return;
       }
       const json = await res.json();
-      const diagramList = json.diagrams || [];
+      const diagramList = (json.diagrams || []).filter((item) => !isAutosaveName(item?.name));
       listTargets.forEach(({ list, empty }) => {
         empty.hidden = diagramList.length > 0;
         list.innerHTML = '';
@@ -10513,7 +10993,7 @@ function initGlobalToolbar() {
     collapseBtn.setAttribute('aria-expanded', !collapsed);
     collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
     collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
-    const span = collapseBtn.querySelector('span');
+    const span = collapseBtn.querySelector('.toolbar-collapse-btn-text');
     if (span) span.textContent = collapsed ? '+' : '−';
     requestAnimationFrame(applyGlobalToolbarPadding);
   }
@@ -12361,6 +12841,7 @@ function init() {
     if (authState.token) {
       switchView('view-canvas');
       updateServicem8ToolbarWarning();
+      maybePromptAutosaveRestore();
     } else {
       switchView('view-login');
     }

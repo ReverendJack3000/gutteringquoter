@@ -433,6 +433,13 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.105.3** **Mobile anti-overlap nudge for rotate handle.** On mobile top-docked auto-placement, detect selected element rotate-handle X overlap and nudge toolbar left/right within clamps when possible; fallback to centered top if no non-overlap placement fits.
 - [ ] **54.105.4** **E2E + manual QA + Railway safety verification.** Extend mobile E2E assertion to check top-docked open position near safe top before manual drag; run `npm test`; manual QA on iOS Safari + Android Chrome (portrait/landscape, 200% zoom); confirm no Railway env/build/config changes.
 
+**54.106 Mobile header: collapse toolbar button → expand/collapse SVG icons (mobile-only)**  
+*Plan: docs/plans/2026-02-22-mobile-header-collapse-button-expand-icon.md. Replace the global toolbar collapse button’s “−”/“+” text with SVG icons on mobile only: expand icon (four arrows out) when toolbar is collapsed, collapse icon when expanded. Scope: body[data-viewport-mode="mobile"]; desktop unchanged; Railway-safe.*
+
+- [x] **54.106.1** **Mobile: expand icon (4 arrows) when toolbar collapsed.** In `frontend/index.html`, add a mobile-only icon container inside `#toolbarCollapseBtn` with an inline SVG for the standard expand icon (four arrows pointing out); in `frontend/styles.css` under `body[data-viewport-mode="mobile"]`, hide the existing text span and show this SVG when `#globalToolbar.toolbar--collapsed`. Keep desktop behaviour (text “+”/“−”) unchanged.
+- [x] **54.106.2** **Mobile: collapse icon when toolbar expanded.** Add a collapse icon SVG (e.g. minus or arrows in) in the same container and show it when `#globalToolbar:not(.toolbar--collapsed)`; hide expand icon when expanded. All CSS under mobile scope; 44×44 touch target preserved.
+- [x] **54.106.3** **Verify desktop + Railway.** Confirm desktop collapse/expand unchanged; run `npm test`; no new build step or backend; document in plan handoff.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

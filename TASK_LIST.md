@@ -61,6 +61,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 22 | 22.29 | ServiceM8 API response Success/Error wiring |
 | 24 | 24.4 | (Optional) product_template_id for CSV diagram mapping |
 | 26 | 26.2 | Manual guttering distance entry UI |
+| 33 | 33.4–33.10 | Signed-in server autosave recovery (prompt restore/discard, strict threshold delete, hidden rolling draft) + job-stamp save-path auth-header fix; desktop/mobile + Railway-safe validation. |
+| 34 | 34.3 | (Optional) Role-based permissions for DB-changing endpoints (update-pricing, import-csv); plan: docs/plans/2026-02-22-auth-role-permissions-database-changes.md |
 | 35 | 35.7, 35.8, 35.9 | Auth view switching; no regressions; manual/E2E check |
 | 36 | 36.11 | localProducts migration (optional) |
 | 41 | 41.1, 41.3 | 65/80 mm filter dropdown in Marley panel |

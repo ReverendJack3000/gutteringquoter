@@ -1787,9 +1787,9 @@ body.a11y-force-motion .toggle-icon::after {
 .canvas-placeholder .placeholder-icon {
   display: block;
   margin-bottom: 4px;
-  width: 36px;
-  height: 36px;
-  color: #8E8E93;
+  width: 44px;
+  height: 44px;
+  color: #54B3D9;
   /* 54.84.1: button reset so placeholder camera matches previous span appearance */
   border: none;
   background: none;
@@ -2672,8 +2672,8 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon {
   margin-bottom: 4px;
 }
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon svg {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-title {
@@ -2901,6 +2901,30 @@ body[data-viewport-mode="mobile"] .panel-close,
 body[data-viewport-mode="mobile"] .global-toolbar-wrap .toolbar-collapse-btn {
   min-height: 44px;
   min-width: 44px;
+}
+/* 54.106: Mobile header – collapse btn: SVG expand/collapse icons (mobile only); desktop keeps text */
+.toolbar-collapse-btn-icons--mobile {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .global-toolbar-wrap .toolbar-collapse-btn .toolbar-collapse-btn-text {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .global-toolbar-wrap .toolbar-collapse-btn .toolbar-collapse-btn-icons--mobile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-collapse-btn .toolbar-collapse-expand-icon {
+  display: block;
+}
+body[data-viewport-mode="mobile"] #globalToolbar:not(.toolbar--collapsed) .toolbar-collapse-btn .toolbar-collapse-expand-icon {
+  display: none;
+}
+body[data-viewport-mode="mobile"] #globalToolbar:not(.toolbar--collapsed) .toolbar-collapse-btn .toolbar-collapse-collapse-icon {
+  display: block;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-collapse-btn .toolbar-collapse-collapse-icon {
+  display: none;
 }
 body[data-viewport-mode="mobile"] .panel-close {
   padding: 10px;
