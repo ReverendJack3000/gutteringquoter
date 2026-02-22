@@ -9527,6 +9527,9 @@ async function maybePromptAutosaveRestore() {
   }
 }
 
+/** Max long side (px) for blueprint PNG when saving to Supabase Storage (avoids "Payload too large"). */
+const SAVE_BLUEPRINT_MAX_LONG_SIDE = 1600;
+
 /** Serializable diagram payload for API (no blueprintImageRef). */
 function getDiagramDataForSave() {
   const data = {
@@ -9556,14 +9559,22 @@ function getDiagramDataForSave() {
   let thumbnailBase64 = null;
   if (state.blueprintImage && state.blueprintTransform) {
     const bt = state.blueprintTransform;
+    let w = Math.max(1, Math.round(bt.w));
+    let h = Math.max(1, Math.round(bt.h));
+    const longSide = Math.max(w, h);
+    if (longSide > SAVE_BLUEPRINT_MAX_LONG_SIDE) {
+      const scale = SAVE_BLUEPRINT_MAX_LONG_SIDE / longSide;
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+    }
     const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bt.w));
-    c.height = Math.max(1, Math.round(bt.h));
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d');
     if (ctx) {
       try {
         ctx.globalAlpha = bt.opacity ?? 1;
-        ctx.drawImage(state.blueprintImage, 0, 0, c.width, c.height);
+        ctx.drawImage(state.blueprintImage, 0, 0, bt.w, bt.h, 0, 0, w, h);
         blueprintImageBase64 = c.toDataURL('image/png');
       } catch (e) {
         // Tainted canvas (e.g. cross-origin blueprint from Storage without CORS) — leave base64 null; caller may send blueprintImageSourceUrl

@@ -12,5 +12,6 @@
 - [ ] **33.8** Hide autosave draft from saved-diagrams UIs.
 - [ ] **33.9** Fix shared auth-header scope so job-number stamped autosave works.
 - [ ] **33.10** QA matrix + Railway safety verification.
+- [x] **33.11** Fix mobile diagram save: Supabase Storage "Payload too large" when uploading blueprint.png (e.g. after taking a photo on mobile). Downscale blueprint in `getDiagramDataForSave()` when dimensions or size exceed a threshold so the PNG sent to the backend (and Supabase) stays under the bucket limit. Applies to manual Save, autosave (POST/PATCH), and auto-save after Add to Job. Plan: docs/plans/2026-02-23-mobile-photo-save-supabase-payload-too-large.md.
 
 ---
