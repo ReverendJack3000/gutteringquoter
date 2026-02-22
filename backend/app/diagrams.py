@@ -213,7 +213,7 @@ def delete_diagram(user_id: UUID, diagram_id: UUID) -> bool:
     supabase = get_supabase()
     prefix = f"{user_id}/{diagram_id}"
     try:
-        files = supabase.storage.from_(BUCKET).list(prefix=prefix)
+        files = supabase.storage.from_(BUCKET).list(prefix)
         for item in files or []:
             if isinstance(item, dict) and item.get("name"):
                 supabase.storage.from_(BUCKET).remove([f"{prefix}/{item['name']}"])

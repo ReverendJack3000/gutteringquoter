@@ -1131,6 +1131,7 @@ def api_servicem8_upload_job_attachment(
         logger.warning("Upload job attachment: invalid base64: %s", e)
         raise HTTPException(400, "Invalid image_base64")
     if len(image_bytes) > 10 * 1024 * 1024:
+        logger.warning("Upload job attachment: image too large (%s bytes, max 10MB)", len(image_bytes))
         raise HTTPException(400, "Image too large (max 10MB)")
     attachment_name = (body.attachment_name or "Blueprint_Design.png").strip() or "Blueprint_Design.png"
     if not attachment_name.lower().endswith(".png"):

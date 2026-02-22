@@ -148,6 +148,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Storage delete for diagram failed: list() got unexpected keyword argument 'prefix' – 2026-02
+
+- **Symptom:** Deleting a saved diagram returns 200 OK but logs show `Storage delete for diagram <id> failed: SyncBucketActionsMixin.list() got an unexpected keyword argument 'prefix'`. The diagram row is removed but blueprint/thumb files may remain in Supabase Storage.
+- **Cause:** Supabase Python client `storage.from_(bucket).list()` expects the path as the **first positional argument**, not a keyword `prefix=`. Using `list(prefix=prefix)` raises TypeError.
+- **Fix:** In `backend/app/diagrams.py`, change `supabase.storage.from_(BUCKET).list(prefix=prefix)` to `supabase.storage.from_(BUCKET).list(prefix)`.
+
+---
+
 ## Quote: Downpipe section hierarchy and mixed screw label – 2026-02
 
 - **Symptom:** Downpipe section showed screws first, then downpipes/clips in a flat order; no metres input or incomplete state like Gutter System; mixed quote showed "(brackets & clips)" without "Screws" and screws nested under gutter.
