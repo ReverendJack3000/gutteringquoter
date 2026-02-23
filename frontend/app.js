@@ -12515,6 +12515,31 @@ function filterUserPermissions() {
   renderUserPermissionsList();
 }
 
+/** Format last_sign_in_at for User Permissions table: "8:30pm Today" or "8:30pm February 25th". */
+function formatLastLoginDisplay(isoString) {
+  if (!isoString) return 'Never';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return 'Never';
+  const timeStr = d
+    .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })
+    .toLowerCase()
+    .replace(/\s/g, '');
+  const now = new Date();
+  const isToday =
+    d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear();
+  if (isToday) return `${timeStr} Today`;
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const day = d.getDate();
+  const suffix =
+    day >= 11 && day <= 13 ? 'th' : (['st', 'nd', 'rd'][(day % 10) - 1] || 'th');
+  return `${timeStr} ${months[d.getMonth()]} ${day}${suffix}`;
+}
+
 function renderUserPermissionsList() {
   const tableBody = document.getElementById('userPermissionsTableBody');
   const emptyState = document.getElementById('userPermissionsEmpty');
@@ -12538,12 +12563,6 @@ function renderUserPermissionsList() {
     const emailTd = document.createElement('td');
     emailTd.textContent = user?.email || 'No email';
     tr.appendChild(emailTd);
-
-    const userIdTd = document.createElement('td');
-    const userCode = document.createElement('code');
-    userCode.textContent = userId || 'Unknown user';
-    userIdTd.appendChild(userCode);
-    tr.appendChild(userIdTd);
 
     const roleTd = document.createElement('td');
     if (isSuperAdmin) {
@@ -12578,7 +12597,13 @@ function renderUserPermissionsList() {
     }
     tr.appendChild(roleTd);
 
+    const lastLoginTd = document.createElement('td');
+    lastLoginTd.className = 'permissions-last-login-cell';
+    lastLoginTd.textContent = formatLastLoginDisplay(user?.last_sign_in_at);
+    tr.appendChild(lastLoginTd);
+
     const actionTd = document.createElement('td');
+    actionTd.className = 'permissions-action-cell';
     if (!isSuperAdmin) {
       const saveBtn = document.createElement('button');
       saveBtn.type = 'button';
