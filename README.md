@@ -119,6 +119,9 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 `INSERT INTO public.profiles (user_id, role) SELECT id, 'admin' FROM auth.users WHERE LOWER(email) = LOWER('your@email.com') ON CONFLICT (user_id) DO UPDATE SET role = 'admin';`  
 (replace `your@email.com` with your super admin email). Then sign out and sign in again so the JWT includes the admin role.
 
+- `GET /api/bonus/periods` – list bonus periods (requires Bearer token, role `admin`)
+- `POST /api/bonus/periods` – create bonus period: body `period_name`, `start_date`, `end_date`, optional `status` (open|processing|closed) (requires Bearer token, role `admin`)
+- `PATCH /api/bonus/periods/{period_id}` – update bonus period: body optional `period_name`, `start_date`, `end_date`, `status` (requires Bearer token, role `admin`)
 - `GET /manifest.webmanifest` – PWA manifest (static)
 - `GET /service-worker.js` – service worker script (static)
 

@@ -3315,6 +3315,20 @@ function getAddToJobPayload(jobUuid) {
   materialCost = Math.round(materialCost * 100) / 100;
   const userName = authState.user?.user_metadata?.full_name || authState.user?.email || authState.email || 'Quote App User';
 
+  // Material-only lines for quote persistence (59.19); exclude labour (REP-LAB) and lines with no id
+  let quote_materials = [];
+  if (lastQuoteData?.materials?.length) {
+    quote_materials = lastQuoteData.materials
+      .filter((m) => (m.id || '').toUpperCase() !== 'REP-LAB' && (m.id || '').trim() !== '')
+      .map((m) => {
+        const line = { id: m.id || '', qty: m.qty ?? 0 };
+        if (m.name != null) line.name = m.name;
+        if (m.item_number != null) line.item_number = m.item_number;
+        if (m.servicem8_material_uuid != null) line.servicem8_material_uuid = m.servicem8_material_uuid;
+        return line;
+      });
+  }
+
   return {
     job_uuid: jobUuid,
     elements,
@@ -3324,6 +3338,7 @@ function getAddToJobPayload(jobUuid) {
     user_name: userName,
     profile,
     people_count: peopleCount,
+    quote_materials,
   };
 }
 
@@ -3462,6 +3477,7 @@ function initJobConfirmationOverlay() {
       user_name: payload.user_name,
       profile: payload.profile,
       people_count: payload.people_count,
+      quote_materials: payload.quote_materials ?? [],
       image_base64: imageBase64,
     };
     if (createNewBtn) {

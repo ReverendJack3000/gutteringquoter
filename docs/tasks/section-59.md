@@ -30,27 +30,44 @@
 - **calculate-quote response:** Returns `materials` with `id`, `name`, `qty` (and pricing). That shape is suitable for `quotes.items`; we must **not** store only name+qty (Add to Job payload uses name+qty and is not suitable for matching).
 - **Recommendation:** When persisting to `public.quotes`, set `items` to a JSONB array of **material** lines only (exclude labour): at least `{ id, qty }` per line; optionally `name`, `item_number`, `servicem8_material_uuid` for ServiceM8 matching. Document the shape so Missed Materials logic can rely on it.
 
-### Data ownership (research required — no assumptions)
+### Data ownership (updated per Decisions)
 
 **Tracked by us (our DB)**  
 - bonus_periods (we create/manage periods and status).  
-- job_performance: ledger rows we create; fields such as quoted_labor_minutes, standard_parts_runs, seller_fault_parts_runs, missed_materials_cost, is_callback, callback_reason, callback_cost are entered by admin or derived by our logic.  
-- job_personnel: we assign is_seller, is_executor and record onsite_minutes, travel_shopping_minutes (who enters: admin vs tech vs sync TBD).  
-- Link quote → job: **Verified** — we do not persist to public.quotes when Add to Job runs. Quoted labour for Estimation Accuracy requires implementing one of the options in 59.3.
+- job_performance: rows created by **ServiceM8 webhook** (status → Completed/Invoiced) in **Draft/Unverified** state. ServiceM8 auto-populates: invoiced_revenue_exc_gst, materials_cost, servicem8_job_id. Admin/System: quote_id (matched to active quote), bonus_period_id. Tech/Admin manual: callbacks, seller_fault_parts_runs, standard_parts_runs, missed_materials_cost. quoted_labor_minutes from linked quote (59.3).  
+- job_personnel: is_seller, is_executor; onsite_minutes, travel_shopping_minutes — **Admin verifies/splits** from raw JobActivity baseline before locking period (see Decisions).  
+- Link quote → job: **Active quote** = last quote before job status Scheduled/In Progress (59.3 Option A; persist quotes in 59.19).
 
-**Pulled from ServiceM8 API (research required)**  
-- Scopes already include read_jobs, read_job_payments, read_job_materials, read_schedule, read_staff.  
-- **To confirm via API docs / response inspection:** job status, generated_job_id, invoiced/billed amount (job or job_payments?), materials cost (jobmaterial?), who was scheduled / actual time (jobactivity? activity_was_scheduled vs time entries). Staff list and mapping to our auth.users (technician_id).  
-- **Decision:** Which fields we sync from ServiceM8 into job_performance (e.g. invoiced_revenue_exc_gst, materials_cost) vs manual entry only.
+**Pulled from ServiceM8 API**  
+- Scopes: read_jobs, read_job_payments, read_job_materials, read_schedule, read_staff.  
+- Job: total_invoice_amount (base GP on this). JobMaterial: pricing/GP from our DB, fallback to ServiceM8. JobActivity: raw data as baseline; admin splits onsite vs travel/shopping in our app. Staff → technician_id per 59.2 (email match).
+
+---
+
+### Decisions (data and flow)
+
+The following are **locked decisions**. Full rationale and implementation notes: **`docs/plans/2026-02-23-section-59-data-flow-decisions.md`**. Summary:
+
+- **When is job_performance created?** Automatically via a **ServiceM8 webhook** when a job’s status changes to Completed or Invoiced (webhook to be set up later, POST to our server). New rows are created in an **“Unverified” or “Draft”** state; payroll is too sensitive to fully automate without human review.
+- **Who populates what?**  
+  - **ServiceM8 API auto-populates:** invoiced_revenue_exc_gst, materials_cost, servicem8_job_id.  
+  - **Admin/System:** quote_id (matched automatically), bonus_period_id.  
+  - **Tech/Admin manual entry:** Callbacks, seller_fault_parts_runs, and splitting onsite_minutes vs travel_shopping_minutes.
+- **Quote–job link (multiple quotes per job):** The **active quote** is the **last** quote generated **before** the job is marked “Scheduled” or “In Progress”. Rationale: if a tech revises the quote (e.g. +2h labour) before work starts, they deserve that updated grace period; taking the first quote would penalize legitimate scope changes. Implementation: add `is_final_quote` to `public.quotes` and/or query the most recent timestamp for that servicem8_job_id when matching quote to job.
+- **Revenue for GP:** Base GP on **job.total_invoice_amount** (invoiced amount).
+- **Job Materials:** Use the ServiceM8 JobMaterial endpoint. We already have material UUIDs in ServiceM8 for our materials; pull pricing/GP from **our database**, falling back to ServiceM8 if price/cost is missing.
+- **Job Activities (time):** ServiceM8 check-in/check-out is unreliable (techs forget); API cannot reliably distinguish onsite vs travel/shopping unless custom tasks. **Recommendation:** Pull raw JobActivity data as a **baseline for total hours**, but require **Admin to verify/split** into onsite_minutes and travel_shopping_minutes in our app before locking the period.
+- **Standardised bonus labour rate ($35):** Do **not** hardcode. Store in a **1-row table `public.company_settings`** or as env var **`BONUS_LABOUR_RATE`**. Rates change with inflation; avoid redeploys for rate changes.
+- **quoted_labor_minutes from quotes.labour_hours:** Confirmed: **round(quote.labour_hours * 60)** is mathematically sound and the cleanest way to handle the 15% / 30-minute estimation accuracy logic.
 
 ---
 
 ### Research (must complete before implementation)
 
-- [ ] **59.1** Document ServiceM8 API: list Jobs, Job Activities (schedule/time), Job Payments, Job Materials — response fields for job uuid, generated_job_id, status, invoice/billed amount, materials cost, labour/estimated hours if present; activity assignee and duration. No code changes; produce a short reference (e.g. in docs/) of “what we can pull” for bonus logic.
-- [ ] **59.2** Map ServiceM8 staff to our users: how to resolve technician_id (auth.users.id) from ServiceM8 staff (e.g. email, staff_uuid). Document whether we need a mapping table or can derive from existing auth/profiles; document read_staff response shape.
-- [ ] **59.3** Decide and document source of quoted_labor_minutes for each job. **Current state (audit):** We do not persist quotes; Add to Job sends labour_hours in the request and job note only. Options: (A) Persist to public.quotes when Add to Job (or Create New Job), set servicem8_job_id, then when creating job_performance set quote_id and quoted_labor_minutes = round(quote.labour_hours * 60); (B) When creating job_performance, accept quoted_labor_minutes (or hours) from client / “finalise job” payload that includes quote snapshot; (C) Sync from ServiceM8 if they expose estimated labour. Document chosen option and any schema/API impact. See BACKEND_DATABASE.md “Audit: Labour quote logic and quoted_labor_minutes”.
-- [ ] **59.4** Confirm section 58 schema covers all plan rules: bonus_periods (period pot), job_performance (GP, callback, parts runs, missed materials), job_personnel (seller/executor, onsite + travel_shopping minutes). Note any missing columns or new tables needed (e.g. standardised rate $35 as config or constant). **ServiceM8 link:** Add nullable `servicem8_job_uuid` to `job_performance` for API fallback (audit: BACKEND_DATABASE.md).
+- [x] **59.1** Document ServiceM8 API: list Jobs, Job Activities (schedule/time), Job Payments, Job Materials — response fields for job uuid, generated_job_id, status, invoice/billed amount, materials cost, labour/estimated hours if present; activity assignee and duration. No code changes; produce a short reference (e.g. in docs/) of “what we can pull” for bonus logic.
+- [x] **59.2** Map ServiceM8 staff to our users: how to resolve technician_id (auth.users.id) from ServiceM8 staff (e.g. email, staff_uuid). Document whether we need a mapping table or can derive from existing auth/profiles; document read_staff response shape.
+- [x] **59.3** Decide and document source of quoted_labor_minutes for each job. **Current state (audit):** We do not persist quotes; Add to Job sends labour_hours in the request and job note only. Options: (A) Persist to public.quotes when Add to Job (or Create New Job), set servicem8_job_id, then when creating job_performance set quote_id and quoted_labor_minutes = round(quote.labour_hours * 60); (B) When creating job_performance, accept quoted_labor_minutes (or hours) from client / “finalise job” payload that includes quote snapshot; (C) Sync from ServiceM8 if they expose estimated labour. Document chosen option and any schema/API impact. See BACKEND_DATABASE.md “Audit: Labour quote logic and quoted_labor_minutes”. **Decision: Option A** — documented in BACKEND_DATABASE.md § "Source of quoted_labor_minutes (Section 59.3 decision)"; implement in 59.19 (persist quote) and 59.6/59.7 (set quoted_labor_minutes from quote)."
+- [x] **59.4** Confirm section 58 schema covers all plan rules: bonus_periods (period pot), job_performance (GP, callback, parts runs, missed materials), job_personnel (seller/executor, onsite + travel_shopping minutes). Note any missing columns or new tables needed. **Decisions:** (1) Standardised bonus rate in `public.company_settings` (1-row) or env `BONUS_LABOUR_RATE` — no hardcoding (see Decisions above). (2) job_performance may need a status column (e.g. draft/unverified/verified) for webhook-created rows. (3) public.quotes may need `is_final_quote` and/or logic to select “last quote before Scheduled/In Progress” (see Decisions). **ServiceM8 link:** nullable `servicem8_job_uuid` on job_performance already added (audit: BACKEND_DATABASE.md).
 
 ---
 
@@ -67,16 +84,16 @@
 
 ### Period and ledger lifecycle
 
-- [ ] **59.5** Bonus period management: backend (and optional admin UI) to create/update bonus_periods (period_name, start_date, end_date, status open/processing/closed). Define who can create/close periods (e.g. admin only).
-- [ ] **59.6** Job ledger creation: define when a job_performance row is created (e.g. when a ServiceM8 job is marked complete/invoiced, or on admin “finalise job” action). Document whether creation is triggered by sync from ServiceM8 or manual “add job to period” and how servicem8_job_id, servicem8_job_uuid (fallback), and quote_id are set.
-- [ ] **59.7** Populate job_performance: design flow to set invoiced_revenue_exc_gst, materials_cost, quoted_labor_minutes (per 59.3), standard_parts_runs, seller_fault_parts_runs, missed_materials_cost, is_callback, callback_reason, callback_cost. Specify which fields are synced from ServiceM8 (after 59.1) vs admin/tech entry.
-- [ ] **59.8** Populate job_personnel: design flow to assign technicians to a job (is_seller, is_executor) and record onsite_minutes, travel_shopping_minutes. Specify who enters (admin vs tech) and whether any values can be inferred from ServiceM8 schedule/activities (after 59.1).
+- [x] **59.5** Bonus period management: backend (and optional admin UI) to create/update bonus_periods (period_name, start_date, end_date, status open/processing/closed). Define who can create/close periods (e.g. admin only).
+- [ ] **59.6** Job ledger creation: **Decision** — triggered automatically by **ServiceM8 webhook** when job status → Completed or Invoiced (webhook to be set up later, POST to our server). New row is created in **Draft/Unverified** state; admin must verify before payroll. Implement webhook handler; set servicem8_job_id, servicem8_job_uuid from webhook payload; set quote_id by matching to **active quote** (last quote before job was Scheduled/In Progress — see Decisions). Schema: add job_performance status (draft/unverified/verified) if not present.
+- [ ] **59.7** Populate job_performance: **Decision** — **ServiceM8 auto-populates:** invoiced_revenue_exc_gst (from job.total_invoice_amount), materials_cost (from JobMaterial endpoint; use our DB pricing with ServiceM8 fallback), servicem8_job_id. **Admin/System:** quote_id (matched automatically using “last quote before Scheduled/In Progress”), bonus_period_id. **Tech/Admin manual:** callbacks (is_callback, callback_reason, callback_cost), seller_fault_parts_runs, standard_parts_runs, missed_materials_cost as per plan. quoted_labor_minutes from linked quote (59.3). See Decisions and plan file.
+- [ ] **59.8** Populate job_personnel: **Decision** — Pull raw **JobActivity** data as baseline for total hours; **Admin must verify/split** into onsite_minutes and travel_shopping_minutes in our app before locking the period (ServiceM8 check-in/check-out is unreliable; API cannot reliably distinguish onsite vs travel/shopping). Assign is_seller, is_executor (admin or from schedule where feasible). See Decisions and plan file.
 
 ---
 
 ### Calculation engine (backend)
 
-- [ ] **59.9** Job GP: implement calculation of Job Gross Profit from job_performance (revenue − materials − parts-run deductions − callback cost, etc.) using plan rules (e.g. $20 per standard_parts_runs, missed_materials_cost, seller_fault deductions). Apply standardised bonus labour rate ($35) where specified.
+- [ ] **59.9** Job GP: implement calculation of Job Gross Profit from job_performance (revenue − materials − parts-run deductions − callback cost, etc.) using plan rules (e.g. $20 per standard_parts_runs, missed_materials_cost, seller_fault deductions). **Revenue:** base GP on job total_invoice_amount (invoiced amount). **Bonus labour rate:** read from `public.company_settings` or env `BONUS_LABOUR_RATE` — do not hardcode (see Decisions).
 - [ ] **59.10** Period pot: 10% of sum of (eligible Job GP) for jobs in the period; deduct callback_cost from period pot. Respect bonus_periods status (e.g. only include jobs in periods with status open or processing as defined).
 - [ ] **59.11** 60/40 and “Do it all, get it all”: for each job, compute Seller share (60%) and Executor share (40%); if single tech is both seller and executor for that job, 100% to that tech. Apply Truck Share (split by headcount) when multiple sellers and/or executors.
 - [ ] **59.12** Callback rules: if is_callback and callback_reason = poor_workmanship, void Executor GP credit for that job; if callback_reason = bad_scoping, void Seller GP credit. Deduct callback_cost from period pot (59.10).
@@ -96,8 +113,8 @@
 
 ### Integration and regression
 
-- [ ] **59.19** Quote flow: if 59.3 choice is (A), implement saving to public.quotes when Add to Job (or Create New Job)—include labour_hours (and items/totals as needed)—and set both servicem8_job_id and servicem8_job_uuid (add nullable column to quotes if needed); ensure existing Add to Job / Create New Job flows remain working and Railway-safe. (Audit: we currently do not write to quotes; ServiceM8 audit recommends storing both identifiers.)
-- [ ] **59.19.1** When persisting to public.quotes, set **items** (JSONB) to a clean array of **material** lines only (exclude labour): each element at least `{ id, qty }` (product id + quantity); optionally include name, item_number, servicem8_material_uuid for ServiceM8 matching. Use the same structure as calculate-quote materials (id, qty) so Missed Materials detection can compare quoted items to ServiceM8 job materials. Document the intended items shape in BACKEND_DATABASE or Section 59. See BACKEND_DATABASE.md “Audit: Material quoting and public.quotes.items”.
+- [x] **59.19** Quote flow: implement saving to public.quotes when Add to Job (or Create New Job)—include labour_hours (and items/totals as needed)—and set both servicem8_job_id and servicem8_job_uuid (add nullable column to quotes if needed). **Active-quote rule:** add `is_final_quote` and/or persist job status at quote time so we can select “last quote before Scheduled/In Progress” when matching quote_id to job_performance (see Decisions). Ensure existing Add to Job / Create New Job flows remain working and Railway-safe.
+- [x] **59.19.1** When persisting to public.quotes, set **items** (JSONB) to a clean array of **material** lines only (exclude labour): each element at least `{ id, qty }` (product id + quantity); optionally include name, item_number, servicem8_material_uuid for ServiceM8 matching. Use the same structure as calculate-quote materials (id, qty) so Missed Materials detection can compare quoted items to ServiceM8 job materials. Document the intended items shape in BACKEND_DATABASE or Section 59. See BACKEND_DATABASE.md “Audit: Material quoting and public.quotes.items”.
 - [ ] **59.20** ServiceM8 sync (if any): if we sync job or payment data from ServiceM8 into job_performance, implement sync job or one-off import; handle token expiry and errors. Document what is synced and how often.
 - [ ] **59.21** E2E and regression: ensure quote modal, Add to Job, Create New Job, and existing bonus-unrelated features still pass. Add E2E or manual tests for bonus views if admin UI is added.
 

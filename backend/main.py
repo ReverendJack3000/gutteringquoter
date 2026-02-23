@@ -6,7 +6,7 @@ import base64
 import logging
 import os
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +27,8 @@ from app.diagrams import (
 from app.gutter_accessories import expand_elements_with_gutter_accessories
 from app.pricing import get_product_pricing
 from app.products import get_products
+from app.bonus_periods import create_period, list_periods, update_period
+from app.quotes import QuoteMaterialLine, insert_quote_for_job
 from app.supabase_client import get_supabase
 from app import servicem8 as sm8
 from fastapi.middleware.cors import CORSMiddleware
@@ -340,6 +342,7 @@ class AddToJobRequest(BaseModel):
     user_name: str = Field("", description="Name of app user for note")
     profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
     people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
+    quote_materials: Optional[list[QuoteMaterialLine]] = Field(None, description="Material lines (id, qty) for quote items; exclude labour (REP-LAB)")
 
 
 class UploadJobAttachmentRequest(BaseModel):
@@ -358,7 +361,26 @@ class CreateNewJobRequest(BaseModel):
     user_name: str = Field("", description="Name of app user for note")
     profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
     people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
+    quote_materials: Optional[list[QuoteMaterialLine]] = Field(None, description="Material lines (id, qty) for quote items; exclude labour (REP-LAB)")
     image_base64: Optional[str] = Field(None, description="PNG blueprint image as base64 (no data URL prefix); attached to both original and new job")
+
+
+class CreateBonusPeriodRequest(BaseModel):
+    """Create a bonus period (admin only). Status defaults to open."""
+
+    period_name: str = Field(..., min_length=1, max_length=255)
+    start_date: date = Field(...)
+    end_date: date = Field(...)
+    status: str = Field("open", description="open | processing | closed")
+
+
+class UpdateBonusPeriodRequest(BaseModel):
+    """Update bonus period (admin only). Omitted fields unchanged."""
+
+    period_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    status: Optional[str] = Field(None, description="open | processing | closed")
 
 
 app = FastAPI(
@@ -710,6 +732,80 @@ def api_admin_remove_user(
         logger.warning("Failed to delete profile row for %s (auth user already removed): %s", target_uid, e)
 
     return {"message": "User removed."}
+
+
+# --- Bonus periods (Section 59.5): admin-only create/update/list ---
+
+@app.get("/api/bonus/periods")
+def api_bonus_periods_list(
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """List all bonus periods (admin only). Ordered by start_date descending."""
+    try:
+        supabase = get_supabase()
+        periods = list_periods(supabase)
+        return {"periods": periods}
+    except Exception as e:
+        logger.exception("Failed to list bonus periods: %s", e)
+        raise HTTPException(500, "Failed to list bonus periods")
+
+
+@app.post("/api/bonus/periods")
+def api_bonus_periods_create(
+    body: CreateBonusPeriodRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Create a bonus period (admin only). Status defaults to open."""
+    if body.status not in ("open", "processing", "closed"):
+        raise HTTPException(400, "status must be open, processing, or closed")
+    if body.start_date > body.end_date:
+        raise HTTPException(400, "start_date must be before or equal to end_date")
+    try:
+        supabase = get_supabase()
+        row = create_period(
+            supabase,
+            period_name=body.period_name,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            status=body.status,
+        )
+        return row
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Failed to create bonus period: %s", e)
+        raise HTTPException(500, "Failed to create bonus period")
+
+
+@app.patch("/api/bonus/periods/{period_id}")
+def api_bonus_periods_update(
+    period_id: str,
+    body: UpdateBonusPeriodRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Update a bonus period (admin only). Only provided fields are updated."""
+    if body.status is not None and body.status not in ("open", "processing", "closed"):
+        raise HTTPException(400, "status must be open, processing, or closed")
+    if body.start_date is not None and body.end_date is not None and body.start_date > body.end_date:
+        raise HTTPException(400, "start_date must be before or equal to end_date")
+    try:
+        supabase = get_supabase()
+        row = update_period(
+            supabase,
+            period_id=period_id,
+            period_name=body.period_name,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            status=body.status,
+        )
+        return row
+    except LookupError:
+        raise HTTPException(404, "Period not found")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Failed to update bonus period %s: %s", period_id, e)
+        raise HTTPException(500, "Failed to update bonus period")
 
 
 @app.get("/api/labour-rates")
@@ -1112,12 +1208,29 @@ def api_servicem8_add_to_job(
     if not ok:
         raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
 
-    # Return identifiers so the client can persist both for diagram save even if overlay state is lost (59.4.4)
+    # Persist quote for bonus/ledger (59.19); fail request if DB insert fails so we don't silently miss quotes
     job = sm8.fetch_job_by_uuid(tokens["access_token"], body.job_uuid)
+    generated_job_id = job.get("generated_job_id") if job else None
+    try:
+        supabase = get_supabase()
+        items = [m.model_dump() for m in (body.quote_materials or [])]
+        insert_quote_for_job(
+            supabase,
+            servicem8_job_id=generated_job_id or "",
+            servicem8_job_uuid=body.job_uuid,
+            labour_hours=body.labour_hours,
+            quote_total=body.quote_total,
+            material_cost=body.material_cost,
+            items=items,
+        )
+    except Exception as e:
+        logger.exception("Failed to persist quote for Add to Job: %s", e)
+        raise HTTPException(503, "Quote was added to the job in ServiceM8, but we couldn't save a copy for bonus tracking. Please don't add to this job again; contact support if you need this recorded.")
+
     return {
         "success": True,
         "uuid": body.job_uuid,
-        "generated_job_id": job.get("generated_job_id") if job else None,
+        "generated_job_id": generated_job_id,
     }
 
 
@@ -1328,6 +1441,24 @@ def api_servicem8_create_new_job(
 
     new_job = sm8.fetch_job_by_uuid(access_token, new_job_uuid)
     generated_job_id = new_job.get("generated_job_id") if new_job else None
+
+    # Persist quote for new job (59.19); fail request if DB insert fails
+    try:
+        supabase = get_supabase()
+        items = [m.model_dump() for m in (body.quote_materials or [])]
+        insert_quote_for_job(
+            supabase,
+            servicem8_job_id=generated_job_id or "",
+            servicem8_job_uuid=new_job_uuid,
+            labour_hours=body.labour_hours,
+            quote_total=body.quote_total,
+            material_cost=body.material_cost,
+            items=items,
+        )
+    except Exception as e:
+        logger.exception("Failed to persist quote for Create New Job: %s", e)
+        raise HTTPException(503, "New job was created in ServiceM8, but we couldn't save a copy for bonus tracking. Please don't create another copy of this job; contact support if you need this recorded.")
+
     return {"success": True, "new_job_uuid": new_job_uuid, "generated_job_id": generated_job_id}
 
 

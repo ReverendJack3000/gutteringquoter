@@ -72,6 +72,32 @@ Per-user saved blueprint/diagram state (Sections 33 & 34). Blueprint image store
 
 **Storage:** Bucket `blueprints` (public read). Paths: `{user_id}/{diagram_id}/blueprint.png`, `thumb.png`.
 
+### 2.5 `public.quotes`
+
+Quote estimates; persisted when Add to Job or Create New Job succeeds (Section 59.19). Referenced by `job_performance.quote_id`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | PRIMARY KEY, default uuid_generate_v4() |
+| `quote_number` | varchar | Optional display number |
+| `customer_name` | varchar | Optional |
+| `property_address` | text | Optional |
+| `labour_hours` | numeric | Quoted labour hours (for quoted_labor_minutes = round(labour_hours * 60)) |
+| `labour_rate_id` | uuid | Optional FK to labour_rates |
+| `materials_subtotal` | numeric | Optional |
+| `labour_subtotal` | numeric | Optional |
+| `total` | numeric | Quote total (exc GST) |
+| `blueprint_image_url` | text | Optional |
+| `items` | jsonb | Material lines only — see “items shape” below |
+| `status` | varchar | Default 'draft' |
+| `servicem8_job_id` | varchar | ServiceM8 job number (generated_job_id) |
+| `servicem8_job_uuid` | uuid | ServiceM8 job UUID (nullable). Migration: `add_quotes_servicem8_job_uuid`. |
+| `created_at` | timestamptz | default now() |
+| `updated_at` | timestamptz | default now() |
+| `is_final_quote` | boolean | NOT NULL default false; set by webhook when job → Scheduled/In Progress (Section 59.4). |
+
+**items (JSONB) shape (Section 59.19.1):** When persisting a quote (Add to Job / Create New Job), `items` is set to an array of **material** lines only (exclude labour/REP-LAB). Each element: at least `{ "id": "<product_id>", "qty": <number> }`; optionally `name`, `item_number`, `servicem8_material_uuid`. Used for Missed Materials comparison with ServiceM8 job materials. See “Audit: Material quoting and public.quotes.items”.
+
 ### 3. Future (optional)
 
 - **`public.profiles`** – If using Supabase Auth: extend with app-specific profile fields; link to `auth.users` via `id`. App role column `role`: one of `viewer`, `editor`, `technician`, `admin`.
@@ -89,6 +115,53 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 | **`public.job_personnel`** | Who was on each job (seller/executor), onsite and travel/shopping minutes. | `job_performance_id` → `public.job_performance.id`; `technician_id` → `auth.users.id`. |
 
 **RLS:** Off on all three. Migrations: `add_bonus_periods_job_performance_job_personnel`; `add_servicem8_job_uuid_to_saved_diagrams_and_job_performance` (adds nullable `servicem8_job_uuid` to `saved_diagrams` and `job_performance`).
+
+**Section 59.4 additions (implemented):**
+
+- **`public.job_performance.status`** — `varchar` with `CHECK (status IN ('draft','verified','processed'))`, default `'draft'`. Webhook-created rows are `draft`; after admin review → `verified`; when period closed → `processed`. Only verified/processed rows in period pot. Migration: `add_job_performance_status`.
+- **`public.quotes.is_final_quote`** — `boolean` NOT NULL default `false`. When a job moves to Scheduled/In Progress (webhook), backend sets `is_final_quote = true` on the most recently updated quote for that `servicem8_job_id`. That quote is used for `quoted_labor_minutes`. Migration: `add_quotes_is_final_quote`.
+- **`public.company_settings`** — Single-row table for app config (no hardcoded bonus rate). Columns: `id` (integer PK, check id = 1), `bonus_labour_rate` (numeric NOT NULL default 35.00), `updated_at` (timestamptz). Backend reads at calculation time; Admin UI can update. Migration: `add_company_settings_bonus_rate`.
+
+---
+
+## Staff → technician_id mapping (Section 59.2)
+
+**Purpose:** `job_personnel.technician_id` references `auth.users.id`. When we create job_personnel rows (from ServiceM8 job activities or admin assignment), we need to resolve ServiceM8 staff to our user id.
+
+### ServiceM8 staff response (read_staff)
+
+GET `/api_1.0/staff.json` returns an array of staff objects. Key fields for mapping:
+
+- **`uuid`** — ServiceM8 staff UUID (stable; use for API lookups and optional mapping table).
+- **`email`** — Staff email (string; may be empty for some staff).
+- **`first`**, **`last`** — Name (display only).
+
+Full field list: see `docs/SERVICEM8_API_REFERENCE.md` §5.
+
+### Our side
+
+- **auth.users:** `id` (UUID), `email` (from Supabase Auth; set at sign-up/invite).
+- **public.profiles:** `user_id` → auth.users.id, `role` (viewer | editor | technician | admin). Role is for app permissions; any app user can be a “technician” for bonus if we assign them to jobs.
+
+### Mapping decision: derive from email (no mapping table)
+
+We **do not** add a mapping table for the first implementation. Resolve `technician_id` as follows:
+
+1. **Input:** ServiceM8 staff record (e.g. from GET staff.json or from job activity assignee).
+2. **Key:** Staff `email` (trimmed, case-insensitive). If email is empty, we cannot derive technician_id for that staff.
+3. **Lookup:** Match staff email to `auth.users.email` (case-insensitive). Use the same approach as `_resolve_company_email_to_user_id()` in `backend/app/servicem8.py`: list auth users (service role), find user where email matches, return that user’s `id` as `technician_id`.
+4. **Cache:** Reuse or extend a cache (e.g. email → user_id) to avoid repeated list_users calls when resolving many staff in one run.
+5. **No match:** If no auth user has that email, leave `technician_id` NULL for that staff in job_personnel, or do not create a job_personnel row until an admin links them. Optional: log unmapped staff for admin follow-up.
+
+**Rationale:** Technicians who use the app are invited by email; the same email is typically used in ServiceM8. A mapping table would be needed only if we must support staff whose ServiceM8 email differs from their app login email, or to exclude certain staff from bonus.
+
+### Optional later: mapping table
+
+If we need to override or handle non-matching emails, add a table such as:
+
+- **servicem8_staff_technician_map:** `servicem8_staff_uuid` (UUID, UNIQUE), `technician_id` (UUID → auth.users.id). Look up by staff uuid first; if row exists use its technician_id; else fall back to email match. Admin UI could manage this table.
+
+No migration for this until required.
 
 ---
 
@@ -126,6 +199,41 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 - **Recommendation:** Before or as part of Section 59, introduce a way to store quoted labour for the job, for example: (1) **Option A:** When Add to Job (or Create New Job) runs, persist a row to `public.quotes` (e.g. quote_number, items, labour_hours, total, `servicem8_job_id`), then when creating `job_performance` link `quote_id` and set `quoted_labor_minutes = round(quote.labour_hours * 60)`. (2) **Option B:** When creating `job_performance`, accept `quoted_labor_minutes` (or quoted labour hours) from the client or from a dedicated “finalise job” payload that includes the quote snapshot. (3) **Option C:** Rely on ServiceM8 if they expose estimated/invoiced labour and we sync it. Document the chosen approach in Section 59 (task 59.3).
 
 **Schema impact:** The new bonus schema does **not** break the current quoting flow: we do not read or write `public.quotes` or `job_performance` today. Adding persistence for quoted labour is an additive change (new or extended write path) once the option above is decided.
+
+---
+
+## Source of quoted_labor_minutes (Section 59.3 decision)
+
+**Decision: Option A** — Persist to `public.quotes` when Add to Job (or Create New Job) runs; when creating a `job_performance` row, set `quoted_labor_minutes = round(quote.labour_hours * 60)` from the linked quote.
+
+**Rationale:**
+
+- **Single source of truth:** The quote row captures what was actually sent to ServiceM8 at Add to Job / Create New Job time, so estimation accuracy (15% / 30 min rule) compares actual labour to that stored value.
+- **Aligns with existing plan:** Task 59.19 already covers persisting to `public.quotes` on Add to Job / Create New Job (including `servicem8_job_id`, `servicem8_job_uuid`, labour and items). 59.19.1 defines the `items` shape for Missed Materials. Using the same quote row for `quoted_labor_minutes` avoids a second source or client-supplied value that could drift.
+- **Option B (client/finalise payload):** Would require the client or admin to supply quoted labour when creating `job_performance`; that value would still need to come from somewhere (e.g. diagram or a stored quote). Option A stores it once at quote time.
+- **Option C (ServiceM8):** ServiceM8 “estimated labour” / “quoted hours” on the job object is **not yet confirmed** (see `docs/SERVICEM8_API_REFERENCE.md` §1). We do not rely on it for 59.3; we can revisit if ServiceM8 later exposes a reliable field.
+
+**Implementation (no code in this change):**
+
+- **59.19:** Implement saving to `public.quotes` on Add to Job / Create New Job (include `labour_hours`, `servicem8_job_id`, `servicem8_job_uuid`, and materials `items` per 59.19.1). Ensure existing flows remain working and Railway-safe.
+- **59.6 / 59.7:** When creating a `job_performance` row, set `quote_id` to the quote created at Add to Job (or Create New Job) and set `quoted_labor_minutes = round(quote.labour_hours * 60)`. If `public.quotes` does not yet have a `labour_hours` column, add it (or store labour in an existing column) as part of 59.19.
+
+**Constraint respected:** We do not write to `public.quotes` until 59.19 is implemented; this section only records the decision and the intended behaviour once that write path exists.
+
+---
+
+## Section 59 decisions (data flow, quote link, rate, time)
+
+The following are **locked decisions** for bonus ledger and calculation. Full rationale and implementation notes: **`docs/plans/2026-02-23-section-59-data-flow-decisions.md`**. Summary:
+
+- **job_performance creation:** Triggered by **ServiceM8 webhook** when job status → Completed or Invoiced (webhook to be set up later). New rows created with **status = 'draft'**; admin verifies → **verified**; period closed → **processed**. Schema: **status** column added (draft/verified/processed). Only verified/processed in period pot.
+- **Data ownership:** ServiceM8 auto-populates: invoiced_revenue_exc_gst, materials_cost, servicem8_job_id. Admin/System: quote_id (matched automatically), bonus_period_id. Tech/Admin manual: callbacks, seller_fault_parts_runs, onsite_minutes vs travel_shopping_minutes (admin verifies/splits from raw JobActivity before locking period).
+- **Active quote (multiple quotes per job):** The active quote is the **last** quote (by updated_at) for that servicem8_job_id when the job moves to Scheduled or In Progress. **`is_final_quote`** (boolean) added to `public.quotes`; when webhook reports job → Scheduled/In Progress, backend sets `is_final_quote = true` on that most recent quote.
+- **Revenue for GP:** Base on **job.total_invoice_amount** (invoiced amount).
+- **Job Materials:** Use JobMaterial endpoint; pull pricing/GP from our DB, fall back to ServiceM8 if missing.
+- **Job Activities:** Pull raw data as baseline for total hours; **Admin verifies/splits** into onsite_minutes and travel_shopping_minutes in our app before locking period (do not rely on API to distinguish onsite vs travel).
+- **Standardised bonus labour rate:** Do not hardcode. Store in **`public.company_settings`** (1-row table, `bonus_labour_rate` column; default 35). Backend reads at calculation time; Admin can update without redeploy.
+- **quoted_labor_minutes:** Confirmed: `round(quote.labour_hours * 60)` from linked quote (see “Source of quoted_labor_minutes” above).
 
 ---
 
@@ -214,6 +322,12 @@ Migrations are applied via Supabase MCP (`apply_migration`) or the Supabase dash
 Current migrations in **Jacks Quote App** (see Supabase dashboard or `list_migrations` MCP):
 
 1. **create_products** – Creates `public.products` (with RLS and a public read policy) and inserts the six MVP products.
+2. **add_company_settings_bonus_rate** (Section 59.4) – Creates `public.company_settings` (1-row: id=1, bonus_labour_rate default 35, updated_at). No hardcoded bonus rate.
+3. **add_job_performance_status** (Section 59.4) – Adds `status` to `job_performance`: draft | verified | processed, default 'draft'.
+4. **add_quotes_is_final_quote** (Section 59.4) – Adds `is_final_quote` boolean (default false) to `public.quotes` for active-quote rule.
+5. **add_quotes_servicem8_job_uuid** (Section 59.19) – Adds nullable `servicem8_job_uuid` (uuid) to `public.quotes` for API lookups and quote–job link.
+
+(Other migrations omitted for brevity; see Supabase dashboard or `list_migrations` MCP for full list.)
 
 ---
 

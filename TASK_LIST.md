@@ -91,7 +91,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 59 | 59.1–59.23, 59.4.1–59.4.4 | Technician quotes: team pool bonus — research, ServiceM8 job link (capture/save job_uuid), period/ledger, calculation engine, API/UI. See section-59.md and BACKEND_DATABASE.md audits. |
+| 59 | 59.6–59.23 | Technician quotes: team pool bonus. 59.19 (persist quotes), 59.5 (bonus period API) done. Remainder: 59.6 (webhook), ledger/calculation engine, API/UI. See section-59.md and BACKEND_DATABASE.md. |
 
 ---
 
@@ -109,6 +109,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **Port** | Default (e.g. 8000 for FastAPI) | |
 | **Codebase** | From scratch | |
 | **Data / products** | Supabase (Jacks Quote App) | `public.products`; backend requires `.env` with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY |
+| **ServiceM8 auth** | OAuth only in app; API key for local dev only | App uses OAuth 2.0 only. `SERVICEM8_API_KEY` in `backend/.env` is for local dev only. All API-key scripts live in **`scripts/servicem8-api-key-local/`**; never rewrite project files for them. Do not use the API key in production or app code. |
 
 ---
 
