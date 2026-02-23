@@ -24,6 +24,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **Mobile app** (adaptive layout, toolbars, camera, header) | [docs/tasks/section-54.md](docs/tasks/section-54.md) | 54 |
 | Mobile accessibility (Apple HIG) | [docs/tasks/section-55.md](docs/tasks/section-55.md) | 55 |
 | Toolbar carve-out (toolbar.js), mobile canvas fit/pan | [docs/tasks/sections-56-57.md](docs/tasks/sections-56-57.md) | 56–57 |
+| Bonus period / job performance schema (Supabase) | [docs/tasks/section-58.md](docs/tasks/section-58.md) | 58 |
+| Technician quotes: team pool bonus (research + implementation) | [docs/tasks/section-59.md](docs/tasks/section-59.md) | 59 |
 
 **By section number — open the file that contains your section:**
 
@@ -39,6 +41,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | [section-54.md](docs/tasks/section-54.md) |
 | 55 | [section-55.md](docs/tasks/section-55.md) |
 | 56, 57 | [sections-56-57.md](docs/tasks/sections-56-57.md) |
+| 58 | [section-58.md](docs/tasks/section-58.md) |
+| 59 | [section-59.md](docs/tasks/section-59.md) |
 
 ---
 
@@ -87,6 +91,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
+| 59 | 59.1–59.23, 59.4.1–59.4.4 | Technician quotes: team pool bonus — research, ServiceM8 job link (capture/save job_uuid), period/ledger, calculation engine, API/UI. See section-59.md and BACKEND_DATABASE.md audits. |
+
 ---
 
 ## Locked decisions

@@ -313,6 +313,7 @@ class SaveDiagramRequest(BaseModel):
     blueprintImageUrl: Optional[str] = Field(None, description="When base64 not sent (e.g. tainted canvas), copy from this storage URL to persist blueprint")
     thumbnailBase64: Optional[str] = Field(None, description="Thumbnail PNG as base64")
     servicem8JobId: Optional[str] = Field(None, max_length=32, description="ServiceM8 job number to stamp on the saved project")
+    servicem8JobUuid: Optional[str] = Field(None, description="ServiceM8 job UUID for API lookups")
 
 
 class UpdateDiagramRequest(BaseModel):
@@ -322,6 +323,7 @@ class UpdateDiagramRequest(BaseModel):
     blueprintImageUrl: Optional[str] = Field(None, description="Copy from this storage URL when base64 not sent")
     thumbnailBase64: Optional[str] = None
     servicem8JobId: Optional[str] = Field(None, max_length=32)
+    servicem8JobUuid: Optional[str] = Field(None, description="ServiceM8 job UUID for API lookups")
 
 
 class AddToJobElement(BaseModel):
@@ -870,6 +872,7 @@ def api_create_diagram(body: SaveDiagramRequest, user_id: Any = Depends(get_curr
             blueprint_image_source_url=body.blueprintImageUrl,
             thumbnail_bytes=thumbnail_bytes,
             servicem8_job_id=body.servicem8JobId,
+            servicem8_job_uuid=body.servicem8JobUuid,
         )
         return created
     except RuntimeError as e:
@@ -918,6 +921,7 @@ def api_update_diagram(
             blueprint_image_source_url=body.blueprintImageUrl,
             thumbnail_bytes=thumbnail_bytes,
             servicem8_job_id=body.servicem8JobId,
+            servicem8_job_uuid=body.servicem8JobUuid,
         )
     except RuntimeError as e:
         logger.exception("Update diagram failed: %s", e)
@@ -1108,7 +1112,13 @@ def api_servicem8_add_to_job(
     if not ok:
         raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
 
-    return {"success": True}
+    # Return identifiers so the client can persist both for diagram save even if overlay state is lost (59.4.4)
+    job = sm8.fetch_job_by_uuid(tokens["access_token"], body.job_uuid)
+    return {
+        "success": True,
+        "uuid": body.job_uuid,
+        "generated_job_id": job.get("generated_job_id") if job else None,
+    }
 
 
 @app.post("/api/servicem8/upload-job-attachment")

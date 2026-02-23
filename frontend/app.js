@@ -3406,13 +3406,19 @@ function initJobConfirmationOverlay() {
       }
       addBtn.classList.remove('job-confirm-add-btn--loading');
       addBtn.classList.add('job-confirm-add-btn--done');
-      const jobNumberForSave = document.getElementById('jobConfirmAddId')?.textContent?.trim() || '';
+      // Prefer response identifiers when present so we can persist both even if overlay state is lost (59.4.4)
+      const jobNumberForSave = (data.generated_job_id != null && data.generated_job_id !== '')
+        ? String(data.generated_job_id)
+        : (document.getElementById('jobConfirmAddId')?.textContent?.trim() || '');
+      const jobUuidForSave = (data.uuid != null && data.uuid !== '')
+        ? String(data.uuid)
+        : (overlay?.dataset?.jobUuid || '');
       setTimeout(() => {
         hideOverlay();
         showFeedback(feedbackMsg, false);
         addBtn.classList.remove('job-confirm-add-btn--done');
         addBtn.disabled = false;
-        if (jobNumberForSave) autoSaveDiagramWithJobNumber(jobNumberForSave);
+        if (jobNumberForSave) autoSaveDiagramWithJobNumber(jobNumberForSave, jobUuidForSave);
       }, 800);
     } catch (err) {
       console.error('Add to Job failed', err);
@@ -3487,6 +3493,7 @@ function initJobConfirmationOverlay() {
         createNewBtn.classList.add('job-confirm-create-new--done');
       }
       const newJobNumber = data.generated_job_id || data.new_job_uuid || '';
+      const newJobUuid = data.new_job_uuid || '';
       setTimeout(() => {
         hideOverlay();
         showFeedback('New job created. Note and blueprint added to both jobs.', false);
@@ -3494,7 +3501,7 @@ function initJobConfirmationOverlay() {
           createNewBtn.classList.remove('job-confirm-create-new--done');
           createNewBtn.disabled = false;
         }
-        if (newJobNumber) autoSaveDiagramWithJobNumber(newJobNumber);
+        if (newJobNumber) autoSaveDiagramWithJobNumber(newJobNumber, newJobUuid);
       }, 800);
     } catch (err) {
       console.error('Create New Job failed', err);
@@ -9652,9 +9659,11 @@ function getDiagramDataForSave() {
 
 /**
  * Auto-save current diagram with a ServiceM8 Job # stamp (after Add to Job or Create New Job).
- * Creates a new saved project with name "ProjectName (Job #123)" and servicem8JobId set.
+ * Creates a new saved project with name "ProjectName (Job #123)" and servicem8JobId (and optional servicem8JobUuid) set.
+ * @param {string} jobNumber - Job number to stamp (required).
+ * @param {string} [jobUuid] - Optional ServiceM8 job UUID; when provided, stored alongside job number for API lookups.
  */
-async function autoSaveDiagramWithJobNumber(jobNumber) {
+async function autoSaveDiagramWithJobNumber(jobNumber, jobUuid) {
   if (!jobNumber || !authState.token) return;
   const projectNameInput = document.getElementById('toolbarProjectNameInput');
   const projectName = (projectNameInput?.value || '').trim() || 'Untitled';
@@ -9668,6 +9677,9 @@ async function autoSaveDiagramWithJobNumber(jobNumber) {
     thumbnailBase64: thumbnailBase64 || undefined,
     servicem8JobId: String(jobNumber),
   };
+  if (jobUuid && String(jobUuid).trim()) {
+    body.servicem8JobUuid = String(jobUuid).trim();
+  }
   try {
     const res = await fetch('/api/diagrams', {
       method: 'POST',

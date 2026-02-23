@@ -45,12 +45,25 @@ def _storage_path(user_id: UUID, diagram_id: UUID, filename: str) -> str:
     return f"{user_id}/{diagram_id}/{filename}"
 
 
+def _parse_servicem8_job_uuid(value: Optional[str]) -> Optional[str]:
+    """Return canonical UUID string if value is a valid UUID; otherwise None. Does not raise."""
+    if not value or not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        return str(UUID(value))
+    except (ValueError, TypeError):
+        return None
+
+
 def list_diagrams(user_id: UUID):
-    """Return list of saved diagrams for user (id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, created_at, updated_at)."""
+    """Return list of saved diagrams for user (id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, servicem8_job_uuid, created_at, updated_at)."""
     supabase = get_supabase()
     resp = (
         supabase.table("saved_diagrams")
-        .select("id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, created_at, updated_at")
+        .select("id, name, thumbnail_url, blueprint_image_url, servicem8_job_id, servicem8_job_uuid, created_at, updated_at")
         .eq("user_id", str(user_id))
         .order("created_at", desc=True)
         .execute()
@@ -63,6 +76,7 @@ def list_diagrams(user_id: UUID):
             "thumbnailUrl": r.get("thumbnail_url"),
             "blueprintImageUrl": r.get("blueprint_image_url"),
             "servicem8JobId": r.get("servicem8_job_id"),
+            "servicem8JobUuid": str(r["servicem8_job_uuid"]) if r.get("servicem8_job_uuid") is not None else None,
             "createdAt": r.get("created_at"),
             "updatedAt": r.get("updated_at"),
         }
@@ -85,6 +99,7 @@ def get_diagram(user_id: UUID, diagram_id: UUID) -> Optional[dict]:
     if not rows:
         return None
     r = rows[0]
+    suuid = r.get("servicem8_job_uuid")
     return {
         "id": str(r["id"]),
         "name": r.get("name", ""),
@@ -92,6 +107,7 @@ def get_diagram(user_id: UUID, diagram_id: UUID) -> Optional[dict]:
         "blueprintImageUrl": r.get("blueprint_image_url"),
         "thumbnailUrl": r.get("thumbnail_url"),
         "servicem8JobId": r.get("servicem8_job_id"),
+        "servicem8JobUuid": str(suuid) if suuid is not None else None,
         "createdAt": r.get("created_at"),
         "updatedAt": r.get("updated_at"),
     }
@@ -106,6 +122,7 @@ def create_diagram(
     blueprint_image_source_url: Optional[str] = None,
     thumbnail_bytes: Optional[bytes] = None,
     servicem8_job_id: Optional[str] = None,
+    servicem8_job_uuid: Optional[str] = None,
 ) -> dict:
     """Insert row and optionally upload blueprint/thumbnail to Storage. Returns created diagram meta."""
     if not blueprint_bytes and blueprint_image_source_url:
@@ -118,6 +135,9 @@ def create_diagram(
     }
     if servicem8_job_id is not None:
         insert["servicem8_job_id"] = servicem8_job_id[:32] if servicem8_job_id else None
+    parsed_uuid = _parse_servicem8_job_uuid(servicem8_job_uuid)
+    if parsed_uuid is not None:
+        insert["servicem8_job_uuid"] = parsed_uuid
     resp = supabase.table("saved_diagrams").insert(insert).execute()
     rows = resp.data or []
     if not rows:
@@ -156,6 +176,7 @@ def create_diagram(
         "blueprintImageUrl": blueprint_url,
         "thumbnailUrl": thumbnail_url,
         "servicem8JobId": insert.get("servicem8_job_id"),
+        "servicem8JobUuid": insert.get("servicem8_job_uuid"),
         "createdAt": row.get("created_at"),
         "updatedAt": row.get("updated_at"),
     }
@@ -171,6 +192,7 @@ def update_diagram(
     blueprint_image_source_url: Optional[str] = None,
     thumbnail_bytes: Optional[bytes] = None,
     servicem8_job_id: Optional[str] = None,
+    servicem8_job_uuid: Optional[str] = None,
 ) -> Optional[dict]:
     """Update diagram; optionally replace image/thumbnail. Returns updated row or None if not found."""
     if not blueprint_bytes and blueprint_image_source_url:
@@ -186,6 +208,8 @@ def update_diagram(
         updates["data"] = data
     if servicem8_job_id is not None:
         updates["servicem8_job_id"] = servicem8_job_id[:32] if servicem8_job_id else None
+    if servicem8_job_uuid is not None:
+        updates["servicem8_job_uuid"] = _parse_servicem8_job_uuid(servicem8_job_uuid)
 
     try:
         if blueprint_bytes:
