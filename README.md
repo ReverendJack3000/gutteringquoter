@@ -111,8 +111,8 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `POST /api/diagrams` – save diagram (requires Bearer token)
 - `GET /api/diagrams/{id}` – load diagram (requires Bearer token)
 - `GET /api/admin/user-permissions` – list users + roles for admin permissions management (requires Bearer token, role `admin`, and backend `SUPABASE_SERVICE_ROLE_KEY`)
-- `PATCH /api/admin/user-permissions/{user_id}` – update a user role (`viewer|editor|admin`) in `public.profiles` (requires Bearer token and role `admin`)
-- `POST /api/admin/user-permissions/invite` – invite user by email with optional default role (requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
+- `PATCH /api/admin/user-permissions/{user_id}` – update a user role (`viewer|editor|technician|admin`) in `public.profiles` (requires Bearer token and role `admin`)
+- `POST /api/admin/user-permissions/invite` – invite user by email with optional default role (viewer | editor | technician | admin; requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`)
 - `DELETE /api/admin/user-permissions/{user_id}` – remove user (cannot remove self or last admin; requires Bearer token, role `admin`, and `SUPABASE_SERVICE_ROLE_KEY`). **Super admin:** set `SUPER_ADMIN_EMAIL` in the backend environment to an admin user’s email; that user cannot be modified or removed by anyone.
 
 **Super admin setup (after setting `SUPER_ADMIN_EMAIL` on Railway or in `backend/.env`):** The user with that email must have `role = 'admin'` in `public.profiles`. Option A: from the project root run `python scripts/ensure_super_admin.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`). Option B: in Supabase Dashboard → SQL Editor run  

@@ -36,7 +36,7 @@ from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_APP_ROLES = {"viewer", "editor", "admin"}
+ALLOWED_APP_ROLES = {"viewer", "editor", "admin", "technician"}
 ADMIN_USERS_PAGE_SIZE = 200
 
 
@@ -298,12 +298,12 @@ class UpdatePricingItem(BaseModel):
 
 
 class UpdateUserPermissionRoleRequest(BaseModel):
-    role: str = Field(..., min_length=1, description="Role: viewer | editor | admin")
+    role: str = Field(..., min_length=1, description="Role: viewer | editor | admin | technician")
 
 
 class InviteUserRequest(BaseModel):
     email: str = Field(..., min_length=1, description="Email address to invite")
-    role: Optional[str] = Field("viewer", description="Default role: viewer | editor | admin")
+    role: Optional[str] = Field("viewer", description="Default role: viewer | editor | admin | technician")
 
 
 class SaveDiagramRequest(BaseModel):
@@ -565,7 +565,7 @@ def api_update_admin_user_permission(
     _ = user_id
     requested_role = str(body.role or "").strip().lower()
     if requested_role not in ALLOWED_APP_ROLES:
-        raise HTTPException(400, "Invalid role. Allowed roles: viewer, editor, admin")
+        raise HTTPException(400, "Invalid role. Allowed roles: viewer, editor, admin, technician")
     try:
         target_uuid = uuid_lib.UUID(target_user_id)
     except ValueError:

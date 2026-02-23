@@ -96,7 +96,7 @@ const state = {
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
 const authState = { token: null, email: null, user: null, role: 'viewer', supabase: null, recoveryLandingFromHash: false };
 
-const APP_ALLOWED_ROLES = new Set(['viewer', 'editor', 'admin']);
+const APP_ALLOWED_ROLES = new Set(['viewer', 'editor', 'admin', 'technician']);
 
 /** Shared Authorization header helper for signed-in API calls. */
 function getAuthHeaders() {
@@ -12556,7 +12556,7 @@ function renderUserPermissionsList() {
       const roleSelect = document.createElement('select');
       roleSelect.className = 'permissions-role-select';
       roleSelect.setAttribute('aria-label', `Role for ${user?.email || userId}`);
-      ['viewer', 'editor', 'admin'].forEach((roleValue) => {
+      ['viewer', 'editor', 'technician', 'admin'].forEach((roleValue) => {
         const option = document.createElement('option');
         option.value = roleValue;
         option.textContent = roleValue;

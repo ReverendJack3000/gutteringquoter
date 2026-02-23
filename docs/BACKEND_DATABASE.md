@@ -72,7 +72,7 @@ Per-user saved blueprint/diagram state (Sections 33 & 34). Blueprint image store
 
 ### 3. Future (optional)
 
-- **`public.profiles`** – If using Supabase Auth: extend with app-specific profile fields; link to `auth.users` via `id`.
+- **`public.profiles`** – If using Supabase Auth: extend with app-specific profile fields; link to `auth.users` via `id`. App role column `role`: one of `viewer`, `editor`, `technician`, `admin`.
 
 ---
 

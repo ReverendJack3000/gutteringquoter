@@ -44,8 +44,27 @@ When we hit an issue that might come up again, add an entry here so the project 
   - **503:** Backend cannot use Supabase Auth Admin API (usually missing/invalid `SUPABASE_SERVICE_ROLE_KEY` in Railway/runtime).
 - **Fix:**  
   - For **403**: confirm `public.profiles.role = 'admin'` for your user, then **sign out and sign in again** so JWT `app_metadata.role` refreshes.  
-  - For **503**: set a valid `SUPABASE_SERVICE_ROLE_KEY` in Railway/backend env, redeploy, then retry.
+  - For **503**: set a valid `SUPABASE_SERVICE_ROLE_KEY` in Railway/backend env, redeploy, then retry. **Local dev:** add `SUPABASE_SERVICE_ROLE_KEY=<service_role key>` to `backend/.env` (Supabase → Settings → API → service_role), then restart the server.
+  - **Wrong key:** If you still get 503 after setting the variable, make sure you pasted the **service_role** key, not the **anon** key. In Supabase → Settings → API they are listed separately; use the one labeled "service_role" (secret). The anon key will not work for User Permissions.
   - If changing your own role, always refresh auth session (sign out/in) before re-testing permissions.
+
+---
+
+## Technician role: 400 "Invalid role" or DB error when saving – 2026-02
+
+- **Symptom:** PATCH user-permissions or invite with role `technician` returns 400 "Invalid role. Allowed roles: ..." or a database constraint error when saving to `public.profiles`.
+- **Cause:** (1) Backend/frontend not updated to include `technician` in allowed roles (codebase should have it). (2) Supabase `public.profiles.role` has a CHECK constraint that only allows `viewer`, `editor`, `admin` (e.g. `role IN ('viewer','editor','admin')`).
+- **Fix:** (1) Confirm `ALLOWED_APP_ROLES` in `backend/main.py` and `APP_ALLOWED_ROLES` in `frontend/app.js` include `'technician'`. (2) In Supabase Dashboard → Table Editor → `public.profiles` → check the `role` column for a CHECK constraint. If present, apply a migration to allow `technician`. **Jacks Quote App:** Migration `allow_technician_role_in_profiles` was already applied (constraint now allows `viewer`, `editor`, `admin`, `technician`). **Using Supabase MCP in this project:** The MCP server name is **`user-supabase`** (not `supabase`). Use `list_tables` to inspect `public.profiles.role`, then `apply_migration` with name `allow_technician_role_in_profiles` and query: `ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check; ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role = ANY (ARRAY['viewer'::text, 'editor'::text, 'admin'::text, 'technician'::text]));` (project_id: `rlptjmkejfykisaefkeh`). Alternatively use Supabase Dashboard → SQL Editor with the same SQL.
+
+---
+
+## Supabase "Invalid API key" on server startup – 2026-02
+
+- **Symptom:** Server fails to start with `SupabaseException: Invalid API key` in `supabase_client.py` / `create_client`.
+- **Cause:** `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in `backend/.env` is not a valid Supabase key. Both anon and service_role keys are **JWTs**: long strings in three parts separated by dots (e.g. `eyJ...xxx.yyy.zzz`). If you pasted something that looks like `sb_secret_...` or a short token, that is the wrong format.
+- **Fix:** In Supabase → **Settings → API**, under **Project API keys**, copy the full key:
+  - **anon (public)** for `SUPABASE_ANON_KEY` – use "Reveal" and copy the entire JWT.
+  - **service_role (secret)** for `SUPABASE_SERVICE_ROLE_KEY` – same: copy the entire JWT (starts with `eyJ`, has two more dot-separated parts). Do not use a different "secret" field (e.g. from another product). If you only need the app to start and don’t need User Permissions yet, leave `SUPABASE_SERVICE_ROLE_KEY=` empty; the server will use the anon key and start (User Permissions will return 503 until you add the real service_role JWT).
 
 ---
 
