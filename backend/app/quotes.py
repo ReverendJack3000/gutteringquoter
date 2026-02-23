@@ -66,3 +66,28 @@ def insert_quote_for_job(
     if not quote_id:
         raise RuntimeError("Supabase quotes insert did not return id")
     return str(quote_id)
+
+
+def get_active_quote_for_job(supabase: Any, servicem8_job_id: str) -> Optional[dict[str, Any]]:
+    """
+    Return the active quote for a ServiceM8 job: latest by is_final_quote (true first) then updated_at.
+    Used by job_performance sync (59.6) and future webhook. Returns row with id, labour_hours or None.
+    """
+    if not servicem8_job_id or not str(servicem8_job_id).strip():
+        return None
+    job_id = str(servicem8_job_id).strip()[:32]
+    try:
+        resp = (
+            supabase.table("quotes")
+            .select("id, labour_hours")
+            .eq("servicem8_job_id", job_id)
+            .order("is_final_quote", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = (resp.data or []) if hasattr(resp, "data") else []
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.warning("get_active_quote_for_job failed for servicem8_job_id=%s: %s", job_id, e)
+        return None

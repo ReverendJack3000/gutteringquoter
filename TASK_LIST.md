@@ -48,8 +48,11 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/section-59-cron-sync
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 59.6 Job ledger creation (cron sync)
 
 **Uncompleted tasks (by section):**
 
@@ -91,7 +94,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 59 | 59.6–59.23 | Technician quotes: team pool bonus. 59.19 (persist quotes), 59.5 (bonus period API) done. Remainder: 59.6 (webhook), ledger/calculation engine, API/UI. See section-59.md and BACKEND_DATABASE.md. |
+| 59 | 59.7–59.23 | Technician quotes: team pool bonus. 59.19 (persist quotes), 59.5 (bonus period API), 59.6 (cron sync) done. Remainder: ledger/calculation engine, API/UI. See section-59.md and docs/plans/2026-02-24-section-59-cron-sync-job-performance.md. |
 
 ---
 

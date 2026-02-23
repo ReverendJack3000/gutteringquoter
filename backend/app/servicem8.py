@@ -112,6 +112,14 @@ def _get_company_user_id() -> Optional[str]:
     return None
 
 
+def get_sync_user_id() -> Optional[str]:
+    """
+    Return the user_id whose ServiceM8 tokens should be used for headless/cron sync (no request user).
+    Requires SERVICEM8_COMPANY_USER_ID or SERVICEM8_COMPANY_EMAIL to be set. Used by job_performance sync (59.6).
+    """
+    return _get_company_user_id()
+
+
 def get_effective_servicem8_user_id(current_user_id: str) -> str:
     """
     Return the user_id whose ServiceM8 tokens should be used for API calls.
@@ -457,6 +465,37 @@ def fetch_job_by_uuid(access_token: str, job_uuid: str) -> Optional[dict[str, An
     except Exception as e:
         logger.warning("ServiceM8 job fetch by uuid failed for uuid=%s: %s", job_uuid, e)
         return None
+
+
+def list_jobs(access_token: str, status: str) -> list[dict[str, Any]]:
+    """
+    List ServiceM8 jobs filtered by status (e.g. 'Completed', 'Invoiced').
+    Uses cursor-based pagination (cursor=-1 then x-next-cursor header). Returns all pages merged.
+    """
+    status = str(status).strip()
+    if not status:
+        return []
+    # ServiceM8 requires value in single quotes
+    filter_expr = f"status eq '{status}'"
+    all_jobs: list[dict[str, Any]] = []
+    cursor: Optional[str] = "-1"
+    try:
+        while cursor is not None:
+            params: dict[str, Any] = {"$filter": filter_expr}
+            if cursor:
+                params["cursor"] = cursor
+            resp = make_api_request("GET", "/api_1.0/job.json", access_token, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            page = data if isinstance(data, list) else []
+            all_jobs.extend(page)
+            # ServiceM8 returns next page cursor in header (case may vary)
+            next_cursor = resp.headers.get("x-next-cursor") or resp.headers.get("X-Next-Cursor")
+            cursor = next_cursor if next_cursor else None
+        return all_jobs
+    except Exception as e:
+        logger.warning("ServiceM8 list_jobs failed for status=%s: %s", status, e)
+        return all_jobs  # Return what we have so far
 
 
 def create_job(access_token: str, payload: dict[str, Any]) -> tuple[bool, Optional[str]]:
