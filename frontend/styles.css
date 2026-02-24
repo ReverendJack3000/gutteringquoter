@@ -4605,24 +4605,32 @@ body[data-viewport-mode="mobile"] .technician-bonus-view-container {
   display: block;
   width: 100%;
   height: auto;
+  overflow: hidden;
+  aspect-ratio: 200 / 120;
 }
 
 .bonus-pot-gauge-track,
 .bonus-pot-gauge-fill {
   fill: none;
   stroke-width: 14;
-  stroke-linecap: round;
 }
 
 .bonus-pot-gauge-track {
   stroke: #e2e8f0;
+  stroke-linecap: round;
 }
 
 .bonus-pot-gauge-fill {
   stroke: var(--gauge-color);
-  stroke-dasharray: 100;
-  stroke-dashoffset: calc(100 - var(--fill-percentage));
-  transition: stroke-dashoffset 1s ease-out, stroke 0.3s ease, filter 0.3s ease;
+  stroke-linecap: butt;
+  stroke-dasharray: var(--fill-percentage) 100;
+  stroke-dashoffset: 0;
+  transition: stroke-dasharray 1s ease-out, stroke 0.3s ease, filter 0.3s ease;
+}
+
+.bonus-pot-gauge-dot {
+  fill: var(--gauge-color);
+  transition: fill 0.3s ease;
 }
 
 .bonus-pot-gauge[data-heat="cold"] {
@@ -4637,7 +4645,8 @@ body[data-viewport-mode="mobile"] .technician-bonus-view-container {
   --gauge-color: #ef4444;
 }
 
-.bonus-pot-gauge[data-heat="hot"] .bonus-pot-gauge-fill {
+.bonus-pot-gauge[data-heat="hot"] .bonus-pot-gauge-fill,
+.bonus-pot-gauge[data-heat="hot"] .bonus-pot-gauge-dot {
   filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.45));
 }
 
@@ -4736,6 +4745,142 @@ body[data-viewport-mode="mobile"] .bonus-race-leaderboard .bonus-badge-chip {
   min-height: 44px;
   padding: 10px 14px;
   font-size: 12px;
+}
+
+/* Race section gamified (mobile only): category toggle + podium + catch-up */
+body[data-viewport-mode="mobile"] .bonus-race-category-toggle-wrap {
+  display: flex;
+  gap: 0;
+  margin: 12px 0 14px;
+  padding: 4px;
+  background: #e8eef5;
+  border-radius: 999px;
+  border: 1px solid #d0dce8;
+}
+body[data-viewport-mode="mobile"] .bonus-race-category-toggle-wrap[hidden] {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] .bonus-race-leaderboard {
+  transition: opacity 0.22s ease;
+}
+body[data-viewport-mode="mobile"] .bonus-race-category-btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #5a6578;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.2s ease;
+}
+body[data-viewport-mode="mobile"] .bonus-race-category-btn[aria-pressed="true"][data-category="sellers"] {
+  background: linear-gradient(135deg, #f0c14b 0%, #e6a90a 100%);
+  color: #3d3006;
+  box-shadow: 0 2px 8px rgba(230, 169, 10, 0.4);
+}
+body[data-viewport-mode="mobile"] .bonus-race-category-btn[aria-pressed="true"][data-category="executors"] {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+/* Podium: King of the Hill (1st place) */
+body[data-viewport-mode="mobile"] .bonus-racer--king {
+  border-width: 3px;
+  border-color: #e6a90a;
+  box-shadow: 0 0 0 1px #e6a90a, 0 8px 24px rgba(230, 169, 10, 0.35);
+  padding: 14px 12px;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 18px;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-crown {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-12deg);
+  font-size: 24px;
+  line-height: 1;
+  pointer-events: none;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar-wrap {
+  position: relative;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--contender {
+  padding: 8px 10px;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-bar-wrap,
+body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-meta,
+body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-view-details {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .bonus-racer-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  border: none;
+  flex-shrink: 0;
+}
+body[data-viewport-mode="mobile"] .bonus-racer-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+body[data-viewport-mode="mobile"] .bonus-racer-gp--major {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0c4a6e;
+}
+body[data-viewport-mode="mobile"] .bonus-racer-catch-up {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 4px;
+}
+body[data-viewport-mode="mobile"] .bonus-racer-catch-up strong {
+  color: #0f172a;
+}
+/* Placeholder / Challenger slots */
+body[data-viewport-mode="mobile"] .bonus-racer--placeholder {
+  border: 2px dashed #cbd5e1;
+  background: rgba(248, 250, 252, 0.7);
+  opacity: 0.85;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-bar-wrap,
+body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-meta,
+body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-view-details {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-slot-open {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 4px;
+}
+/* Whole card clickable on mobile (no separate View details) */
+body[data-viewport-mode="mobile"] .bonus-racer[role="button"] {
+  cursor: pointer;
+  text-align: left;
+}
+body[data-viewport-mode="mobile"] .bonus-racer[role="button"]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
 }
 
 body[data-viewport-mode="mobile"] .bonus-effects-summary .bonus-badge-chip {
@@ -7657,13 +7802,15 @@ body[data-viewport-mode="mobile"] #quoteModal #labourEditorModal .labour-editor-
 
 body.a11y-reduce-motion .bonus-racer,
 body.a11y-reduce-motion .bonus-racer-bar,
-body.a11y-reduce-motion .bonus-pot-gauge-fill {
+body.a11y-reduce-motion .bonus-pot-gauge-fill,
+body.a11y-reduce-motion .bonus-pot-gauge-dot {
   transition: none !important;
 }
 
 /* 59.18.2.2: Pot motion – respect system reduced-motion when app a11y class not set */
 @media (prefers-reduced-motion: reduce) {
   .bonus-pot-gauge-fill,
+  .bonus-pot-gauge-dot,
   .bonus-racer-bar,
   .bonus-racer {
     transition: none !important;

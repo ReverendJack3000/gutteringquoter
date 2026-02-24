@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.bonus_calc import compute_period_pot
 from app.bonus_dashboard import (
     build_canonical_ledger_rows,
+    compute_per_technician_executor_gp,
+    compute_per_technician_seller_gp,
     compute_total_contributed_gp,
     filter_eligible_period_jobs,
     group_personnel_by_job,
@@ -40,6 +42,23 @@ class TestCanonicalDashboardPayload(unittest.TestCase):
         eligible = filter_eligible_period_jobs(jobs)
         self.assertEqual(len(eligible), 2)
         self.assertEqual({e["id"] for e in eligible}, {"2", "3"})
+
+    def test_eligible_jobs_excludes_below_50_percent_margin(self):
+        """60.5: Jobs with Job GP / revenue < 0.50 are excluded from period pot and ledger."""
+        # Revenue 1000, materials 600, 0 parts runs → Job GP 400 → 400/1000 = 0.4 < 0.50
+        jobs = [
+            {"id": "1", "status": "verified", "bonus_period_id": "p1", "period_link_method": "bonus_period_id", "invoiced_revenue_exc_gst": 1000, "materials_cost": 600, "standard_parts_runs": 0, "is_upsell": True},
+        ]
+        eligible = filter_eligible_period_jobs(jobs)
+        self.assertEqual(len(eligible), 0, "Job with margin 40% must be excluded")
+
+    def test_eligible_jobs_excludes_non_upsell(self):
+        """60.6: Only jobs with is_upsell true count toward period pot."""
+        jobs = [
+            {"id": "1", "status": "verified", "bonus_period_id": "p1", "period_link_method": "bonus_period_id", "invoiced_revenue_exc_gst": 1000, "materials_cost": 200, "standard_parts_runs": 0, "is_upsell": False},
+        ]
+        eligible = filter_eligible_period_jobs(jobs)
+        self.assertEqual(len(eligible), 0, "Job with is_upsell false must be excluded")
 
     def test_period_pot_uses_eligible_only(self):
         """compute_period_pot uses job GP and subtracts callback costs."""
@@ -124,3 +143,93 @@ class TestCanonicalDashboardPayload(unittest.TestCase):
         expected_payout = round(pot * (my_gp / total_gp), 2) if total_gp > 0 else 0.0
         self.assertIsInstance(expected_payout, float)
         self.assertGreaterEqual(expected_payout, 0)
+
+    def test_per_technician_seller_gp_seller_only_gets_seller_share(self):
+        """59.16.8: Tech with only seller role has seller GP > 0 and executor GP 0."""
+        job = {
+            "id": "j1",
+            "status": "verified",
+            "invoiced_revenue_exc_gst": 1000,
+            "materials_cost": 200,
+            "standard_parts_runs": 0,
+            "quoted_labor_minutes": 60,
+            "is_callback": False,
+            "callback_reason": None,
+            "seller_fault_parts_runs": 0,
+            "missed_materials_cost": 0,
+        }
+        personnel = [
+            {"job_performance_id": "j1", "technician_id": "seller", "is_seller": True, "is_executor": False, "onsite_minutes": 50, "travel_shopping_minutes": 10},
+        ]
+        personnel_by_job = group_personnel_by_job(personnel)
+        eligible = [job]
+        seller_gp = compute_per_technician_seller_gp(eligible, personnel_by_job)
+        executor_gp = compute_per_technician_executor_gp(eligible, personnel_by_job)
+        self.assertIn("seller", seller_gp)
+        self.assertGreater(seller_gp["seller"], 0)
+        self.assertIn("seller", executor_gp)
+        self.assertEqual(executor_gp["seller"], 0.0)
+
+    def test_per_technician_executor_gp_executor_only_gets_executor_share(self):
+        """59.16.8: Tech with only executor role has executor GP > 0 and seller GP 0."""
+        job = {
+            "id": "j1",
+            "status": "verified",
+            "invoiced_revenue_exc_gst": 1000,
+            "materials_cost": 200,
+            "standard_parts_runs": 0,
+            "quoted_labor_minutes": 60,
+            "is_callback": False,
+            "callback_reason": None,
+            "seller_fault_parts_runs": 0,
+            "missed_materials_cost": 0,
+        }
+        personnel = [
+            {"job_performance_id": "j1", "technician_id": "executor", "is_seller": False, "is_executor": True, "onsite_minutes": 50, "travel_shopping_minutes": 10},
+        ]
+        personnel_by_job = group_personnel_by_job(personnel)
+        eligible = [job]
+        seller_gp = compute_per_technician_seller_gp(eligible, personnel_by_job)
+        executor_gp = compute_per_technician_executor_gp(eligible, personnel_by_job)
+        self.assertIn("executor", executor_gp)
+        self.assertGreater(executor_gp["executor"], 0)
+        self.assertIn("executor", seller_gp)
+        self.assertEqual(seller_gp["executor"], 0.0)
+
+    def test_per_technician_do_it_all_gets_full_gp_in_seller_bucket(self):
+        """59.16.8: Do-it-all tech gets 100% in seller_base (executor_base 0); seller GP equals my_gp."""
+        job = {
+            "id": "j1",
+            "status": "verified",
+            "invoiced_revenue_exc_gst": 1000,
+            "materials_cost": 200,
+            "standard_parts_runs": 0,
+            "quoted_labor_minutes": 60,
+            "is_callback": False,
+            "callback_reason": None,
+            "seller_fault_parts_runs": 0,
+            "missed_materials_cost": 0,
+        }
+        personnel = [
+            {"job_performance_id": "j1", "technician_id": "tech-a", "is_seller": True, "is_executor": True, "onsite_minutes": 50, "travel_shopping_minutes": 10},
+        ]
+        personnel_by_job = group_personnel_by_job(personnel)
+        eligible = [job]
+        seller_gp = compute_per_technician_seller_gp(eligible, personnel_by_job)
+        executor_gp = compute_per_technician_executor_gp(eligible, personnel_by_job)
+        total_gp = compute_total_contributed_gp(eligible, personnel_by_job)
+        rows = build_canonical_ledger_rows(eligible, personnel_by_job, "tech-a")
+        my_gp = sum(r.get("my_job_gp_contribution", 0) for r in rows)
+        self.assertIn("tech-a", seller_gp)
+        self.assertIn("tech-a", executor_gp)
+        self.assertGreater(seller_gp["tech-a"], 0, "Do-it-all gets 100% in seller_base")
+        self.assertEqual(executor_gp["tech-a"], 0.0, "Do-it-all has executor_base 0")
+        self.assertAlmostEqual(seller_gp["tech-a"], my_gp, places=2)
+        self.assertAlmostEqual(total_gp, my_gp, places=2)
+
+    def test_per_technician_empty_jobs_returns_empty_dict(self):
+        """59.16.8: Empty eligible jobs yields empty seller/executor GP dicts."""
+        seller_gp = compute_per_technician_seller_gp([], {})
+        executor_gp = compute_per_technician_executor_gp([], {})
+        self.assertEqual(seller_gp, {})
+        self.assertEqual(executor_gp, {})

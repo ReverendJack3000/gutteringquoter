@@ -600,6 +600,72 @@ def compute_total_contributed_gp(
     return round(total, 2)
 
 
+def compute_per_technician_seller_gp(
+    eligible_jobs: list[dict[str, Any]],
+    personnel_by_job: dict[str, list[dict[str, Any]]],
+) -> dict[str, float]:
+    """
+    59.16.8: Per-technician total seller GP (sum of seller_base across eligible jobs).
+    Same pipeline as compute_total_contributed_gp; used for leaderboard_sellers.
+    Returns dict technician_id -> total seller GP (rounded to 2 decimals).
+    """
+    by_tech: dict[str, float] = {}
+    for job in eligible_jobs or []:
+        job_id = _normalize_id((job or {}).get("id"))
+        if not job_id:
+            continue
+        personnel = list(personnel_by_job.get(job_id) or [])
+        if not personnel:
+            continue
+        spotter_splits = compute_job_spotter_splits(job, personnel)
+        if spotter_splits is not None:
+            splits0 = spotter_splits
+        else:
+            splits0 = compute_job_base_splits(job, personnel)
+        splits1 = apply_callback_voids(job, splits0)
+        splits2 = apply_estimation_accuracy(job, personnel, splits1)
+        splits3 = apply_seller_penalties(job, personnel, splits2)
+        for tech_id, amounts in splits3.items():
+            tid = _normalize_id(tech_id)
+            if not tid:
+                continue
+            by_tech[tid] = by_tech.get(tid, 0.0) + _to_float(amounts.get("seller_base"))
+    return {tid: round(val, 2) for tid, val in by_tech.items()}
+
+
+def compute_per_technician_executor_gp(
+    eligible_jobs: list[dict[str, Any]],
+    personnel_by_job: dict[str, list[dict[str, Any]]],
+) -> dict[str, float]:
+    """
+    59.16.8: Per-technician total executor GP (sum of executor_base across eligible jobs).
+    Same pipeline as compute_total_contributed_gp; used for leaderboard_executors.
+    Returns dict technician_id -> total executor GP (rounded to 2 decimals).
+    """
+    by_tech: dict[str, float] = {}
+    for job in eligible_jobs or []:
+        job_id = _normalize_id((job or {}).get("id"))
+        if not job_id:
+            continue
+        personnel = list(personnel_by_job.get(job_id) or [])
+        if not personnel:
+            continue
+        spotter_splits = compute_job_spotter_splits(job, personnel)
+        if spotter_splits is not None:
+            splits0 = spotter_splits
+        else:
+            splits0 = compute_job_base_splits(job, personnel)
+        splits1 = apply_callback_voids(job, splits0)
+        splits2 = apply_estimation_accuracy(job, personnel, splits1)
+        splits3 = apply_seller_penalties(job, personnel, splits2)
+        for tech_id, amounts in splits3.items():
+            tid = _normalize_id(tech_id)
+            if not tid:
+                continue
+            by_tech[tid] = by_tech.get(tid, 0.0) + _to_float(amounts.get("executor_base"))
+    return {tid: round(val, 2) for tid, val in by_tech.items()}
+
+
 def compute_technician_contribution_total(ledger_rows: list[dict[str, Any]]) -> float:
     total = sum(_to_float((row or {}).get("my_job_gp_contribution")) for row in (ledger_rows or []))
     return round(total, 2)

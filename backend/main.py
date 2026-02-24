@@ -19,6 +19,8 @@ from app.bonus_dashboard import (
     build_badge_events,
     build_canonical_ledger_rows,
     compute_hot_streak,
+    compute_per_technician_executor_gp,
+    compute_per_technician_seller_gp,
     compute_technician_contribution_total,
     compute_total_contributed_gp,
     filter_eligible_period_jobs,
@@ -553,6 +555,8 @@ def _build_provisional_technician_dashboard_payload(
                 "empty_state": "No open or processing bonus period was found.",
             },
             "leaderboard": [],
+            "leaderboard_sellers": [],
+            "leaderboard_executors": [],
             "badge_events": build_badge_events([], {"hot_streak_count": 0, "hot_streak_active": False}),
             "streak": {"hot_streak_count": 0, "hot_streak_active": False},
         }
@@ -632,6 +636,60 @@ def _build_provisional_technician_dashboard_payload(
             "share_of_team_pot": row["share_of_team_pot"],
             "rank": row["rank"],
         })
+    # 59.16.8: seller and executor leaderboards (same tech set, ranked by seller_base / executor_base)
+    seller_gp_by_tech = compute_per_technician_seller_gp(eligible_jobs, personnel_by_job)
+    executor_gp_by_tech = compute_per_technician_executor_gp(eligible_jobs, personnel_by_job)
+    tech_ids = [r["technician_id"] for r in leaderboard_rows]
+    seller_rows = [
+        {"technician_id": tid, "gp_contributed": seller_gp_by_tech.get(tid, 0.0)}
+        for tid in tech_ids
+    ]
+    seller_rows.sort(key=lambda r: (r["gp_contributed"], r["technician_id"]), reverse=True)
+    for rank_one_based, row in enumerate(seller_rows, start=1):
+        row["rank"] = rank_one_based
+    leaderboard_sellers = []
+    for row in seller_rows:
+        tid = row["technician_id"]
+        info = display_map.get(tid) or {"display_name": "Tech", "avatar_initials": "??"}
+        gp = row["gp_contributed"]
+        share = (
+            round(team_pot * (gp / total_contributed_gp), 2)
+            if total_contributed_gp > 0
+            else 0.0
+        )
+        leaderboard_sellers.append({
+            "technician_id": tid,
+            "display_name": info["display_name"],
+            "avatar_initials": info["avatar_initials"],
+            "gp_contributed": gp,
+            "share_of_team_pot": share,
+            "rank": row["rank"],
+        })
+    executor_rows = [
+        {"technician_id": tid, "gp_contributed": executor_gp_by_tech.get(tid, 0.0)}
+        for tid in tech_ids
+    ]
+    executor_rows.sort(key=lambda r: (r["gp_contributed"], r["technician_id"]), reverse=True)
+    for rank_one_based, row in enumerate(executor_rows, start=1):
+        row["rank"] = rank_one_based
+    leaderboard_executors = []
+    for row in executor_rows:
+        tid = row["technician_id"]
+        info = display_map.get(tid) or {"display_name": "Tech", "avatar_initials": "??"}
+        gp = row["gp_contributed"]
+        share = (
+            round(team_pot * (gp / total_contributed_gp), 2)
+            if total_contributed_gp > 0
+            else 0.0
+        )
+        leaderboard_executors.append({
+            "technician_id": tid,
+            "display_name": info["display_name"],
+            "avatar_initials": info["avatar_initials"],
+            "gp_contributed": gp,
+            "share_of_team_pot": share,
+            "rank": row["rank"],
+        })
     streak = compute_hot_streak(
         eligible_jobs=eligible_jobs,
         personnel_by_job=personnel_by_job,
@@ -676,6 +734,8 @@ def _build_provisional_technician_dashboard_payload(
             ),
         },
         "leaderboard": leaderboard,
+        "leaderboard_sellers": leaderboard_sellers,
+        "leaderboard_executors": leaderboard_executors,
         "badge_events": badge_events,
         "streak": {"hot_streak_count": streak["hot_streak_count"], "hot_streak_active": streak["hot_streak_active"]},
     }

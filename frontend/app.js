@@ -285,6 +285,8 @@ const technicianBonusState = {
   tooltipBound: false,
   tallyBound: false,
   previousPayload: null,
+  /** Mobile Race: 'sellers' | 'executors' for category toggle */
+  raceCategory: 'sellers',
 };
 
 /** Bonus Admin view (59.17): periods list and selected period for summary/breakdown/jobs. */
@@ -14052,6 +14054,42 @@ function announceBonusRace(message) {
   announcer.textContent = String(message || '');
 }
 
+/** First name or "First L." from display name for Race cards (mobile). */
+function bonusRaceFirstName(displayName) {
+  const s = String(displayName || '').trim();
+  if (!s) return '—';
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return parts[0] + ' ' + (parts[1] ? parts[1].charAt(0) + '.' : '');
+}
+
+/** Avatar background palette for Race (mobile). */
+const BONUS_RACER_AVATAR_COLORS = ['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
+
+function getLeaderboardRowsForCategory(payload, category) {
+  const list = category === 'executors' && Array.isArray(payload?.leaderboard_executors)
+    ? payload.leaderboard_executors
+    : category === 'sellers' && Array.isArray(payload?.leaderboard_sellers)
+      ? payload.leaderboard_sellers
+      : Array.isArray(payload?.leaderboard)
+        ? payload.leaderboard
+        : [];
+  if (list.length > 0) {
+    return list
+      .map((row, idx) => ({
+        technician_id: String(row?.technician_id || `row-${idx}`),
+        display_name: String(row?.display_name || row?.avatar_initials || `Tech ${idx + 1}`),
+        avatar_initials: String(row?.avatar_initials || ''),
+        gp_contributed: Number(row?.gp_contributed || 0),
+        share_of_team_pot: Number(row?.share_of_team_pot || 0),
+        rank: Number(row?.rank || (idx + 1)),
+        placeholder: false,
+      }))
+      .sort((a, b) => a.rank - b.rank);
+  }
+  return buildBonusLeaderboardRows(payload);
+}
+
 function buildBonusLeaderboardRows(payload) {
   const leaderboard = Array.isArray(payload?.leaderboard) ? payload.leaderboard.slice() : [];
   if (leaderboard.length > 0) {
@@ -14135,7 +14173,7 @@ function renderBonusRaceBoard(payload) {
       deltaEl.textContent = `Leak detected: ${formatCurrency(Math.abs(delta))} drained from the Team Pool.`;
       deltaEl.dataset.tone = 'leak';
     } else {
-      deltaEl.textContent = 'No team pool movement since last update.';
+      deltaEl.textContent = 'No Team Pool movement since last update.';
       deltaEl.dataset.tone = 'neutral';
     }
   }
@@ -14164,47 +14202,172 @@ function renderBonusRaceBoard(payload) {
 function renderBonusRaceLeaderboard(payload) {
   const listEl = document.getElementById('bonusRaceLeaderboard');
   if (!listEl) return;
-  const rows = buildBonusLeaderboardRows(payload);
+  const isMobile = document.body?.getAttribute('data-viewport-mode') === 'mobile';
+  const category = technicianBonusState.raceCategory || 'sellers';
+  const rows = isMobile ? getLeaderboardRowsForCategory(payload, category) : buildBonusLeaderboardRows(payload);
   const nextRanks = new Map();
-  listEl.innerHTML = rows.map((row, index) => {
-    const rank = Number(row?.rank || (index + 1));
-    const id = String(row?.technician_id || `row-${index}`);
-    const prevRank = technicianBonusState.lastRanks.get(id);
-    const changedRank = Number.isFinite(prevRank) && prevRank !== rank;
-    nextRanks.set(id, rank);
-    const initials = String(row?.avatar_initials || getBonusInitials(row?.display_name || '') || '--');
-    const share = Math.max(0, Math.min(1, Number(row?.share_of_team_pot || 0)));
-    const barWidth = Math.max(0, Math.min(100, share * 100));
-    const crown = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#';
-    const tooltipText = row.placeholder
-      ? 'Peer leaderboard data will appear here after backend wiring.'
-      : `${row.display_name}: ${formatCurrency(row.gp_contributed)} contributed (${formatBonusPercent(share)} of team share).`;
-    const viewDetailsAria = row.placeholder
-      ? 'View details'
-      : `View details for ${escapeHtml(String(row.display_name || 'Unknown')).replace(/"/g, '&quot;')}`;
-    return `<li class="bonus-racer${changedRank ? ' bonus-racer--overtake' : ''}" data-rank="${rank}">
-      <div class="bonus-racer-top">
-        <div class="bonus-racer-left">
-          <span class="bonus-racer-rank" aria-label="Rank ${rank}">${crown}</span>
-          <span class="bonus-racer-rank" aria-hidden="true">${escapeHtml(initials)}</span>
-          <span class="bonus-racer-name">${escapeHtml(String(row.display_name || 'Unknown'))}</span>
+
+  /* Mobile: show category toggle and bind; render gamified rows */
+  const toggleWrap = document.getElementById('bonusRaceCategoryToggleWrap');
+  if (toggleWrap) {
+    if (isMobile) {
+      toggleWrap.hidden = false;
+      const sellersBtn = document.getElementById('bonusRaceCategorySellers');
+      const executorsBtn = document.getElementById('bonusRaceCategoryExecutors');
+      if (sellersBtn) {
+        sellersBtn.setAttribute('aria-pressed', category === 'sellers' ? 'true' : 'false');
+      }
+      if (executorsBtn) {
+        executorsBtn.setAttribute('aria-pressed', category === 'executors' ? 'true' : 'false');
+      }
+      if (!technicianBonusState.raceCategoryToggleBound) {
+        technicianBonusState.raceCategoryToggleBound = true;
+        sellersBtn?.addEventListener('click', () => {
+          technicianBonusState.raceCategory = 'sellers';
+          renderBonusRaceLeaderboard(technicianBonusState.payload);
+        });
+        executorsBtn?.addEventListener('click', () => {
+          technicianBonusState.raceCategory = 'executors';
+          renderBonusRaceLeaderboard(technicianBonusState.payload);
+        });
+      }
+    } else {
+      toggleWrap.hidden = true;
+    }
+  }
+
+  if (isMobile) {
+    listEl.style.opacity = '0';
+    listEl.innerHTML = rows.map((row, index) => {
+      const rank = Number(row?.rank || (index + 1));
+      const id = String(row?.technician_id || `row-${index}`);
+      const prevRank = technicianBonusState.lastRanks.get(id);
+      const changedRank = Number.isFinite(prevRank) && prevRank !== rank;
+      nextRanks.set(id, rank);
+      const initials = String(row?.avatar_initials || getBonusInitials(row?.display_name || '') || '--');
+      const firstName = bonusRaceFirstName(row?.display_name);
+      const gp = Number(row?.gp_contributed || 0);
+      const avatarColor = BONUS_RACER_AVATAR_COLORS[(rank - 1) % BONUS_RACER_AVATAR_COLORS.length];
+      const isKing = rank === 1 && !row.placeholder;
+      const isPlaceholder = !!row.placeholder;
+      const isContender = rank >= 2 && !row.placeholder;
+      const rowAbove = index > 0 ? rows[index - 1] : null;
+      const gpAbove = rowAbove ? Number(rowAbove.gp_contributed || 0) : 0;
+      const gap = Math.max(0, gpAbove - gp);
+      let catchUpHtml = '';
+      if (isContender && rowAbove) {
+        const rankLabel = rowAbove.rank === 1 ? '1st' : rowAbove.rank === 2 ? '2nd' : `${rowAbove.rank}th`;
+        if (rowAbove.rank === 1) {
+          catchUpHtml = gap > 0
+            ? `<div class="bonus-racer-catch-up">🔥 Only ${escapeHtml(formatCurrency(gap))} behind 1st place!</div>`
+            : '';
+        } else {
+          catchUpHtml = gap > 0
+            ? `<div class="bonus-racer-catch-up">Keep pushing! ${escapeHtml(formatCurrency(gap))} to overtake ${rankLabel}.</div>`
+            : '';
+        }
+      }
+      const rankLabelA11y = rank === 1 ? 'Rank 1' : rank === 2 ? 'Rank 2' : rank === 3 ? 'Rank 3' : `Rank ${rank}`;
+      const cardRole = isPlaceholder ? null : 'button';
+      const tabIndex = isPlaceholder ? -1 : 0;
+      const cardClass = [
+        'bonus-racer',
+        changedRank ? 'bonus-racer--overtake' : '',
+        isKing ? 'bonus-racer--king' : '',
+        isContender ? 'bonus-racer--contender' : '',
+        isPlaceholder ? 'bonus-racer--placeholder' : '',
+      ].filter(Boolean).join(' ');
+      if (isPlaceholder) {
+        return `<li class="${cardClass}" data-rank="${rank}" data-placeholder="true">
+          <div class="bonus-racer-top">
+            <div class="bonus-racer-left">
+              <span class="bonus-racer-rank" aria-label="${rankLabelA11y}">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}</span>
+              <span class="bonus-racer-avatar" style="background: #94a3b8;">${escapeHtml(initials)}</span>
+              <span class="bonus-racer-name">—</span>
+            </div>
+            <span class="bonus-racer-gp bonus-racer-gp--major">${escapeHtml(formatCurrency(0))}</span>
+          </div>
+          <p class="bonus-racer-slot-open">Slot open. Close a deal to claim this spot!</p>
+        </li>`;
+      }
+      return `<li class="${cardClass}" data-rank="${rank}" ${cardRole ? `role="${cardRole}" tabindex="${tabIndex}"` : ''} data-technician-id="${escapeHtml(id)}">
+        <div class="bonus-racer-top">
+          <div class="bonus-racer-left">
+            <span class="bonus-racer-rank" aria-hidden="true">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}</span>
+            <div class="bonus-racer-avatar-wrap">
+              ${isKing ? '<span class="bonus-racer-crown" aria-hidden="true">👑</span>' : ''}
+              <span class="bonus-racer-avatar" style="background: ${escapeHtml(avatarColor)};" aria-hidden="true">${escapeHtml(initials)}</span>
+            </div>
+            <span class="bonus-racer-name">${escapeHtml(firstName)}</span>
+          </div>
+          <span class="bonus-racer-gp bonus-racer-gp--major">${escapeHtml(formatCurrency(gp))}</span>
         </div>
-        <span class="bonus-racer-gp">${escapeHtml(formatCurrency(row.gp_contributed || 0))}</span>
-      </div>
-      <div class="bonus-racer-bar-wrap"><div class="bonus-racer-bar" style="--bar-width: ${barWidth.toFixed(2)}%;" role="presentation"></div></div>
-      <div class="bonus-racer-meta">
-        <span>${escapeHtml(formatBonusPercent(share))} of team share</span>
-        ${changedRank ? '<span> • Overtake!</span>' : ''}
-      </div>
-      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" aria-label="${viewDetailsAria}" title="${escapeHtml(tooltipText)}" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
-    </li>`;
-  }).join('');
-  /* 59.18.2.3: slice-bar fill animation; respects reduced-motion via CSS */
-  requestAnimationFrame(() => {
-    listEl.querySelectorAll('.bonus-racer-bar').forEach((bar) => {
-      bar.classList.add('bonus-racer-bar--filled');
+        ${catchUpHtml}
+      </li>`;
+    }).join('');
+    listEl.querySelectorAll('.bonus-racer[role="button"]').forEach((el) => {
+      const tid = el.getAttribute('data-technician-id');
+      if (tid && !el._bonusRaceClickBound) {
+        el._bonusRaceClickBound = true;
+        el.addEventListener('click', () => {
+          if (getVisibleViewId() === 'view-technician-bonus' && tid) {
+            technicianBonusState.selectedTechnicianId = tid;
+            void fetchTechnicianBonusDashboard({ skipAdminOptions: true });
+          }
+        });
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            el.click();
+          }
+        });
+      }
     });
-  });
+    requestAnimationFrame(() => {
+      listEl.style.opacity = '1';
+    });
+  } else {
+    /* Desktop: original markup */
+    listEl.innerHTML = rows.map((row, index) => {
+      const rank = Number(row?.rank || (index + 1));
+      const id = String(row?.technician_id || `row-${index}`);
+      const prevRank = technicianBonusState.lastRanks.get(id);
+      const changedRank = Number.isFinite(prevRank) && prevRank !== rank;
+      nextRanks.set(id, rank);
+      const initials = String(row?.avatar_initials || getBonusInitials(row?.display_name || '') || '--');
+      const share = Math.max(0, Math.min(1, Number(row?.share_of_team_pot || 0)));
+      const barWidth = Math.max(0, Math.min(100, share * 100));
+      const crown = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#';
+      const tooltipText = row.placeholder
+        ? 'Peer leaderboard data will appear here after backend wiring.'
+        : `${row.display_name}: ${formatCurrency(row.gp_contributed)} contributed (${formatBonusPercent(share)} of team share).`;
+      const viewDetailsAria = row.placeholder
+        ? 'View details'
+        : `View details for ${escapeHtml(String(row.display_name || 'Unknown')).replace(/"/g, '&quot;')}`;
+      return `<li class="bonus-racer${changedRank ? ' bonus-racer--overtake' : ''}" data-rank="${rank}">
+        <div class="bonus-racer-top">
+          <div class="bonus-racer-left">
+            <span class="bonus-racer-rank" aria-label="Rank ${rank}">${crown}</span>
+            <span class="bonus-racer-rank" aria-hidden="true">${escapeHtml(initials)}</span>
+            <span class="bonus-racer-name">${escapeHtml(String(row.display_name || 'Unknown'))}</span>
+          </div>
+          <span class="bonus-racer-gp">${escapeHtml(formatCurrency(row.gp_contributed || 0))}</span>
+        </div>
+        <div class="bonus-racer-bar-wrap"><div class="bonus-racer-bar" style="--bar-width: ${barWidth.toFixed(2)}%;" role="presentation"></div></div>
+        <div class="bonus-racer-meta">
+          <span>${escapeHtml(formatBonusPercent(share))} of team share</span>
+          ${changedRank ? '<span> • Overtake!</span>' : ''}
+        </div>
+        <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" aria-label="${viewDetailsAria}" title="${escapeHtml(tooltipText)}" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
+      </li>`;
+    }).join('');
+    requestAnimationFrame(() => {
+      listEl.querySelectorAll('.bonus-racer-bar').forEach((bar) => {
+        bar.classList.add('bonus-racer-bar--filled');
+      });
+    });
+  }
+
   const previousSelfRank = technicianBonusState.lastRanks.get(String(payload?.technician_context?.technician_id || 'self'));
   const selfRow = rows.find((row) => String(row.technician_id) === String(payload?.technician_context?.technician_id || 'self'));
   if (selfRow && Number.isFinite(previousSelfRank) && previousSelfRank !== selfRow.rank) {
