@@ -267,8 +267,9 @@ def _parse_expires_at(val: Any) -> float:
 
 def get_tokens(user_id: str) -> Optional[dict[str, Any]]:
     """
-    Get tokens for user. If access token is expired, refresh it first.
+    Get tokens for user. If access token is expired or expires within 5 minutes, refresh it first.
     Returns dict with access_token, refresh_token, expires_at, scope or None if not connected.
+    On refresh failure (e.g. revoked token), tokens are deleted and None is returned (59.20).
     """
     supabase = get_supabase()
     resp = (
@@ -493,6 +494,11 @@ def list_jobs(access_token: str, status: str) -> list[dict[str, Any]]:
             # ServiceM8 returns next page cursor in header (case may vary)
             next_cursor = resp.headers.get("x-next-cursor") or resp.headers.get("X-Next-Cursor")
             cursor = next_cursor if next_cursor else None
+        return all_jobs
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise  # Caller may retry with fresh token (59.20)
+        logger.warning("ServiceM8 list_jobs failed for status=%s: %s", status, e)
         return all_jobs
     except Exception as e:
         logger.warning("ServiceM8 list_jobs failed for status=%s: %s", status, e)

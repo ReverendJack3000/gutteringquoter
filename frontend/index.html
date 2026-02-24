@@ -108,6 +108,12 @@
               </svg>
               <span>User Permissions</span>
             </div>
+            <div class="profile-menu-item" id="menuItemBonusAdmin" role="menuitem" hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+              </svg>
+              <span>Bonus Admin</span>
+            </div>
             <div class="profile-menu-item" id="menuItemTechnicianBonus" role="menuitem" hidden>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2l3 6 7 .8-5 4.6 1.4 6.6L12 17l-6.4 3 1.4-6.6-5-4.6 7-.8 3-6z"></path>
@@ -614,6 +620,83 @@
       </div>
     </div>
 
+    <div id="view-bonus-admin" class="app-view hidden" role="region" aria-label="Bonus admin">
+      <div class="bonus-admin-view-container">
+        <header class="bonus-admin-header">
+          <div class="bonus-admin-header-left">
+            <button type="button" id="btnBonusAdminBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="bonus-admin-header-title">Bonus Admin</div>
+          <div class="bonus-admin-header-right"></div>
+        </header>
+        <main class="bonus-admin-main" aria-label="Bonus admin content">
+          <div class="bonus-admin-period-row">
+            <label for="bonusAdminPeriodSelect" class="bonus-admin-period-label">Period</label>
+            <select id="bonusAdminPeriodSelect" class="bonus-admin-period-select" aria-label="Select bonus period" hidden>
+              <option value="">Select a period…</option>
+            </select>
+            <button type="button" id="btnBonusAdminCreatePeriod" class="btn bonus-admin-period-action-btn">Create period</button>
+            <button type="button" id="btnBonusAdminEditPeriod" class="btn bonus-admin-period-action-btn" hidden aria-label="Edit selected period">Edit period</button>
+          </div>
+          <div id="bonusAdminPeriodsEmpty" class="bonus-admin-periods-empty" hidden>No periods. Create one.</div>
+          <p class="bonus-admin-placeholder bonus-admin-placeholder--when-no-period">Select a period to manage.</p>
+          <div id="bonusAdminSummarySection" class="bonus-admin-summary-section" hidden>
+            <h2 class="bonus-admin-summary-title">Summary</h2>
+            <div class="bonus-admin-summary-cards">
+              <div class="bonus-admin-summary-card">
+                <span class="bonus-admin-summary-card-label">Total team pot</span>
+                <span id="bonusAdminSummaryPot" class="bonus-admin-summary-card-value">—</span>
+              </div>
+              <div class="bonus-admin-summary-card">
+                <span class="bonus-admin-summary-card-label">Eligible jobs</span>
+                <span id="bonusAdminSummaryEligibleCount" class="bonus-admin-summary-card-value">—</span>
+              </div>
+              <div class="bonus-admin-summary-card">
+                <span class="bonus-admin-summary-card-label">Callback total</span>
+                <span id="bonusAdminSummaryCallbackTotal" class="bonus-admin-summary-card-value">—</span>
+              </div>
+            </div>
+          </div>
+          <div id="bonusAdminBreakdownSection" class="bonus-admin-breakdown-section" hidden>
+            <h2 class="bonus-admin-breakdown-title">Per-technician breakdown</h2>
+            <div class="bonus-admin-breakdown-table-wrap">
+              <table class="bonus-admin-breakdown-table" aria-label="Per-technician bonus breakdown">
+                <thead>
+                  <tr>
+                    <th scope="col">Technician</th>
+                    <th scope="col">GP contributed</th>
+                    <th scope="col">Share of pot</th>
+                    <th scope="col">Expected payout</th>
+                  </tr>
+                </thead>
+                <tbody id="bonusAdminBreakdownTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="bonusAdminJobsSection" class="bonus-admin-jobs-section" hidden>
+            <h2 class="bonus-admin-jobs-title">Jobs</h2>
+            <div class="bonus-admin-jobs-table-wrap">
+              <table class="bonus-admin-jobs-table" aria-label="Period jobs">
+                <thead>
+                  <tr>
+                    <th scope="col">Identifier</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Job GP</th>
+                    <th scope="col">Personnel</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="bonusAdminJobsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
     <div id="view-technician-bonus" class="app-view hidden" role="region" aria-label="Technician bonus dashboard">
       <div class="technician-bonus-view-container">
         <header class="technician-bonus-header">
@@ -730,6 +813,118 @@
       <div class="auth-actions">
         <button type="button" class="btn btn-primary" id="inviteUserSubmitBtn">Send invite</button>
         <button type="button" class="btn" id="inviteUserCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bonus Admin: Edit job (job_performance) modal -->
+  <div class="auth-modal bonus-admin-edit-job-modal" id="bonusAdminEditJobModal" role="dialog" aria-labelledby="bonusAdminEditJobModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="bonusAdminEditJobModalBackdrop"></div>
+    <div class="auth-modal-content bonus-admin-edit-job-modal-content">
+      <h2 id="bonusAdminEditJobModalTitle" class="auth-modal-title">Edit job</h2>
+      <form id="bonusAdminEditJobForm">
+        <div class="form-group">
+          <label for="bonusAdminEditJobStatus">Status</label>
+          <select id="bonusAdminEditJobStatus" aria-label="Job status">
+            <option value="draft">draft</option>
+            <option value="verified">verified</option>
+            <option value="processed">processed</option>
+          </select>
+        </div>
+        <div class="form-group form-group--checkbox">
+          <label>
+            <input type="checkbox" id="bonusAdminEditJobIsCallback" aria-label="Is callback" />
+            Callback
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobCallbackReason">Callback reason</label>
+          <input type="text" id="bonusAdminEditJobCallbackReason" placeholder="Optional" aria-label="Callback reason" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobCallbackCost">Callback cost</label>
+          <input type="number" id="bonusAdminEditJobCallbackCost" min="0" step="0.01" value="0" aria-label="Callback cost" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobStandardPartsRuns">Standard parts runs</label>
+          <input type="number" id="bonusAdminEditJobStandardPartsRuns" min="0" step="1" value="0" aria-label="Standard parts runs" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobSellerFaultPartsRuns">Seller fault parts runs</label>
+          <input type="number" id="bonusAdminEditJobSellerFaultPartsRuns" min="0" step="1" value="0" aria-label="Seller fault parts runs" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobMissedMaterialsCost">Missed materials cost</label>
+          <input type="number" id="bonusAdminEditJobMissedMaterialsCost" min="0" step="0.01" value="0" aria-label="Missed materials cost" />
+        </div>
+      </form>
+      <div id="bonusAdminEditJobError" class="auth-error" role="alert" hidden></div>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="bonusAdminEditJobSaveBtn">Save</button>
+        <button type="button" class="btn" id="bonusAdminEditJobCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bonus Admin: Edit personnel (job_personnel) modal -->
+  <div class="auth-modal bonus-admin-edit-personnel-modal" id="bonusAdminEditPersonnelModal" role="dialog" aria-labelledby="bonusAdminEditPersonnelModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="bonusAdminEditPersonnelModalBackdrop"></div>
+    <div class="auth-modal-content bonus-admin-edit-personnel-modal-content">
+      <h2 id="bonusAdminEditPersonnelModalTitle" class="auth-modal-title">Edit personnel</h2>
+      <p id="bonusAdminEditPersonnelModalSubtitle" class="bonus-admin-edit-personnel-subtitle" aria-hidden="true"></p>
+      <div class="bonus-admin-edit-personnel-table-wrap">
+        <table class="bonus-admin-edit-personnel-table" aria-label="Personnel for this job">
+          <thead>
+            <tr>
+              <th scope="col">Personnel</th>
+              <th scope="col">Onsite (min)</th>
+              <th scope="col">Travel (min)</th>
+              <th scope="col">Seller</th>
+              <th scope="col">Executor</th>
+            </tr>
+          </thead>
+          <tbody id="bonusAdminEditPersonnelTableBody"></tbody>
+        </table>
+      </div>
+      <div id="bonusAdminEditPersonnelError" class="auth-error" role="alert" hidden></div>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="bonusAdminEditPersonnelSaveBtn">Save</button>
+        <button type="button" class="btn" id="bonusAdminEditPersonnelCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bonus Admin: Create/Edit period modal -->
+  <div class="auth-modal bonus-admin-period-modal" id="bonusAdminPeriodModal" role="dialog" aria-labelledby="bonusAdminPeriodModalTitle" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="bonusAdminPeriodModalBackdrop"></div>
+    <div class="auth-modal-content bonus-admin-period-modal-content">
+      <h2 id="bonusAdminPeriodModalTitle" class="auth-modal-title">Create period</h2>
+      <form id="bonusAdminPeriodForm">
+        <div class="form-group">
+          <label for="bonusAdminPeriodName">Period name</label>
+          <input type="text" id="bonusAdminPeriodName" required maxlength="255" placeholder="e.g. Feb 2026 Fortnight 1" aria-label="Period name" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminPeriodStartDate">Start date</label>
+          <input type="date" id="bonusAdminPeriodStartDate" required aria-label="Start date" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminPeriodEndDate">End date</label>
+          <input type="date" id="bonusAdminPeriodEndDate" required aria-label="End date" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminPeriodStatus">Status</label>
+          <select id="bonusAdminPeriodStatus" aria-label="Period status">
+            <option value="open">open</option>
+            <option value="processing">processing</option>
+            <option value="closed">closed</option>
+          </select>
+        </div>
+      </form>
+      <div id="bonusAdminPeriodError" class="auth-error" role="alert" hidden></div>
+      <div class="auth-actions">
+        <button type="button" class="btn btn-primary" id="bonusAdminPeriodSaveBtn">Save</button>
+        <button type="button" class="btn" id="bonusAdminPeriodCancelBtn">Cancel</button>
       </div>
     </div>
   </div>

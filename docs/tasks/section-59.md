@@ -121,15 +121,24 @@ The following are **locked decisions**. Full rationale and implementation notes:
 
 ### API and UI (scope TBD after research)
 
-- [ ] **59.16** Backend API: define endpoints for bonus feature (e.g. list periods, get period summary with pot and per-tech breakdown, get job list for period, create/update job_performance and job_personnel). **Include list/read job_personnel** (e.g. by job_performance_id or period) so Admin UI can display and edit personnel. Auth: who can read (admin + technician self?) and who can write (admin only for ledger, or tech for own time?). Implement after 59.1–59.8.
+- [x] **59.16** Backend API: define endpoints for bonus feature (e.g. list periods, get period summary with pot and per-tech breakdown, get job list for period, create/update job_performance and job_personnel). **Include list/read job_personnel** (e.g. by job_performance_id or period) so Admin UI can display and edit personnel. Auth: who can read (admin + technician self?) and who can write (admin only for ledger, or tech for own time?). Implement after 59.1–59.8.
   - [x] **59.16.1** Prototype read API shipped: `GET /api/bonus/technician/period-current`, `GET /api/bonus/technician/dashboard`, `GET /api/bonus/technician/jobs` with role gates (`admin`, `editor`, `technician`) and self-context enforcement for non-admin users.
   - [x] **59.16.2** Finalize full bonus API surface for Admin UI and payroll flow (period summary, per-tech breakdown, list/read job_personnel by period/job, and any required write endpoints beyond existing admin PATCH).
-  - [ ] **59.16.3** Leaderboard contract: return period `leaderboard[]` with `{ technician_id, display_name, avatar_url?, avatar_initials, gp_contributed, share_of_team_pot, rank, previous_rank? }`.
-  - [ ] **59.16.4** Pot momentum fields: `{ total_team_pot, team_pot_delta, team_pot_delta_reason, as_of }` with reason enum `job_finalized | callback_deduction | admin_adjustment`.
-  - [ ] **59.16.5** Streak fields: `{ hot_streak_count, hot_streak_active }` based on consecutive jobs with zero callbacks and zero parts runs.
-  - [ ] **59.16.6** Badge evidence payload: `badge_events[]` with `{ code, earned, evidence_text }` for tooltip-grade explanations.
-  - [ ] **59.16.7** Monotonic snapshot/version field (`snapshot_version` or `updated_at`) for deterministic frontend diff animations.
-- [ ] **59.17** Admin UI: views to manage periods, finalise jobs, assign personnel, enter callback/parts-run/missed-materials data, and view period pot and per-tech GP. Desktop-first; mobile later if needed. Depends on 59.16 list/read job_personnel for the personnel assign/verify screen.
+  - [x] **59.16.3** Leaderboard contract: return period `leaderboard[]` with `{ technician_id, display_name, avatar_url?, avatar_initials, gp_contributed, share_of_team_pot, rank, previous_rank? }`.
+  - [x] **59.16.4** Pot momentum fields: `{ total_team_pot, team_pot_delta, team_pot_delta_reason, as_of }` with reason enum `job_finalized | callback_deduction | admin_adjustment`.
+  - [x] **59.16.5** Streak fields: `{ hot_streak_count, hot_streak_active }` based on consecutive jobs with zero callbacks and zero parts runs.
+  - [x] **59.16.6** Badge evidence payload: `badge_events[]` with `{ code, earned, evidence_text }` for tooltip-grade explanations.
+  - [x] **59.16.7** Monotonic snapshot/version field (`snapshot_version` or `updated_at`) for deterministic frontend diff animations.
+- [x] **59.17** Admin UI: views to manage periods, finalise jobs, assign personnel, enter callback/parts-run/missed-materials data, and view period pot and per-tech GP. Desktop-first; mobile later if needed. Depends on 59.16 list/read job_personnel for the personnel assign/verify screen. Plan: docs/plans/2026-02-24-section-59-17-admin-ui-plan.md.
+  - [x] **59.17.1** View shell and entry: add `#view-bonus-admin`, profile menu item “Bonus Admin” (admin-only), wire `switchView` and guard; redirect non-admin/mobile.
+  - [x] **59.17.1.1** When redirecting from view-bonus-admin in syncAdminDesktopAccess (e.g. resize to mobile or role change), close Edit job modal and clear bonusAdminEditJobId so the modal does not remain open over the canvas.
+  - [x] **59.17.2** Period list and selector: fetch `GET /api/bonus/periods`, populate period dropdown; on change store selected period id; empty state when no periods.
+  - [x] **59.17.3** Period summary and breakdown: fetch and render summary (pot, eligible count, callback total) and per-tech breakdown table; scope styles under `#view-bonus-admin`.
+  - [x] **59.17.4** Jobs list for period: fetch and render jobs (identifier, status, job_gp, personnel); “Edit job” per row.
+  - [x] **59.17.5** Edit job (job_performance): form/modal for status, callback, parts runs, missed materials; PATCH job-performance; refresh on success.
+  - [x] **59.17.5.1** Edit job form: prevent Enter from submitting (add submit handler preventDefault and call save, or replace form with non-form container) to avoid page reload and state loss.
+  - [x] **59.17.6** Edit personnel (job_personnel): per-job/per-row edit onsite_minutes, travel_shopping_minutes, is_seller, is_executor; PATCH job-personnel; refresh on success.
+  - [x] **59.17.7** Create/update period: form for period_name, start_date, end_date, status; POST/PATCH periods; refresh period list.
 - [ ] **59.18** Technician UI (required): deliver technician-facing bonus dashboard. Read-only first, then final-rule payout once 59.9–59.15 are complete.
   - [x] **59.18.1** Prototype dashboard shipped (mobile-first, desktop-safe): period header/status, provisional Team Pot + My GP hero cards, pending Expected Payout, and transparent per-job ledger with role badges, estimation indicator, penalty tags, and pending reasons/explanations.
   - [x] **59.18.2** Final dashboard pass: switch provisional metrics/ledger to canonical rule engine outputs (59.9–59.15), remove provisional placeholders where no longer needed, and lock payout display for closed periods.
@@ -145,7 +154,7 @@ The following are **locked decisions**. Full rationale and implementation notes:
 
 - [x] **59.19** Quote flow: implement saving to public.quotes when Add to Job (or Create New Job)—include labour_hours (and items/totals as needed)—and set both servicem8_job_id and servicem8_job_uuid (add nullable column to quotes if needed). **Active-quote rule:** add `is_final_quote` and/or persist job status at quote time so we can select “last quote before Scheduled/In Progress” when matching quote_id to job_performance (see Decisions). Ensure existing Add to Job / Create New Job flows remain working and Railway-safe.
 - [x] **59.19.1** When persisting to public.quotes, set **items** (JSONB) to a clean array of **material** lines only (exclude labour): each element at least `{ id, qty }` (product id + quantity); optionally include name, item_number, servicem8_material_uuid for ServiceM8 matching. Use the same structure as calculate-quote materials (id, qty) so Missed Materials detection can compare quoted items to ServiceM8 job materials. Document the intended items shape in BACKEND_DATABASE or Section 59. See BACKEND_DATABASE.md “Audit: Material quoting and public.quotes.items”.
-- [ ] **59.20** ServiceM8 sync: 59.6 uses a **scheduled cron sync** to create/update job_performance from Completed/Invoiced jobs. If additional sync (e.g. payment data, one-off backfill) is needed, implement and document token expiry handling and sync frequency.
+- [x] **59.20** ServiceM8 sync: 59.6 uses a **scheduled cron sync** to create/update job_performance from Completed/Invoiced jobs. If additional sync (e.g. payment data, one-off backfill) is needed, implement and document token expiry handling and sync frequency.
 - [ ] **59.21** E2E and regression: ensure quote modal, Add to Job, Create New Job, and existing bonus-unrelated features still pass. Add E2E or manual tests for bonus views if admin UI is added.
 
 ---

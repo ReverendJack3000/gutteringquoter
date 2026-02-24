@@ -60,7 +60,7 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 | `SERVICEM8_COMPANY_EMAIL` | No (ServiceM8) | ServiceM8 account owner email (e.g. `jack@clearstreamguttering.co.nz`). When set, that user's ServiceM8 tokens are used for all users. Only that user can connect or disconnect; others see "ServiceM8 connected (organization)". That user must connect ServiceM8 once. Resolved to user id via Supabase Auth (requires `SUPABASE_SERVICE_ROLE_KEY`). |
 | `SERVICEM8_COMPANY_USER_ID` | No (ServiceM8) | Alternative to `SERVICEM8_COMPANY_EMAIL`: Supabase auth user UUID. When set, that user's ServiceM8 tokens are used for all users. Prefer `SERVICEM8_COMPANY_EMAIL` so you don't have to look up the UUID. |
 
-**Job performance sync (optional):** If you run the job_performance sync (Section 59, e.g. cron calling `scripts/run_job_performance_sync.py`), the company user must have connected ServiceM8 at least once. The app's default OAuth scope request includes `read_jobs` and `read_job_materials`, which the sync requires to list Completed/Invoiced jobs and job materials.
+**Job performance sync (optional):** If you run the job_performance sync (Section 59, e.g. cron calling `scripts/run_job_performance_sync.py`), the company user must have connected ServiceM8 at least once. The app's default OAuth scope request includes `read_jobs` and `read_job_materials`, which the sync requires to list Completed/Invoiced jobs and job materials. Token expiry handling, recommended sync frequency, and additional sync/backfill: **[SERVICEM8_SYNC.md](SERVICEM8_SYNC.md)**.
 
 Do **not** commit `.env` or paste these values into the repo. Railway injects them at runtime.
 

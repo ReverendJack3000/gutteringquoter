@@ -266,6 +266,17 @@ const technicianBonusState = {
   previousPayload: null,
 };
 
+/** Bonus Admin view (59.17): periods list and selected period for summary/breakdown/jobs. */
+const bonusAdminState = {
+  periods: [],
+  selectedPeriodId: null,
+  loading: false,
+  summary: null,
+  breakdown: null,
+  summaryLoading: false,
+  jobs: [],
+};
+
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
 
@@ -9826,6 +9837,7 @@ function initAuth() {
   const profileDropdown = document.getElementById('profileDropdown');
   const menuItemProducts = document.getElementById('menuItemProducts');
   const menuItemUserPermissions = document.getElementById('menuItemUserPermissions');
+  const menuItemBonusAdmin = document.getElementById('menuItemBonusAdmin');
   const menuItemTechnicianBonus = document.getElementById('menuItemTechnicianBonus');
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
@@ -9942,6 +9954,21 @@ function initAuth() {
         return;
       }
       switchView('view-user-permissions', { triggerEl: userAvatar || menuItemUserPermissions });
+    });
+  }
+  if (menuItemBonusAdmin) {
+    menuItemBonusAdmin.addEventListener('click', (e) => {
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      e.stopPropagation();
+      if (!canAccessDesktopAdminUi()) {
+        const msg = isDesktopViewport()
+          ? 'Only admin users can access Bonus Admin.'
+          : 'Bonus Admin is available on desktop only.';
+        showMessage(msg, 'error');
+        return;
+      }
+      switchView('view-bonus-admin', { triggerEl: userAvatar || menuItemBonusAdmin });
     });
   }
   if (menuItemTechnicianBonus) {
@@ -12560,6 +12587,690 @@ function updateTechnicianBonusMenuVisibility() {
   menuItem.hidden = !canAccessTechnicianBonusView();
 }
 
+function updateBonusAdminMenuVisibility() {
+  const menuItem = document.getElementById('menuItemBonusAdmin');
+  if (!menuItem) return;
+  menuItem.hidden = !canAccessDesktopAdminUi();
+}
+
+function renderBonusAdminPeriodSelect() {
+  const select = document.getElementById('bonusAdminPeriodSelect');
+  const emptyEl = document.getElementById('bonusAdminPeriodsEmpty');
+  if (!select || !emptyEl) return;
+
+  const periods = Array.isArray(bonusAdminState.periods) ? bonusAdminState.periods : [];
+  const loading = bonusAdminState.loading;
+
+  if (loading && periods.length === 0) {
+    emptyEl.textContent = 'Loading…';
+    emptyEl.hidden = false;
+    select.hidden = true;
+    return;
+  }
+
+  if (periods.length === 0) {
+    emptyEl.textContent = 'No periods. Create one.';
+    emptyEl.hidden = false;
+    select.hidden = true;
+    bonusAdminState.selectedPeriodId = null;
+    return;
+  }
+
+  emptyEl.hidden = true;
+  select.hidden = false;
+  select.disabled = false;
+
+  const selectedId = bonusAdminState.selectedPeriodId || '';
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select a period…';
+  select.appendChild(placeholder);
+  periods.forEach((p) => {
+    const opt = document.createElement('option');
+    opt.value = String(p.id || '');
+    opt.textContent = String(p.period_name || p.id || '—');
+    select.appendChild(opt);
+  });
+  if (selectedId && periods.some((p) => String(p.id) === selectedId)) {
+    select.value = selectedId;
+  } else {
+    select.value = '';
+    bonusAdminState.selectedPeriodId = null;
+  }
+
+  const editPeriodBtn = document.getElementById('btnBonusAdminEditPeriod');
+  if (editPeriodBtn) {
+    editPeriodBtn.hidden = !bonusAdminState.selectedPeriodId;
+  }
+}
+
+function renderBonusAdminSummaryAndBreakdown() {
+  const summarySection = document.getElementById('bonusAdminSummarySection');
+  const breakdownSection = document.getElementById('bonusAdminBreakdownSection');
+  const periodId = bonusAdminState.selectedPeriodId;
+  const loading = bonusAdminState.summaryLoading;
+  const summary = bonusAdminState.summary;
+  const breakdown = bonusAdminState.breakdown;
+
+  if (!summarySection || !breakdownSection) return;
+
+  if (!periodId) {
+    summarySection.hidden = true;
+    breakdownSection.hidden = true;
+    return;
+  }
+
+  summarySection.hidden = false;
+  breakdownSection.hidden = false;
+  const potEl = document.getElementById('bonusAdminSummaryPot');
+  const eligibleEl = document.getElementById('bonusAdminSummaryEligibleCount');
+  const callbackEl = document.getElementById('bonusAdminSummaryCallbackTotal');
+  const tbody = document.getElementById('bonusAdminBreakdownTableBody');
+
+  if (loading) {
+    if (potEl) potEl.textContent = 'Loading…';
+    if (eligibleEl) eligibleEl.textContent = '—';
+    if (callbackEl) callbackEl.textContent = '—';
+    if (tbody) tbody.innerHTML = '';
+    return;
+  }
+
+  if (potEl) potEl.textContent = summary ? formatCurrency(summary.total_team_pot ?? 0) : '—';
+  if (eligibleEl) eligibleEl.textContent = summary ? String(summary.eligible_job_count ?? 0) : '—';
+  if (callbackEl) callbackEl.textContent = summary ? formatCurrency(summary.callback_cost_total ?? 0) : '—';
+
+  if (!tbody) return;
+  const rows = Array.isArray(bonusAdminState.breakdown) ? bonusAdminState.breakdown : [];
+  tbody.innerHTML = rows.map((row) => {
+    const name = String(row.display_name || row.technician_id || '—').trim() || '—';
+    const gp = Number(row.gp_contributed);
+    const share = Number(row.share_of_team_pot);
+    const payout = Number(row.expected_payout);
+    return `<tr><td>${escapeHtml(name)}</td><td>${formatCurrency(gp)}</td><td>${formatCurrency(share)}</td><td>${formatCurrency(payout)}</td></tr>`;
+  }).join('');
+}
+
+function renderBonusAdminJobsList() {
+  const section = document.getElementById('bonusAdminJobsSection');
+  const tbody = document.getElementById('bonusAdminJobsTableBody');
+  if (!section || !tbody) return;
+
+  const periodId = bonusAdminState.selectedPeriodId;
+  const loading = bonusAdminState.summaryLoading;
+  const jobs = Array.isArray(bonusAdminState.jobs) ? bonusAdminState.jobs : [];
+
+  if (!periodId || loading) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  tbody.innerHTML = jobs.map((job) => {
+    const id = String(job.id || '').trim();
+    const identifier = String(job.servicem8_job_id || job.id || '—').trim() || '—';
+    const status = String(job.status || '—').trim() || '—';
+    const jobGp = Number(job.job_gp);
+    const personnel = Array.isArray(job.personnel) ? job.personnel : [];
+    const personnelLabel = personnel.length === 0 ? '0' : String(personnel.length);
+    return `<tr data-job-id="${escapeHtml(id)}">
+      <td>${escapeHtml(identifier)}</td>
+      <td>${escapeHtml(status)}</td>
+      <td>${formatCurrency(jobGp)}</td>
+      <td>${escapeHtml(personnelLabel)}</td>
+      <td>
+        <button type="button" class="bonus-admin-edit-job-btn" data-job-id="${escapeHtml(id)}" aria-label="Edit job ${escapeHtml(identifier)}">Edit job</button>
+        <button type="button" class="bonus-admin-edit-personnel-btn" data-job-id="${escapeHtml(id)}" data-job-identifier="${escapeHtml(identifier)}" aria-label="Edit personnel for job ${escapeHtml(identifier)}">Edit personnel</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  section.querySelectorAll('.bonus-admin-edit-job-btn').forEach((btn) => {
+    if (btn.dataset.bonusAdminBound) return;
+    btn.dataset.bonusAdminBound = 'true';
+    btn.addEventListener('click', () => {
+      const jobId = btn.getAttribute('data-job-id');
+      if (!jobId) return;
+      openBonusAdminEditJobModal(jobId);
+    });
+  });
+  section.querySelectorAll('.bonus-admin-edit-personnel-btn').forEach((btn) => {
+    if (btn.dataset.bonusAdminBound) return;
+    btn.dataset.bonusAdminBound = 'true';
+    btn.addEventListener('click', () => {
+      const jobId = btn.getAttribute('data-job-id');
+      const jobIdentifier = btn.getAttribute('data-job-identifier') || '';
+      if (!jobId) return;
+      openBonusAdminEditPersonnelModal(jobId, jobIdentifier);
+    });
+  });
+}
+
+let bonusAdminEditJobId = null;
+
+function populateBonusAdminEditJobForm(job) {
+  if (!job) return;
+  const statusEl = document.getElementById('bonusAdminEditJobStatus');
+  const isCallbackEl = document.getElementById('bonusAdminEditJobIsCallback');
+  const callbackReasonEl = document.getElementById('bonusAdminEditJobCallbackReason');
+  const callbackCostEl = document.getElementById('bonusAdminEditJobCallbackCost');
+  const standardPartsEl = document.getElementById('bonusAdminEditJobStandardPartsRuns');
+  const sellerFaultPartsEl = document.getElementById('bonusAdminEditJobSellerFaultPartsRuns');
+  const missedMaterialsEl = document.getElementById('bonusAdminEditJobMissedMaterialsCost');
+  if (statusEl) statusEl.value = job.status === 'verified' || job.status === 'processed' ? job.status : 'draft';
+  if (isCallbackEl) isCallbackEl.checked = !!job.is_callback;
+  if (callbackReasonEl) callbackReasonEl.value = String(job.callback_reason || '').trim();
+  if (callbackCostEl) callbackCostEl.value = Number(job.callback_cost) >= 0 ? Number(job.callback_cost) : 0;
+  if (standardPartsEl) standardPartsEl.value = Math.max(0, parseInt(job.standard_parts_runs, 10) || 0);
+  if (sellerFaultPartsEl) sellerFaultPartsEl.value = Math.max(0, parseInt(job.seller_fault_parts_runs, 10) || 0);
+  if (missedMaterialsEl) missedMaterialsEl.value = Number(job.missed_materials_cost) >= 0 ? Number(job.missed_materials_cost) : 0;
+}
+
+function getBonusAdminEditJobFormBody() {
+  const statusEl = document.getElementById('bonusAdminEditJobStatus');
+  const isCallbackEl = document.getElementById('bonusAdminEditJobIsCallback');
+  const callbackReasonEl = document.getElementById('bonusAdminEditJobCallbackReason');
+  const callbackCostEl = document.getElementById('bonusAdminEditJobCallbackCost');
+  const standardPartsEl = document.getElementById('bonusAdminEditJobStandardPartsRuns');
+  const sellerFaultPartsEl = document.getElementById('bonusAdminEditJobSellerFaultPartsRuns');
+  const missedMaterialsEl = document.getElementById('bonusAdminEditJobMissedMaterialsCost');
+  const body = {};
+  if (statusEl) body.status = statusEl.value || 'draft';
+  if (isCallbackEl) body.is_callback = isCallbackEl.checked;
+  if (callbackReasonEl) body.callback_reason = callbackReasonEl.value.trim() || null;
+  if (callbackCostEl) body.callback_cost = Math.max(0, parseFloat(callbackCostEl.value) || 0);
+  if (standardPartsEl) body.standard_parts_runs = Math.max(0, parseInt(standardPartsEl.value, 10) || 0);
+  if (sellerFaultPartsEl) body.seller_fault_parts_runs = Math.max(0, parseInt(sellerFaultPartsEl.value, 10) || 0);
+  if (missedMaterialsEl) body.missed_materials_cost = Math.max(0, parseFloat(missedMaterialsEl.value) || 0);
+  return body;
+}
+
+async function openBonusAdminEditJobModal(jobId) {
+  if (!jobId || !canAccessDesktopAdminUi()) return;
+  const triggerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const errorEl = document.getElementById('bonusAdminEditJobError');
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+
+  try {
+    const resp = await fetch(`/api/bonus/job-performance/${encodeURIComponent(jobId)}`, { headers: { ...getAuthHeaders() } });
+    if (handleAuthFailure(resp)) return;
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      showMessage(typeof data?.detail === 'string' ? data.detail : 'Failed to load job.', 'error');
+      return;
+    }
+    bonusAdminEditJobId = jobId;
+    populateBonusAdminEditJobForm(data);
+    openAccessibleModal('bonusAdminEditJobModal', { triggerEl });
+  } catch (err) {
+    showMessage(err?.message || 'Failed to load job.', 'error');
+  }
+}
+
+async function saveBonusAdminEditJob() {
+  const jobId = bonusAdminEditJobId;
+  if (!jobId || !canAccessDesktopAdminUi()) return;
+  const errorEl = document.getElementById('bonusAdminEditJobError');
+  const saveBtn = document.getElementById('bonusAdminEditJobSaveBtn');
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const body = getBonusAdminEditJobFormBody();
+    const resp = await fetch(`/api/bonus/job-performance/${encodeURIComponent(jobId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(body),
+    });
+    if (handleAuthFailure(resp)) return;
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const msg = typeof data?.detail === 'string' ? data.detail : data?.detail?.msg || 'Failed to update job.';
+      if (errorEl) { errorEl.textContent = msg; errorEl.hidden = false; }
+      return;
+    }
+    closeAccessibleModal('bonusAdminEditJobModal', { restoreFocus: true });
+    bonusAdminEditJobId = null;
+    showMessage('Job updated.', 'success');
+    void fetchBonusAdminSummaryAndBreakdown();
+  } catch (err) {
+    if (errorEl) { errorEl.textContent = err?.message || 'Failed to update job.'; errorEl.hidden = false; }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function fetchBonusAdminSummaryAndBreakdown() {
+  const periodId = bonusAdminState.selectedPeriodId;
+  if (!periodId || !canAccessDesktopAdminUi() || getVisibleViewId() !== 'view-bonus-admin') return;
+
+  bonusAdminState.summaryLoading = true;
+  bonusAdminState.summary = null;
+  bonusAdminState.breakdown = null;
+  bonusAdminState.jobs = [];
+  renderBonusAdminSummaryAndBreakdown();
+  renderBonusAdminJobsList();
+
+  try {
+    const [summaryResp, breakdownResp, jobsResp] = await Promise.all([
+      fetch(`/api/bonus/admin/periods/${encodeURIComponent(periodId)}/summary`, { headers: { ...getAuthHeaders() } }),
+      fetch(`/api/bonus/admin/periods/${encodeURIComponent(periodId)}/breakdown`, { headers: { ...getAuthHeaders() } }),
+      fetch(`/api/bonus/admin/periods/${encodeURIComponent(periodId)}/jobs`, { headers: { ...getAuthHeaders() } }),
+    ]);
+    if (handleAuthFailure(summaryResp) || handleAuthFailure(breakdownResp) || handleAuthFailure(jobsResp)) return;
+    const [summaryData, breakdownData, jobsData] = await Promise.all([
+      summaryResp.json().catch(() => ({})),
+      breakdownResp.json().catch(() => ({})),
+      jobsResp.json().catch(() => ({})),
+    ]);
+    if (!summaryResp.ok) {
+      showMessage(typeof summaryData?.detail === 'string' ? summaryData.detail : 'Failed to load summary.', 'error');
+      return;
+    }
+    if (!breakdownResp.ok) {
+      showMessage(typeof breakdownData?.detail === 'string' ? breakdownData.detail : 'Failed to load breakdown.', 'error');
+      return;
+    }
+    if (!jobsResp.ok) {
+      showMessage(typeof jobsData?.detail === 'string' ? jobsData.detail : 'Failed to load jobs.', 'error');
+      return;
+    }
+    bonusAdminState.summary = summaryData;
+    bonusAdminState.breakdown = breakdownData.breakdown ?? [];
+    bonusAdminState.jobs = Array.isArray(jobsData?.jobs) ? jobsData.jobs : [];
+    renderBonusAdminSummaryAndBreakdown();
+    renderBonusAdminJobsList();
+  } catch (err) {
+    showMessage(err?.message || 'Failed to load summary and breakdown.', 'error');
+  } finally {
+    bonusAdminState.summaryLoading = false;
+    renderBonusAdminSummaryAndBreakdown();
+    renderBonusAdminJobsList();
+  }
+}
+
+async function fetchBonusAdminPeriods() {
+  if (!canAccessDesktopAdminUi()) return;
+  if (getVisibleViewId() !== 'view-bonus-admin') return;
+
+  bonusAdminState.loading = true;
+  renderBonusAdminPeriodSelect();
+
+  try {
+    const resp = await fetch('/api/bonus/periods', { headers: { ...getAuthHeaders() } });
+    if (handleAuthFailure(resp)) return;
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const msg = typeof data?.detail === 'string' ? data.detail : data?.detail?.msg || 'Failed to load periods.';
+      showMessage(msg, 'error');
+      return;
+    }
+    const periods = Array.isArray(data?.periods) ? data.periods : [];
+    bonusAdminState.periods = periods;
+    const currentSelected = bonusAdminState.selectedPeriodId;
+    const ids = new Set(periods.map((p) => String(p.id)));
+    if (!currentSelected || !ids.has(currentSelected)) {
+      bonusAdminState.selectedPeriodId = null;
+    }
+    renderBonusAdminPeriodSelect();
+  } catch (err) {
+    showMessage(err?.message || 'Failed to load periods.', 'error');
+  } finally {
+    bonusAdminState.loading = false;
+    renderBonusAdminPeriodSelect();
+  }
+}
+
+function initBonusAdminView() {
+  const backBtn = document.getElementById('btnBonusAdminBackToCanvas');
+  if (!backBtn || backBtn.dataset.bonusAdminBound) return;
+  backBtn.dataset.bonusAdminBound = 'true';
+  backBtn.addEventListener('click', () => {
+    switchView('view-canvas', { triggerEl: backBtn });
+  });
+
+  const periodSelect = document.getElementById('bonusAdminPeriodSelect');
+  if (periodSelect && !periodSelect.dataset.bonusAdminBound) {
+    periodSelect.dataset.bonusAdminBound = 'true';
+    periodSelect.addEventListener('change', () => {
+      const value = periodSelect.value || '';
+      bonusAdminState.selectedPeriodId = value || null;
+      if (value) {
+        void fetchBonusAdminSummaryAndBreakdown();
+      } else {
+        bonusAdminState.summary = null;
+        bonusAdminState.breakdown = null;
+        bonusAdminState.jobs = [];
+        renderBonusAdminSummaryAndBreakdown();
+        renderBonusAdminJobsList();
+      }
+    });
+  }
+
+  const editJobForm = document.getElementById('bonusAdminEditJobForm');
+  const editJobSaveBtn = document.getElementById('bonusAdminEditJobSaveBtn');
+  const editJobCancelBtn = document.getElementById('bonusAdminEditJobCancelBtn');
+  if (editJobForm && !editJobForm.dataset.bonusAdminBound) {
+    editJobForm.dataset.bonusAdminBound = 'true';
+    editJobForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void saveBonusAdminEditJob();
+    });
+  }
+  if (editJobSaveBtn && !editJobSaveBtn.dataset.bonusAdminBound) {
+    editJobSaveBtn.dataset.bonusAdminBound = 'true';
+    editJobSaveBtn.addEventListener('click', () => void saveBonusAdminEditJob());
+  }
+  if (editJobCancelBtn && !editJobCancelBtn.dataset.bonusAdminBound) {
+    editJobCancelBtn.dataset.bonusAdminBound = 'true';
+    editJobCancelBtn.addEventListener('click', () => {
+      closeAccessibleModal('bonusAdminEditJobModal');
+      bonusAdminEditJobId = null;
+    });
+  }
+
+  const editPersonnelSaveBtn = document.getElementById('bonusAdminEditPersonnelSaveBtn');
+  const editPersonnelCancelBtn = document.getElementById('bonusAdminEditPersonnelCancelBtn');
+  if (editPersonnelSaveBtn && !editPersonnelSaveBtn.dataset.bonusAdminBound) {
+    editPersonnelSaveBtn.dataset.bonusAdminBound = 'true';
+    editPersonnelSaveBtn.addEventListener('click', () => void saveBonusAdminEditPersonnel());
+  }
+  if (editPersonnelCancelBtn && !editPersonnelCancelBtn.dataset.bonusAdminBound) {
+    editPersonnelCancelBtn.dataset.bonusAdminBound = 'true';
+    editPersonnelCancelBtn.addEventListener('click', () => {
+      closeAccessibleModal('bonusAdminEditPersonnelModal');
+      bonusAdminEditPersonnelJobId = null;
+      bonusAdminEditPersonnelData = [];
+    });
+  }
+
+  const createPeriodBtn = document.getElementById('btnBonusAdminCreatePeriod');
+  const editPeriodBtn = document.getElementById('btnBonusAdminEditPeriod');
+  if (createPeriodBtn && !createPeriodBtn.dataset.bonusAdminBound) {
+    createPeriodBtn.dataset.bonusAdminBound = 'true';
+    createPeriodBtn.addEventListener('click', () => openBonusAdminCreatePeriodModal());
+  }
+  if (editPeriodBtn && !editPeriodBtn.dataset.bonusAdminBound) {
+    editPeriodBtn.dataset.bonusAdminBound = 'true';
+    editPeriodBtn.addEventListener('click', () => {
+      const periodId = bonusAdminState.selectedPeriodId;
+      if (periodId) openBonusAdminEditPeriodModal(periodId);
+    });
+  }
+
+  const periodForm = document.getElementById('bonusAdminPeriodForm');
+  const periodSaveBtn = document.getElementById('bonusAdminPeriodSaveBtn');
+  const periodCancelBtn = document.getElementById('bonusAdminPeriodCancelBtn');
+  if (periodForm && !periodForm.dataset.bonusAdminBound) {
+    periodForm.dataset.bonusAdminBound = 'true';
+    periodForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void saveBonusAdminPeriod();
+    });
+  }
+  if (periodSaveBtn && !periodSaveBtn.dataset.bonusAdminBound) {
+    periodSaveBtn.dataset.bonusAdminBound = 'true';
+    periodSaveBtn.addEventListener('click', () => void saveBonusAdminPeriod());
+  }
+  if (periodCancelBtn && !periodCancelBtn.dataset.bonusAdminBound) {
+    periodCancelBtn.dataset.bonusAdminBound = 'true';
+    periodCancelBtn.addEventListener('click', () => {
+      closeAccessibleModal('bonusAdminPeriodModal');
+      bonusAdminEditPeriodId = null;
+    });
+  }
+}
+
+let bonusAdminEditPersonnelJobId = null;
+let bonusAdminEditPersonnelData = [];
+
+function populateBonusAdminEditPersonnelTable(personnel, jobIdentifier) {
+  const tbody = document.getElementById('bonusAdminEditPersonnelTableBody');
+  const subtitleEl = document.getElementById('bonusAdminEditPersonnelModalSubtitle');
+  if (!tbody) return;
+  if (subtitleEl) subtitleEl.textContent = jobIdentifier ? `Job ${jobIdentifier}` : '';
+
+  const list = Array.isArray(personnel) ? personnel : [];
+  tbody.innerHTML = list.map((p, index) => {
+    const pid = String(p.id || '').trim();
+    const label = `Personnel ${index + 1}`;
+    const onsite = Math.max(0, parseInt(p.onsite_minutes, 10) || 0);
+    const travel = Math.max(0, parseInt(p.travel_shopping_minutes, 10) || 0);
+    const seller = !!p.is_seller;
+    const executor = !!p.is_executor;
+    return `<tr data-personnel-id="${escapeHtml(pid)}">
+      <td>${escapeHtml(label)}</td>
+      <td><input type="number" min="0" step="1" value="${onsite}" aria-label="Onsite minutes for ${escapeHtml(label)}" class="bonus-admin-personnel-onsite" data-personnel-id="${escapeHtml(pid)}" /></td>
+      <td><input type="number" min="0" step="1" value="${travel}" aria-label="Travel minutes for ${escapeHtml(label)}" class="bonus-admin-personnel-travel" data-personnel-id="${escapeHtml(pid)}" /></td>
+      <td><input type="checkbox" ${seller ? 'checked' : ''} aria-label="Seller for ${escapeHtml(label)}" class="bonus-admin-personnel-seller" data-personnel-id="${escapeHtml(pid)}" /></td>
+      <td><input type="checkbox" ${executor ? 'checked' : ''} aria-label="Executor for ${escapeHtml(label)}" class="bonus-admin-personnel-executor" data-personnel-id="${escapeHtml(pid)}" /></td>
+    </tr>`;
+  }).join('');
+}
+
+async function openBonusAdminEditPersonnelModal(jobId, jobIdentifier) {
+  if (!jobId || !canAccessDesktopAdminUi()) return;
+  const triggerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const errorEl = document.getElementById('bonusAdminEditPersonnelError');
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+
+  try {
+    const resp = await fetch(`/api/bonus/job-performance/${encodeURIComponent(jobId)}/personnel`, { headers: { ...getAuthHeaders() } });
+    if (handleAuthFailure(resp)) return;
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      showMessage(typeof data?.detail === 'string' ? data.detail : 'Failed to load personnel.', 'error');
+      return;
+    }
+    const personnel = Array.isArray(data.personnel) ? data.personnel : [];
+    bonusAdminEditPersonnelJobId = jobId;
+    bonusAdminEditPersonnelData = personnel.map((p) => ({
+      id: p.id,
+      onsite_minutes: Math.max(0, parseInt(p.onsite_minutes, 10) || 0),
+      travel_shopping_minutes: Math.max(0, parseInt(p.travel_shopping_minutes, 10) || 0),
+      is_seller: !!p.is_seller,
+      is_executor: !!p.is_executor,
+    }));
+    populateBonusAdminEditPersonnelTable(personnel, jobIdentifier || null);
+    openAccessibleModal('bonusAdminEditPersonnelModal', { triggerEl });
+  } catch (err) {
+    showMessage(err?.message || 'Failed to load personnel.', 'error');
+  }
+}
+
+async function saveBonusAdminEditPersonnel() {
+  const jobId = bonusAdminEditPersonnelJobId;
+  if (!jobId || !canAccessDesktopAdminUi()) return;
+  const errorEl = document.getElementById('bonusAdminEditPersonnelError');
+  const saveBtn = document.getElementById('bonusAdminEditPersonnelSaveBtn');
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const tbody = document.getElementById('bonusAdminEditPersonnelTableBody');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr[data-personnel-id]');
+    const updates = [];
+    for (const row of rows) {
+      const pid = row.getAttribute('data-personnel-id');
+      if (!pid) continue;
+      const onsiteInput = row.querySelector('.bonus-admin-personnel-onsite');
+      const travelInput = row.querySelector('.bonus-admin-personnel-travel');
+      const sellerInput = row.querySelector('.bonus-admin-personnel-seller');
+      const executorInput = row.querySelector('.bonus-admin-personnel-executor');
+      const onsite = Math.max(0, parseInt(onsiteInput?.value, 10) || 0);
+      const travel = Math.max(0, parseInt(travelInput?.value, 10) || 0);
+      const seller = !!(sellerInput && sellerInput.checked);
+      const executor = !!(executorInput && executorInput.checked);
+      const original = bonusAdminEditPersonnelData.find((p) => String(p.id) === String(pid));
+      if (!original) continue;
+      const changed =
+        original.onsite_minutes !== onsite ||
+        original.travel_shopping_minutes !== travel ||
+        original.is_seller !== seller ||
+        original.is_executor !== executor;
+      if (changed) updates.push({ personnel_id: pid, body: { onsite_minutes: onsite, travel_shopping_minutes: travel, is_seller: seller, is_executor: executor } });
+    }
+    for (const { personnel_id, body } of updates) {
+      const resp = await fetch(`/api/bonus/job-personnel/${encodeURIComponent(personnel_id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(body),
+      });
+      if (handleAuthFailure(resp)) return;
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = typeof data?.detail === 'string' ? data.detail : 'Failed to update personnel.';
+        if (errorEl) { errorEl.textContent = msg; errorEl.hidden = false; }
+        return;
+      }
+    }
+    closeAccessibleModal('bonusAdminEditPersonnelModal', { restoreFocus: true });
+    bonusAdminEditPersonnelJobId = null;
+    bonusAdminEditPersonnelData = [];
+    showMessage(updates.length > 0 ? 'Personnel updated.' : 'No changes to save.', 'success');
+    void fetchBonusAdminSummaryAndBreakdown();
+  } catch (err) {
+    if (errorEl) { errorEl.textContent = err?.message || 'Failed to save personnel.'; errorEl.hidden = false; }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+let bonusAdminEditPeriodId = null;
+
+function openBonusAdminCreatePeriodModal() {
+  if (!canAccessDesktopAdminUi()) return;
+  const titleEl = document.getElementById('bonusAdminPeriodModalTitle');
+  const nameEl = document.getElementById('bonusAdminPeriodName');
+  const startEl = document.getElementById('bonusAdminPeriodStartDate');
+  const endEl = document.getElementById('bonusAdminPeriodEndDate');
+  const statusEl = document.getElementById('bonusAdminPeriodStatus');
+  const errorEl = document.getElementById('bonusAdminPeriodError');
+  if (titleEl) titleEl.textContent = 'Create period';
+  if (nameEl) nameEl.value = '';
+  if (startEl) startEl.value = '';
+  if (endEl) endEl.value = '';
+  if (statusEl) statusEl.value = 'open';
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  bonusAdminEditPeriodId = null;
+  const triggerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  openAccessibleModal('bonusAdminPeriodModal', { triggerEl });
+}
+
+function openBonusAdminEditPeriodModal(periodId) {
+  if (!periodId || !canAccessDesktopAdminUi()) return;
+  const period = (bonusAdminState.periods || []).find((p) => String(p.id) === String(periodId));
+  if (!period) {
+    showMessage('Period not found.', 'error');
+    return;
+  }
+  const titleEl = document.getElementById('bonusAdminPeriodModalTitle');
+  const nameEl = document.getElementById('bonusAdminPeriodName');
+  const startEl = document.getElementById('bonusAdminPeriodStartDate');
+  const endEl = document.getElementById('bonusAdminPeriodEndDate');
+  const statusEl = document.getElementById('bonusAdminPeriodStatus');
+  const errorEl = document.getElementById('bonusAdminPeriodError');
+  if (titleEl) titleEl.textContent = 'Edit period';
+  if (nameEl) nameEl.value = String(period.period_name || '').trim();
+  if (startEl) startEl.value = period.start_date ? String(period.start_date).slice(0, 10) : '';
+  if (endEl) endEl.value = period.end_date ? String(period.end_date).slice(0, 10) : '';
+  if (statusEl) statusEl.value = period.status === 'processing' || period.status === 'closed' ? period.status : 'open';
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  bonusAdminEditPeriodId = periodId;
+  const triggerEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  openAccessibleModal('bonusAdminPeriodModal', { triggerEl });
+}
+
+async function saveBonusAdminPeriod() {
+  if (!canAccessDesktopAdminUi()) return;
+  const nameEl = document.getElementById('bonusAdminPeriodName');
+  const startEl = document.getElementById('bonusAdminPeriodStartDate');
+  const endEl = document.getElementById('bonusAdminPeriodEndDate');
+  const statusEl = document.getElementById('bonusAdminPeriodStatus');
+  const errorEl = document.getElementById('bonusAdminPeriodError');
+  const saveBtn = document.getElementById('bonusAdminPeriodSaveBtn');
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  if (saveBtn) saveBtn.disabled = true;
+
+  const period_name = (nameEl?.value || '').trim();
+  const start_date = startEl?.value || '';
+  const end_date = endEl?.value || '';
+  const status = (statusEl?.value || 'open').trim();
+
+  if (!period_name) {
+    if (errorEl) { errorEl.textContent = 'Period name is required.'; errorEl.hidden = false; }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+  if (!start_date || !end_date) {
+    if (errorEl) { errorEl.textContent = 'Start date and end date are required.'; errorEl.hidden = false; }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+  if (start_date > end_date) {
+    if (errorEl) { errorEl.textContent = 'Start date must be before or equal to end date.'; errorEl.hidden = false; }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+  if (!['open', 'processing', 'closed'].includes(status)) {
+    if (errorEl) { errorEl.textContent = 'Status must be open, processing, or closed.'; errorEl.hidden = false; }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+
+  try {
+    const isEdit = !!bonusAdminEditPeriodId;
+    let createdOrUpdatedId = bonusAdminEditPeriodId;
+
+    if (isEdit) {
+      const resp = await fetch(`/api/bonus/periods/${encodeURIComponent(bonusAdminEditPeriodId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ period_name, start_date, end_date, status }),
+      });
+      if (handleAuthFailure(resp)) return;
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = typeof data?.detail === 'string' ? data.detail : 'Failed to update period.';
+        if (errorEl) { errorEl.textContent = msg; errorEl.hidden = false; }
+        return;
+      }
+    } else {
+      const resp = await fetch('/api/bonus/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ period_name, start_date, end_date, status }),
+      });
+      if (handleAuthFailure(resp)) return;
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = typeof data?.detail === 'string' ? data.detail : 'Failed to create period.';
+        if (errorEl) { errorEl.textContent = msg; errorEl.hidden = false; }
+        return;
+      }
+      createdOrUpdatedId = data?.id || null;
+    }
+
+    closeAccessibleModal('bonusAdminPeriodModal', { restoreFocus: true });
+    bonusAdminEditPeriodId = null;
+    showMessage(isEdit ? 'Period updated.' : 'Period created.', 'success');
+
+    await fetchBonusAdminPeriods();
+    if (createdOrUpdatedId && !isEdit) {
+      bonusAdminState.selectedPeriodId = String(createdOrUpdatedId);
+      renderBonusAdminPeriodSelect();
+      void fetchBonusAdminSummaryAndBreakdown();
+    } else if (isEdit) {
+      renderBonusAdminPeriodSelect();
+    }
+  } catch (err) {
+    if (errorEl) { errorEl.textContent = err?.message || 'Failed to save period.'; errorEl.hidden = false; }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
 function updateMobileBonusButtonVisibility() {
   const btn = document.getElementById('mobileBonusDashboardBtn');
   if (!btn) return;
@@ -12578,6 +13289,7 @@ function openTechnicianBonusView(triggerEl) {
 function syncAdminDesktopAccess(options = {}) {
   updateUserPermissionsMenuVisibility();
   updateTechnicianBonusMenuVisibility();
+  updateBonusAdminMenuVisibility();
   updateMobileBonusButtonVisibility();
 
   const quoteTable = document.getElementById('quotePartsTable');
@@ -12600,6 +13312,33 @@ function syncAdminDesktopAccess(options = {}) {
         const message = isDesktopViewport()
           ? 'Only admin users can access User Permissions.'
           : 'User Permissions is available on desktop only.';
+        showMessage(message, 'info');
+      }
+    }
+  }
+
+  if (getVisibleViewId() === 'view-bonus-admin' && !canAccessDesktopAdminUi()) {
+    if (!authState.token) {
+      closeAllModals({ restoreFocus: false });
+      bonusAdminEditJobId = null;
+      bonusAdminEditPersonnelJobId = null;
+      bonusAdminEditPersonnelData = [];
+      bonusAdminEditPeriodId = null;
+      switchView('view-login');
+      if (options.notify !== false) showMessage('Session expired. Please sign in again.', 'info');
+    } else {
+      closeAccessibleModal('bonusAdminEditJobModal');
+      closeAccessibleModal('bonusAdminEditPersonnelModal');
+      closeAccessibleModal('bonusAdminPeriodModal');
+      bonusAdminEditJobId = null;
+      bonusAdminEditPersonnelJobId = null;
+      bonusAdminEditPersonnelData = [];
+      bonusAdminEditPeriodId = null;
+      switchView('view-canvas', { focus: options.focus !== false });
+      if (options.notify !== false) {
+        const message = isDesktopViewport()
+          ? 'Only admin users can access Bonus Admin.'
+          : 'Bonus Admin is available on desktop only.';
         showMessage(message, 'info');
       }
     }
@@ -13387,6 +14126,9 @@ function renderBonusRaceLeaderboard(payload) {
     const tooltipText = row.placeholder
       ? 'Peer leaderboard data will appear here after backend wiring.'
       : `${row.display_name}: ${formatCurrency(row.gp_contributed)} contributed (${formatBonusPercent(share)} of team share).`;
+    const viewDetailsAria = row.placeholder
+      ? 'View details'
+      : `View details for ${escapeHtml(String(row.display_name || 'Unknown')).replace(/"/g, '&quot;')}`;
     return `<li class="bonus-racer${changedRank ? ' bonus-racer--overtake' : ''}" data-rank="${rank}">
       <div class="bonus-racer-top">
         <div class="bonus-racer-left">
@@ -13401,7 +14143,7 @@ function renderBonusRaceLeaderboard(payload) {
         <span>${escapeHtml(formatBonusPercent(share))} of team share</span>
         ${changedRank ? '<span> • Overtake!</span>' : ''}
       </div>
-      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" aria-label="View details" title="${escapeHtml(tooltipText)}" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
+      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" aria-label="${viewDetailsAria}" title="${escapeHtml(tooltipText)}" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
     </li>`;
   }).join('');
   /* 59.18.2.3: slice-bar fill animation; respects reduced-motion via CSS */
@@ -14248,6 +14990,27 @@ function initModalAccessibilityFramework() {
     closeOnEscape: true,
     initialFocus: () => document.getElementById('inviteUserEmail'),
   });
+  registerAccessibleModal({
+    id: 'bonusAdminEditJobModal',
+    element: document.getElementById('bonusAdminEditJobModal'),
+    backdrop: document.getElementById('bonusAdminEditJobModalBackdrop'),
+    closeOnEscape: true,
+    initialFocus: () => document.getElementById('bonusAdminEditJobStatus') || document.getElementById('bonusAdminEditJobSaveBtn'),
+  });
+  registerAccessibleModal({
+    id: 'bonusAdminEditPersonnelModal',
+    element: document.getElementById('bonusAdminEditPersonnelModal'),
+    backdrop: document.getElementById('bonusAdminEditPersonnelModalBackdrop'),
+    closeOnEscape: true,
+    initialFocus: () => document.getElementById('bonusAdminEditPersonnelTableBody')?.querySelector('input') || document.getElementById('bonusAdminEditPersonnelSaveBtn'),
+  });
+  registerAccessibleModal({
+    id: 'bonusAdminPeriodModal',
+    element: document.getElementById('bonusAdminPeriodModal'),
+    backdrop: document.getElementById('bonusAdminPeriodModalBackdrop'),
+    closeOnEscape: true,
+    initialFocus: () => document.getElementById('bonusAdminPeriodName') || document.getElementById('bonusAdminPeriodSaveBtn'),
+  });
   (function registerDiagramsBottomSheetModal() {
     const SHEET_ID = 'diagramsBottomSheet';
     const SWIPE_CLOSE_THRESHOLD_PX = 50;
@@ -14467,6 +15230,9 @@ function getPrimaryViewFocusTarget(viewId) {
       || document.getElementById('btnRefreshUserPermissions')
       || document.getElementById('btnPermissionsBackToCanvas');
   }
+  if (viewId === 'view-bonus-admin') {
+    return document.getElementById('btnBonusAdminBackToCanvas');
+  }
   if (viewId === 'view-technician-bonus') {
     return document.getElementById('btnBonusRefresh')
       || document.getElementById('btnBonusBackToCanvas')
@@ -14502,6 +15268,13 @@ function switchView(viewId, options = {}) {
     showMessage(message, 'error');
     return;
   }
+  if (viewId === 'view-bonus-admin' && !canAccessDesktopAdminUi()) {
+    const message = isDesktopViewport()
+      ? 'Only admin users can access Bonus Admin.'
+      : 'Bonus Admin is available on desktop only.';
+    showMessage(message, 'error');
+    return;
+  }
   if (viewId === 'view-technician-bonus' && !canAccessTechnicianBonusView()) {
     showMessage('Your role does not allow access to the bonus dashboard.', 'error');
     return;
@@ -14530,6 +15303,9 @@ function switchView(viewId, options = {}) {
     } else if (viewId === 'view-user-permissions') {
       initUserPermissionsView();
       void fetchUserPermissions();
+    } else if (viewId === 'view-bonus-admin') {
+      initBonusAdminView();
+      void fetchBonusAdminPeriods();
     } else if (viewId === 'view-technician-bonus') {
       initTechnicianBonusView();
       void fetchTechnicianBonusDashboard();

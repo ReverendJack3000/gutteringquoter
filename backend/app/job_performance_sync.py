@@ -4,10 +4,13 @@ Lists jobs from ServiceM8 API, resolves active quote per job, upserts into publi
 with merge-before-upsert to preserve admin-edited fields. 59.7: populates invoiced_revenue_exc_gst
 and materials_cost (our DB pricing with ServiceM8 fallback). 59.8: creates job_personnel baseline
 from JobActivity (filter zero-duration stubs); does not overwrite existing rows.
+Token expiry: get_tokens() refreshes when < 5 min; on 401 we retry once with fresh tokens (59.20).
 """
 import logging
 from datetime import datetime
 from typing import Any, Optional
+
+import httpx
 
 from app.quotes import get_active_quote_for_job
 from app.supabase_client import get_supabase
@@ -168,9 +171,27 @@ def run_sync() -> dict[str, Any]:
     access_token = tokens["access_token"]
     supabase = get_supabase()
 
-    # List Completed and Invoiced jobs; merge and dedupe by uuid
-    completed = list_jobs(access_token, "Completed")
-    invoiced = list_jobs(access_token, "Invoiced")
+    # List Completed and Invoiced jobs; merge and dedupe by uuid. Retry once on 401 with fresh token (59.20).
+    try:
+        completed = list_jobs(access_token, "Completed")
+        invoiced = list_jobs(access_token, "Invoiced")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401 and sync_user_id:
+            tokens = get_tokens(sync_user_id)
+            if tokens:
+                access_token = tokens["access_token"]
+                logger.info("job_performance_sync: 401 on first request; retrying with refreshed token")
+                completed = list_jobs(access_token, "Completed")
+                invoiced = list_jobs(access_token, "Invoiced")
+            else:
+                result["error"] = "ServiceM8 token expired; refresh failed (reconnect ServiceM8 in app)"
+                logger.warning("job_performance_sync: %s", result["error"])
+                return result
+        else:
+            result["error"] = str(e)
+            logger.warning("job_performance_sync: %s", result["error"])
+            return result
+
     seen_uuids: set[str] = set()
     jobs: list[dict[str, Any]] = []
     for j in completed + invoiced:

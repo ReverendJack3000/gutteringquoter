@@ -564,3 +564,124 @@ def compute_total_contributed_gp(
 def compute_technician_contribution_total(ledger_rows: list[dict[str, Any]]) -> float:
     total = sum(_to_float((row or {}).get("my_job_gp_contribution")) for row in (ledger_rows or []))
     return round(total, 2)
+
+
+def compute_hot_streak(
+    eligible_jobs: list[dict[str, Any]],
+    personnel_by_job: dict[str, list[dict[str, Any]]],
+    technician_id: str,
+) -> dict[str, Any]:
+    """
+    59.16.5: Hot streak from consecutive jobs (most recent first) with zero callbacks
+    and zero parts runs (standard + seller_fault). Returns hot_streak_count and hot_streak_active.
+    """
+    tech_id = _normalize_id(technician_id)
+    jobs_for_tech: list[dict[str, Any]] = []
+    for job in eligible_jobs or []:
+        job_id = _normalize_id((job or {}).get("id"))
+        if not job_id:
+            continue
+        personnel = list(personnel_by_job.get(job_id) or [])
+        if not any(_normalize_id(p.get("technician_id")) == tech_id for p in personnel):
+            continue
+        jobs_for_tech.append(job)
+    jobs_for_tech.sort(
+        key=lambda j: (_parse_datetime(j.get("created_at")) or datetime.min, _normalize_id(j.get("id"))),
+        reverse=True,
+    )
+    count = 0
+    for job in jobs_for_tech:
+        is_callback = (job or {}).get("is_callback") is True
+        standard = _to_int((job or {}).get("standard_parts_runs"))
+        seller_fault = _to_int((job or {}).get("seller_fault_parts_runs"))
+        if is_callback or standard > 0 or seller_fault > 0:
+            break
+        count += 1
+    return {
+        "hot_streak_count": count,
+        "hot_streak_active": count > 0,
+    }
+
+
+def build_badge_events(
+    ledger_rows: list[dict[str, Any]],
+    hero: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """
+    59.16.6: Badge evidence for tooltip-grade explanations. One entry per badge code
+    with earned (bool) and evidence_text (string). Codes align with frontend effect chips.
+    """
+    rows = ledger_rows or []
+    hero = hero or {}
+    do_it_all_count = 0
+    sniper_count = 0
+    sniper_evidence = "You nailed the quote tolerance window."
+    flat_tire_count = 0
+    red_flag_count = 0
+    for row in rows:
+        role_badges = list((row or {}).get("role_badges") or [])
+        penalty_tags = list((row or {}).get("penalty_tags") or [])
+        estimation = (row or {}).get("estimation") or {}
+        explanations = list((row or {}).get("explanations") or [])
+        if any("do-it-all" in str(b).lower() for b in role_badges):
+            do_it_all_count += 1
+        if str(estimation.get("status") or "").strip().lower() == "pass":
+            sniper_count += 1
+            if str(estimation.get("message") or "").strip():
+                sniper_evidence = str(estimation.get("message")).strip()
+            if explanations:
+                sniper_evidence = explanations[0]
+        for tag in penalty_tags:
+            code = str((tag or {}).get("code") or "").strip().lower()
+            if code == "seller_fault_parts_runs":
+                flat_tire_count += 1
+            if code in ("callback_bad_scoping", "callback_poor_workmanship"):
+                red_flag_count += 1
+    hot_streak_count = int(hero.get("hot_streak_count") or 0)
+    hot_streak_active = bool(hero.get("hot_streak_active"))
+    events: list[dict[str, Any]] = [
+        {
+            "code": "do_it_all",
+            "earned": do_it_all_count > 0,
+            "evidence_text": (
+                f"{do_it_all_count} job(s) where you sold and executed."
+                if do_it_all_count > 0
+                else "Unlock when you sell and execute the same job on one visit.",
+            ),
+        },
+        {
+            "code": "sniper",
+            "earned": sniper_count > 0,
+            "evidence_text": (
+                sniper_evidence if sniper_count > 0 else "Unlock when actual labour lands inside tolerance."
+            ),
+        },
+        {
+            "code": "hot_streak",
+            "earned": hot_streak_active,
+            "evidence_text": (
+                f"{hot_streak_count} consecutive clean jobs."
+                if hot_streak_active
+                else "Unlock with consecutive jobs with no callbacks and no parts runs.",
+            ),
+        },
+        {
+            "code": "flat_tire",
+            "earned": flat_tire_count > 0,
+            "evidence_text": (
+                f"{flat_tire_count} unscheduled parts run penalties recorded."
+                if flat_tire_count > 0
+                else "No unscheduled parts run penalties in this period.",
+            ),
+        },
+        {
+            "code": "red_flag",
+            "earned": red_flag_count > 0,
+            "evidence_text": (
+                f"{red_flag_count} callback-driven GP penalties recorded."
+                if red_flag_count > 0
+                else "No callback voids recorded in this period.",
+            ),
+        },
+    ]
+    return events

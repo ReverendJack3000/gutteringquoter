@@ -16,7 +16,9 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user_id, get_current_user_id_and_role, require_role
 from app.bonus_dashboard import (
+    build_badge_events,
     build_canonical_ledger_rows,
+    compute_hot_streak,
     compute_technician_contribution_total,
     compute_total_contributed_gp,
     filter_eligible_period_jobs,
@@ -444,6 +446,68 @@ def _fetch_job_personnel_rows_for_jobs(
     return [dict(row or {}) for row in (resp.data or [])]
 
 
+def _leaderboard_initials_from_display_name(display_name: str) -> str:
+    """Derive two-character initials from display name (59.16.3)."""
+    clean = (display_name or "").strip()
+    if not clean:
+        return "??"
+    parts = clean.split()
+    if len(parts) >= 2:
+        return ((parts[0][:1] + parts[1][:1]).upper())[:2]
+    return (clean[:2].upper())[:2] if len(clean) >= 2 else (clean[:1].upper() + "?")[:2]
+
+
+def _resolve_technician_display_names(
+    supabase: Any,
+    technician_ids: list[str],
+) -> dict[str, dict[str, str]]:
+    """
+    Resolve display_name and avatar_initials for technician IDs (59.16.3).
+    Returns dict technician_id -> { "display_name", "avatar_initials" }.
+    On auth unavailability or error, returns placeholders so dashboard never fails.
+    """
+    result: dict[str, dict[str, str]] = {}
+    ids = [str(tid or "").strip() for tid in technician_ids if str(tid or "").strip()]
+    if not ids:
+        return result
+    try:
+        _require_service_role_for_admin_permissions()
+        auth_users = _list_auth_users_via_admin_api(supabase)
+        id_set = set(ids)
+        for user in auth_users or []:
+            uid = str(_extract_auth_user_field(user, "id") or "").strip()
+            if uid not in id_set:
+                continue
+            meta = _extract_auth_user_field(user, "user_metadata")
+            full_name = (meta.get("full_name") if isinstance(meta, dict) else None) or ""
+            full_name = str(full_name).strip() if full_name else ""
+            email = _extract_auth_user_field(user, "email")
+            email = str(email).strip() if email else ""
+            display_name = full_name or email or "Tech"
+            result[uid] = {
+                "display_name": display_name,
+                "avatar_initials": _leaderboard_initials_from_display_name(display_name),
+            }
+    except HTTPException:
+        pass
+    except Exception:
+        pass
+    for tid in ids:
+        if tid not in result:
+            result[tid] = {"display_name": "Tech", "avatar_initials": "??"}
+    placeholder_count = sum(
+        1 for tid in ids
+        if result.get(tid, {}).get("display_name") == "Tech" and result.get(tid, {}).get("avatar_initials") == "??"
+    )
+    if placeholder_count > 0:
+        logger.debug(
+            "Leaderboard display names: using placeholders for %d of %d technician(s)",
+            placeholder_count,
+            len(ids),
+        )
+    return result
+
+
 def _build_provisional_technician_dashboard_payload(
     *,
     supabase: Any,
@@ -454,12 +518,14 @@ def _build_provisional_technician_dashboard_payload(
     actor_role: str,
     forced_self_context: bool,
 ) -> dict[str, Any]:
+    _now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     if not period:
         return {
             "is_provisional": True,
             "selection_reason": selection_reason,
             "expected_payout_status": "pending_final_rules",
             "period": None,
+            "updated_at": _now_iso,
             "technician_context": {
                 "technician_id": technician_id,
                 "actor_user_id": actor_user_id,
@@ -469,6 +535,11 @@ def _build_provisional_technician_dashboard_payload(
             },
             "hero": {
                 "total_team_pot": 0.0,
+                "team_pot_delta": 0.0,
+                "team_pot_delta_reason": None,
+                "as_of": _now_iso,
+                "hot_streak_count": 0,
+                "hot_streak_active": False,
                 "my_total_gp_contributed": 0.0,
                 "my_expected_payout": None,
                 "pending_reasons": [
@@ -481,6 +552,9 @@ def _build_provisional_technician_dashboard_payload(
                 "job_count": 0,
                 "empty_state": "No open or processing bonus period was found.",
             },
+            "leaderboard": [],
+            "badge_events": build_badge_events([], {"hot_streak_count": 0, "hot_streak_active": False}),
+            "streak": {"hot_streak_count": 0, "hot_streak_active": False},
         }
     period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
     period_jobs = select_period_jobs(period, period_jobs_source)
@@ -517,11 +591,73 @@ def _build_provisional_technician_dashboard_payload(
     hero_pending_reasons = (
         [] if period_status == "closed" else ["payout_may_change_until_period_closed"]
     )
+    # 59.16.3: build leaderboard (technician_id, display_name, avatar_initials, gp_contributed, share_of_team_pot, rank)
+    technician_ids_leaderboard: list[str] = []
+    for rows in personnel_by_job.values():
+        for r in rows or []:
+            tid = str((r or {}).get("technician_id") or "").strip()
+            if tid and tid not in technician_ids_leaderboard:
+                technician_ids_leaderboard.append(tid)
+    leaderboard_rows: list[dict[str, Any]] = []
+    for tid in technician_ids_leaderboard:
+        ledger_for_tech = build_canonical_ledger_rows(
+            eligible_jobs=eligible_jobs,
+            personnel_by_job=personnel_by_job,
+            technician_id=tid,
+        )
+        gp_contributed = compute_technician_contribution_total(ledger_for_tech)
+        share_of_team_pot = (
+            round(team_pot * (gp_contributed / total_contributed_gp), 2)
+            if total_contributed_gp > 0
+            else 0.0
+        )
+        leaderboard_rows.append({
+            "technician_id": tid,
+            "gp_contributed": gp_contributed,
+            "share_of_team_pot": share_of_team_pot,
+        })
+    leaderboard_rows.sort(key=lambda row: (row["gp_contributed"], row["technician_id"]), reverse=True)
+    for rank_one_based, row in enumerate(leaderboard_rows, start=1):
+        row["rank"] = rank_one_based
+    display_map = _resolve_technician_display_names(supabase, [r["technician_id"] for r in leaderboard_rows])
+    leaderboard = []
+    for row in leaderboard_rows:
+        tid = row["technician_id"]
+        info = display_map.get(tid) or {"display_name": "Tech", "avatar_initials": "??"}
+        leaderboard.append({
+            "technician_id": tid,
+            "display_name": info["display_name"],
+            "avatar_initials": info["avatar_initials"],
+            "gp_contributed": row["gp_contributed"],
+            "share_of_team_pot": row["share_of_team_pot"],
+            "rank": row["rank"],
+        })
+    streak = compute_hot_streak(
+        eligible_jobs=eligible_jobs,
+        personnel_by_job=personnel_by_job,
+        technician_id=technician_id,
+    )
+    hero_dict = {
+        "total_team_pot": team_pot,
+        "team_pot_delta": 0.0,
+        "team_pot_delta_reason": None,
+        "as_of": _now_iso,
+        "hot_streak_count": streak["hot_streak_count"],
+        "hot_streak_active": streak["hot_streak_active"],
+        "my_total_gp_contributed": technician_gp,
+        "my_expected_payout": my_expected_payout,
+        "period_job_count": len(eligible_jobs),
+        "technician_job_count": len(ledger_rows),
+        "callback_cost_total_raw": callback_cost_total,
+        "pending_reasons": hero_pending_reasons,
+    }
+    badge_events = build_badge_events(ledger_rows, hero_dict)
     return {
         "is_provisional": False,
         "selection_reason": selection_reason,
         "expected_payout_status": expected_payout_status,
         "period": period,
+        "updated_at": _now_iso,
         "technician_context": {
             "technician_id": technician_id,
             "actor_user_id": actor_user_id,
@@ -529,15 +665,7 @@ def _build_provisional_technician_dashboard_payload(
             "is_admin_override": actor_role == "admin" and technician_id != actor_user_id,
             "forced_self_context": forced_self_context,
         },
-        "hero": {
-            "total_team_pot": team_pot,
-            "my_total_gp_contributed": technician_gp,
-            "my_expected_payout": my_expected_payout,
-            "period_job_count": len(eligible_jobs),
-            "technician_job_count": len(ledger_rows),
-            "callback_cost_total_raw": callback_cost_total,
-            "pending_reasons": hero_pending_reasons,
-        },
+        "hero": hero_dict,
         "ledger": {
             "jobs": ledger_rows,
             "job_count": len(ledger_rows),
@@ -547,6 +675,9 @@ def _build_provisional_technician_dashboard_payload(
                 else None
             ),
         },
+        "leaderboard": leaderboard,
+        "badge_events": badge_events,
+        "streak": {"hot_streak_count": streak["hot_streak_count"], "hot_streak_active": streak["hot_streak_active"]},
     }
 
 

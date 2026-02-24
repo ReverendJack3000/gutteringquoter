@@ -3804,6 +3804,271 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   text-align: center;
 }
 
+/* Bonus Admin view (desktop admin only, 59.17) */
+#view-bonus-admin .bonus-admin-view-container {
+  padding: 24px 40px;
+  background: #f9fafb;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+#view-bonus-admin .bonus-admin-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+#view-bonus-admin .bonus-admin-header-left {
+  justify-self: start;
+}
+
+#view-bonus-admin .bonus-admin-header-title {
+  font-size: clamp(1.125rem, 0.8vw + 0.95rem, 1.5rem);
+  font-weight: 600;
+  color: #111;
+  justify-self: center;
+}
+
+#view-bonus-admin .bonus-admin-header-right {
+  justify-self: end;
+}
+
+#view-bonus-admin .bonus-admin-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+}
+
+#view-bonus-admin .bonus-admin-placeholder {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+#view-bonus-admin .bonus-admin-period-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#view-bonus-admin .bonus-admin-period-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  flex-shrink: 0;
+}
+
+#view-bonus-admin .bonus-admin-period-select {
+  min-width: 200px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+}
+
+#view-bonus-admin .bonus-admin-period-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+#view-bonus-admin .bonus-admin-period-action-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+#view-bonus-admin .bonus-admin-period-action-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+#view-bonus-admin .bonus-admin-period-action-btn:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+#view-bonus-admin .bonus-admin-periods-empty {
+  font-size: 14px;
+  color: #6b7280;
+  padding: 12px 0;
+}
+
+#view-bonus-admin .bonus-admin-summary-section {
+  margin-top: 20px;
+}
+
+#view-bonus-admin .bonus-admin-summary-title,
+#view-bonus-admin .bonus-admin-breakdown-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 12px 0;
+}
+
+#view-bonus-admin .bonus-admin-summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+#view-bonus-admin .bonus-admin-summary-card {
+  min-width: 140px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#view-bonus-admin .bonus-admin-summary-card-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+#view-bonus-admin .bonus-admin-summary-card-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-section {
+  margin-top: 8px;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-table-wrap {
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 400px;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-table th,
+#view-bonus-admin .bonus-admin-breakdown-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+  color: #111827;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-table th {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+}
+
+#view-bonus-admin .bonus-admin-breakdown-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+#view-bonus-admin .bonus-admin-jobs-section {
+  margin-top: 24px;
+}
+
+#view-bonus-admin .bonus-admin-jobs-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 12px 0;
+}
+
+#view-bonus-admin .bonus-admin-jobs-table-wrap {
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+#view-bonus-admin .bonus-admin-jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 420px;
+}
+
+#view-bonus-admin .bonus-admin-jobs-table th,
+#view-bonus-admin .bonus-admin-jobs-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+  color: #111827;
+}
+
+#view-bonus-admin .bonus-admin-jobs-table th {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+}
+
+#view-bonus-admin .bonus-admin-jobs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+#view-bonus-admin .bonus-admin-edit-job-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+
+#view-bonus-admin .bonus-admin-edit-job-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+#view-bonus-admin .bonus-admin-edit-job-btn:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+#view-bonus-admin .bonus-admin-edit-personnel-btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+#view-bonus-admin .bonus-admin-edit-personnel-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+#view-bonus-admin .bonus-admin-edit-personnel-btn:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 /* Technician bonus dashboard (Section 59 prototype) */
 .technician-bonus-view-container {
   --bonus-bg-start: #f3f8ff;
@@ -4785,6 +5050,119 @@ body[data-viewport-mode="mobile"] .bonus-pot-gauge .bonus-pot-value {
 .auth-error[hidden] {
   display: none;
 }
+
+.bonus-admin-edit-job-modal .auth-modal-content {
+  max-width: 440px;
+}
+.bonus-admin-edit-job-modal .form-group {
+  margin-bottom: 14px;
+}
+.bonus-admin-edit-job-modal .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+.bonus-admin-edit-job-modal .form-group input,
+.bonus-admin-edit-job-modal .form-group select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: #fff;
+}
+.bonus-admin-edit-job-modal .form-group input:focus,
+.bonus-admin-edit-job-modal .form-group select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+.bonus-admin-edit-job-modal .form-group--checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.bonus-admin-edit-job-modal .form-group--checkbox input[type="checkbox"] {
+  width: auto;
+}
+
+.bonus-admin-edit-personnel-modal .auth-modal-content {
+  max-width: 560px;
+}
+.bonus-admin-edit-personnel-subtitle {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #555;
+}
+.bonus-admin-edit-personnel-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.bonus-admin-edit-personnel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.bonus-admin-edit-personnel-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ddd;
+  font-weight: 600;
+  color: #333;
+}
+.bonus-admin-edit-personnel-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+}
+.bonus-admin-edit-personnel-table input[type="number"] {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.bonus-admin-edit-personnel-table input[type="number"]:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+.bonus-admin-edit-personnel-table input[type="checkbox"] {
+  width: auto;
+}
+
+.bonus-admin-period-modal .auth-modal-content {
+  max-width: 440px;
+}
+.bonus-admin-period-modal .form-group {
+  margin-bottom: 14px;
+}
+.bonus-admin-period-modal .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+.bonus-admin-period-modal .form-group input,
+.bonus-admin-period-modal .form-group select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: #fff;
+}
+.bonus-admin-period-modal .form-group input:focus,
+.bonus-admin-period-modal .form-group select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .auth-forgot-wrap {
   margin: 12px 0 0;
   font-size: 13px;
