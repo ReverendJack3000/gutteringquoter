@@ -48,13 +48,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/section-59-cron-sync
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 59.6 Job ledger creation (cron sync)
-  - [x] 59.7 Populate invoiced_revenue_exc_gst, materials_cost
-  - [x] 59.9 Base Job GP (59.9.1–59.9.3: rate reader, compute_job_gp, GET job-performance/{id})
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
