@@ -130,6 +130,10 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 
 **Schedule Saver (59.15):** A seller who did not execute (is_seller true, is_executor false) keeps full 60% credit (or 60% ÷ number of sellers when truck-shared). The 60/40 split is by role only; there is no extra penalty for not executing. Implemented by `compute_job_base_splits`: sellers split 60% of Job GP, executors split 40%; a seller-only tech receives their share of the 60% with no reduction.
 
+**Cut-off and period assignment (60.7):** The tally closes at **11:59 PM on the last Sunday** of the fortnight’s pay cycle. This time must be evaluated in the **local timezone** (e.g. Pacific/Auckland), not server UTC. **Payment date** (when the job was paid), not just completion or invoice date, must be used to assign the job to the correct fortnightly `bonus_period`. Jobs paid after 11:59 PM on the last Sunday of the period roll into the next period. Sync or cron must have access to payment date (e.g. from ServiceM8) where applicable. Period `end_date` may be stored as date only; implement cut-off as end of that day in the configured timezone when enforcing roll-to-next-period logic.
+
+**Lost shares to CSG (60.8):** Voided shares (e.g. seller share lost due to estimation accuracy fail, executor share voided by poor_workmanship callback, seller share voided by bad_scoping callback) **revert to CSG (the House)**, not to other technicians. The calculation pipeline zeros the affected tech’s share; that amount is not reallocated to anyone else.
+
 ---
 
 ## Staff → technician_id mapping (Section 59.2)
@@ -260,6 +264,7 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 | **bonus_period_id** | Admin / our app | Set by admin (Bonus Admin UI or API) when assigning job to a period. |
 | **status** | Admin / our app | draft (sync default) → verified (admin) → processed (when period closed). Only verified/processed in period pot. |
 | **standard_parts_runs**, **is_callback**, **callback_reason**, **callback_cost**, **seller_fault_parts_runs**, **missed_materials_cost** | Admin / our app | Admin enters or corrects in Bonus Admin (Edit job). Sync does not set these. |
+| **is_upsell** (Section 60.6) | Admin / our app (or sync when ServiceM8 badge available) | True = job is a true upsell and counts toward period pot. Admin toggle in Edit job. When syncing from ServiceM8, if the job has the "Site Sale" badge (name "Site Sale", uuid d14c817e-4ba4-43ee-b51c-219867379a2b), set is_upsell true. Default false. |
 
 ### job_personnel
 

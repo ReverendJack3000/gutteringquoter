@@ -168,6 +168,9 @@ def filter_eligible_period_jobs(period_jobs: list[dict[str, Any]]) -> list[dict[
         job_gp = compute_job_gp(job)
         if job_gp / revenue < MIN_GP_MARGIN:
             continue
+        # Section 60.6: only true upsells count toward period pot
+        if not (job or {}).get("is_upsell", False):
+            continue
         out.append(job)
     return out
 

@@ -300,7 +300,7 @@ BONUS_JOB_PERFORMANCE_COLUMNS = (
     "id, servicem8_job_id, servicem8_job_uuid, bonus_period_id, status, created_at, "
     "invoiced_revenue_exc_gst, materials_cost, quoted_labor_minutes, "
     "is_callback, callback_reason, callback_cost, standard_parts_runs, "
-    "seller_fault_parts_runs, missed_materials_cost"
+    "seller_fault_parts_runs, missed_materials_cost, is_upsell"
 )
 BONUS_JOB_PERSONNEL_COLUMNS = (
     "id, job_performance_id, technician_id, is_seller, is_executor, is_spotter, "
@@ -793,7 +793,7 @@ class UpdateJobPersonnelRequest(BaseModel):
 
 
 class UpdateJobPerformanceRequest(BaseModel):
-    """Update job_performance row (admin only, 59.16.2). Only provided fields are updated."""
+    """Update job_performance row (admin only, 59.16.2, 60.6). Only provided fields are updated."""
 
     status: Optional[str] = Field(None, description="draft | verified | processed")
     bonus_period_id: Optional[str] = Field(None, description="UUID of bonus period")
@@ -803,6 +803,7 @@ class UpdateJobPerformanceRequest(BaseModel):
     standard_parts_runs: Optional[int] = Field(None, ge=0)
     seller_fault_parts_runs: Optional[int] = Field(None, ge=0)
     missed_materials_cost: Optional[float] = Field(None, ge=0)
+    is_upsell: Optional[bool] = Field(None, description="True if job is a true upsell (counts toward period pot, 60.6)")
 
 
 app = FastAPI(

@@ -727,17 +727,17 @@
           <section id="bonusRaceBoardMobile" class="bonus-race-board-mobile" aria-label="GP Race scoreboard">
             <article class="bonus-pot-card">
               <div class="bonus-mobile-card-header">
-                <h2>Team Pot</h2>
-                <button type="button" id="bonusPotTallyBtn" class="bonus-tally-btn" aria-label="Replay team pot tally">Tally</button>
+                <h2>Team Pool</h2>
+                <button type="button" id="bonusPotTallyBtn" class="bonus-tally-btn" aria-label="Replay team pool tally">Tally</button>
               </div>
               <div id="bonusRacePotGauge" class="bonus-pot-gauge" data-heat="cold" style="--fill-percentage: 0; --gauge-color: #3B82F6;">
-                <svg class="bonus-pot-gauge-svg" viewBox="0 0 200 120" role="img" aria-label="Team pot progress gauge">
+                <svg class="bonus-pot-gauge-svg" viewBox="0 0 200 120" role="img" aria-label="Team pool progress gauge">
                   <path class="bonus-pot-gauge-track" d="M20 100 A80 80 0 0 1 180 100" pathLength="100"></path>
                   <path class="bonus-pot-gauge-fill" d="M20 100 A80 80 0 0 1 180 100" pathLength="100"></path>
                 </svg>
-                <p id="bonusRaceTeamPotValue" class="bonus-pot-value bonus-tally-value" role="button" tabindex="0" aria-label="Total team pot. Tap to replay tally.">$0.00</p>
+                <p id="bonusRaceTeamPotValue" class="bonus-pot-value bonus-tally-value" role="button" tabindex="0" aria-label="Total team pool. Tap to replay tally.">$0.00</p>
               </div>
-              <p id="bonusRacePotDelta" class="bonus-pot-delta">No team pot movement yet.</p>
+              <p id="bonusRacePotDelta" class="bonus-pot-delta">No team pool movement yet.</p>
               <p class="bonus-pot-target-note">Target not configured yet. Celebration unlocks after backend target wiring.</p>
             </article>
 
@@ -758,6 +758,16 @@
               <div id="bonusEffectsSummary" class="bonus-effects-summary"></div>
               <p class="bonus-effects-note">Hot Streak unlocks after backend streak wiring.</p>
             </article>
+            <details class="bonus-how-it-works" id="bonusHowItWorksMobile">
+              <summary>How it works</summary>
+              <div class="bonus-how-it-works-content">
+                <p><strong>Team Pool:</strong> 10% of Gross Profit from repair upsells goes into the pool each period. Pot is split by how much $GP you contributed.</p>
+                <p><strong>60/40:</strong> Seller (who spots &amp; closes) gets 60%; Executor (who does the work) gets 40%. Do it all on the same visit → 100%. Truck share: split 30/30 and 20/20 when two on the job.</p>
+                <p><strong>Spotter:</strong> If you hand the lead to the office or a Senior and the quote wins, you get 20% of that job’s GP.</p>
+                <p><strong>Job GP</strong> = (Price to Customer) − (Materials) − ($33 × Man-Hours on site).</p>
+                <p><strong>Conditions:</strong> GP enters when job is completed, invoiced and paid. Tally closes 11:59&nbsp;PM last Sunday of the fortnight. Min 50% margin; true upsells only. Estimation: within 15% or 20&nbsp;min of quote. Callbacks void Seller or Executor share. $10 travel fee per unscheduled parts run. Seller shouts parts from their 60%. Lost shares go to CSG.</p>
+              </div>
+            </details>
           </section>
 
           <section class="bonus-hero-grid" aria-label="Bonus summary">
@@ -862,6 +872,10 @@
         <div class="form-group">
           <label for="bonusAdminEditJobMissedMaterialsCost">Missed materials cost</label>
           <input type="number" id="bonusAdminEditJobMissedMaterialsCost" min="0" step="0.01" value="0" aria-label="Missed materials cost" />
+        </div>
+        <div class="form-group">
+          <label for="bonusAdminEditJobIsUpsell">True upsell (counts toward period pot)</label>
+          <input type="checkbox" id="bonusAdminEditJobIsUpsell" aria-label="Job is a true upsell" />
         </div>
       </form>
       <div id="bonusAdminEditJobError" class="auth-error" role="alert" hidden></div>

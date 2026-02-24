@@ -12781,6 +12781,7 @@ function populateBonusAdminEditJobForm(job) {
   const standardPartsEl = document.getElementById('bonusAdminEditJobStandardPartsRuns');
   const sellerFaultPartsEl = document.getElementById('bonusAdminEditJobSellerFaultPartsRuns');
   const missedMaterialsEl = document.getElementById('bonusAdminEditJobMissedMaterialsCost');
+  const isUpsellEl = document.getElementById('bonusAdminEditJobIsUpsell');
   if (statusEl) statusEl.value = job.status === 'verified' || job.status === 'processed' ? job.status : 'draft';
   if (isCallbackEl) isCallbackEl.checked = !!job.is_callback;
   if (callbackReasonEl) callbackReasonEl.value = String(job.callback_reason || '').trim();
@@ -12788,6 +12789,7 @@ function populateBonusAdminEditJobForm(job) {
   if (standardPartsEl) standardPartsEl.value = Math.max(0, parseInt(job.standard_parts_runs, 10) || 0);
   if (sellerFaultPartsEl) sellerFaultPartsEl.value = Math.max(0, parseInt(job.seller_fault_parts_runs, 10) || 0);
   if (missedMaterialsEl) missedMaterialsEl.value = Number(job.missed_materials_cost) >= 0 ? Number(job.missed_materials_cost) : 0;
+  if (isUpsellEl) isUpsellEl.checked = !!job.is_upsell;
 }
 
 function getBonusAdminEditJobFormBody() {
@@ -12798,6 +12800,7 @@ function getBonusAdminEditJobFormBody() {
   const standardPartsEl = document.getElementById('bonusAdminEditJobStandardPartsRuns');
   const sellerFaultPartsEl = document.getElementById('bonusAdminEditJobSellerFaultPartsRuns');
   const missedMaterialsEl = document.getElementById('bonusAdminEditJobMissedMaterialsCost');
+  const isUpsellEl = document.getElementById('bonusAdminEditJobIsUpsell');
   const body = {};
   if (statusEl) body.status = statusEl.value || 'draft';
   if (isCallbackEl) body.is_callback = isCallbackEl.checked;
@@ -12806,6 +12809,7 @@ function getBonusAdminEditJobFormBody() {
   if (standardPartsEl) body.standard_parts_runs = Math.max(0, parseInt(standardPartsEl.value, 10) || 0);
   if (sellerFaultPartsEl) body.seller_fault_parts_runs = Math.max(0, parseInt(sellerFaultPartsEl.value, 10) || 0);
   if (missedMaterialsEl) body.missed_materials_cost = Math.max(0, parseFloat(missedMaterialsEl.value) || 0);
+  if (isUpsellEl) body.is_upsell = isUpsellEl.checked;
   return body;
 }
 
@@ -14125,13 +14129,13 @@ function renderBonusRaceBoard(payload) {
   }
   if (deltaEl) {
     if (delta > 0) {
-      deltaEl.textContent = `+${formatCurrency(delta)} added to the Team Pot.`;
+      deltaEl.textContent = `+${formatCurrency(delta)} added to the Team Pool.`;
       deltaEl.dataset.tone = 'gain';
     } else if (delta < 0) {
-      deltaEl.textContent = `Leak detected: ${formatCurrency(Math.abs(delta))} drained from the Team Pot.`;
+      deltaEl.textContent = `Leak detected: ${formatCurrency(Math.abs(delta))} drained from the Team Pool.`;
       deltaEl.dataset.tone = 'leak';
     } else {
-      deltaEl.textContent = 'No team pot movement since last update.';
+      deltaEl.textContent = 'No team pool movement since last update.';
       deltaEl.dataset.tone = 'neutral';
     }
   }
@@ -14152,8 +14156,8 @@ function renderBonusRaceBoard(payload) {
   }
   setBonusCurrencyValue(teamPotDesktopEl, teamPot, { animate: previousPot != null, from: previousPot ?? 0 });
 
-  if (delta > 0) announceBonusRace(`Team pot increased by ${formatCurrency(delta)}.`);
-  if (delta < 0) announceBonusRace(`Team pot decreased by ${formatCurrency(Math.abs(delta))}.`);
+  if (delta > 0) announceBonusRace(`Team pool increased by ${formatCurrency(delta)}.`);
+  if (delta < 0) announceBonusRace(`Team pool decreased by ${formatCurrency(Math.abs(delta))}.`);
   technicianBonusState.lastTeamPot = teamPot;
 }
 
