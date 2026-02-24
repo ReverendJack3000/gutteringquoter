@@ -26,6 +26,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | Toolbar carve-out (toolbar.js), mobile canvas fit/pan | [docs/tasks/sections-56-57.md](docs/tasks/sections-56-57.md) | 56–57 |
 | Bonus period / job performance schema (Supabase) | [docs/tasks/section-58.md](docs/tasks/section-58.md) | 58 |
 | Technician quotes: team pool bonus (research + implementation) | [docs/tasks/section-59.md](docs/tasks/section-59.md) | 59 |
+| Technician bonus: spec refinements (labour rate, travel fee, estimation, spotter, margin, copy) | [docs/tasks/section-60.md](docs/tasks/section-60.md) | 60 |
 
 **By section number — open the file that contains your section:**
 
@@ -43,6 +44,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 56, 57 | [sections-56-57.md](docs/tasks/sections-56-57.md) |
 | 58 | [section-58.md](docs/tasks/section-58.md) |
 | 59 | [section-59.md](docs/tasks/section-59.md) |
+| 60 | [section-60.md](docs/tasks/section-60.md) |
 
 ---
 
@@ -91,6 +93,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
+| **60** | **60.1–60.11** | **Technician bonus spec refinements:** labour rate $33+GST, parts run $10, estimation 20 min, spotter share, min margin 50%, true upsells, cut-off docs, lost-shares CSG docs, mobile copy/tooltips, Team Pool naming, Job GP formula in copy. |
 
 ---
 
