@@ -14024,6 +14024,15 @@ function bindBonusTallyInteractions() {
   }
   potBtn?.addEventListener('click', () => replay(teamPotValueEl, { mode: 'slot', durationMs: 560 }));
   myGpBtn?.addEventListener('click', () => replay(myGpValueEl));
+  const teamPotDesktopEl = document.getElementById('bonusHeroTeamPot');
+  if (teamPotDesktopEl) {
+    teamPotDesktopEl.addEventListener('click', () => replay(teamPotDesktopEl, { mode: 'slot', durationMs: 560 }));
+    teamPotDesktopEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      replay(teamPotDesktopEl, { mode: 'slot', durationMs: 560 });
+    });
+  }
 }
 
 function announceBonusRace(message) {
@@ -14126,6 +14135,16 @@ function renderBonusRaceBoard(payload) {
 
   setBonusCurrencyValue(teamPotMobileEl, teamPot, { animate: previousPot != null, from: previousPot ?? 0 });
   setBonusCurrencyValue(myGpMobileEl, myGp, { animate: Number.isFinite(previousMyGp), from: previousMyGp || 0 });
+
+  const heroPotGaugeEl = document.getElementById('bonusHeroPotGauge');
+  const teamPotDesktopEl = document.getElementById('bonusHeroTeamPot');
+  if (heroPotGaugeEl) {
+    heroPotGaugeEl.style.setProperty('--fill-percentage', fillPercent.toFixed(2));
+    heroPotGaugeEl.style.setProperty('--gauge-color', heatColor);
+    heroPotGaugeEl.dataset.heat = heatZone;
+    heroPotGaugeEl.setAttribute('aria-label', `Team pot gauge ${Math.round(fillPercent)} percent filled`);
+  }
+  setBonusCurrencyValue(teamPotDesktopEl, teamPot, { animate: previousPot != null, from: previousPot ?? 0 });
 
   if (delta > 0) announceBonusRace(`Team pot increased by ${formatCurrency(delta)}.`);
   if (delta < 0) announceBonusRace(`Team pot decreased by ${formatCurrency(Math.abs(delta))}.`);

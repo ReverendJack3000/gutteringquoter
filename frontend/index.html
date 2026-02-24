@@ -763,7 +763,13 @@
           <section class="bonus-hero-grid" aria-label="Bonus summary">
             <article class="bonus-hero-card bonus-hero-card--pot">
               <h2>Total Team Pot</h2>
-              <p id="bonusHeroTeamPot" class="bonus-hero-value">$0.00</p>
+              <div id="bonusHeroPotGauge" class="bonus-pot-gauge" data-heat="cold" style="--fill-percentage: 0; --gauge-color: #3B82F6;">
+                <svg class="bonus-pot-gauge-svg" viewBox="0 0 200 120" role="img" aria-label="Team pot progress gauge">
+                  <path class="bonus-pot-gauge-track" d="M20 100 A80 80 0 0 1 180 100" pathLength="100"></path>
+                  <path class="bonus-pot-gauge-fill" d="M20 100 A80 80 0 0 1 180 100" pathLength="100"></path>
+                </svg>
+                <p id="bonusHeroTeamPot" class="bonus-hero-value bonus-pot-value bonus-tally-value" role="button" tabindex="0" aria-label="Total team pot. Click to replay tally.">$0.00</p>
+              </div>
               <p class="bonus-hero-note">Provisional (10% of provisional team GP).</p>
             </article>
             <article class="bonus-hero-card bonus-hero-card--payout">
