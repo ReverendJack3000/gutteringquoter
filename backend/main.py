@@ -660,6 +660,19 @@ class UpdateJobPersonnelRequest(BaseModel):
     is_executor: Optional[bool] = None
 
 
+class UpdateJobPerformanceRequest(BaseModel):
+    """Update job_performance row (admin only, 59.16.2). Only provided fields are updated."""
+
+    status: Optional[str] = Field(None, description="draft | verified | processed")
+    bonus_period_id: Optional[str] = Field(None, description="UUID of bonus period")
+    is_callback: Optional[bool] = None
+    callback_reason: Optional[str] = None
+    callback_cost: Optional[float] = Field(None, ge=0)
+    standard_parts_runs: Optional[int] = Field(None, ge=0)
+    seller_fault_parts_runs: Optional[int] = Field(None, ge=0)
+    missed_materials_cost: Optional[float] = Field(None, ge=0)
+
+
 app = FastAPI(
     title="Quote App API",
     description="Property photo → blueprint; Marley guttering repair plans. API-ready for integrations.",
@@ -1117,6 +1130,176 @@ def api_bonus_job_personnel_update(
         raise HTTPException(500, "Failed to update job personnel")
 
 
+# --- Admin bonus API (59.16.2): period jobs, personnel, summary, breakdown, PATCH job_performance ---
+
+
+@app.get("/api/bonus/admin/periods/{period_id}/jobs")
+def api_bonus_admin_period_jobs(
+    period_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """List all job_performance rows for a period with job_gp and personnel (admin only, 59.16.2). Includes draft/unverified jobs."""
+    _ = user_id
+    try:
+        parsed_period_id = str(uuid_lib.UUID(period_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "period_id must be a valid UUID")
+    try:
+        supabase = get_supabase()
+        period, _ = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=[],
+            requested_period_id=parsed_period_id,
+        )
+        if not period:
+            raise HTTPException(404, "Bonus period not found")
+        period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
+        period_jobs = select_period_jobs(period, period_jobs_source)
+        job_ids = [str((j or {}).get("id") or "").strip() for j in period_jobs if str((j or {}).get("id") or "").strip()]
+        personnel_rows = _fetch_job_personnel_rows_for_jobs(supabase=supabase, job_performance_ids=job_ids)
+        personnel_by_job = group_personnel_by_job(personnel_rows)
+        jobs_with_gp = []
+        for job in period_jobs:
+            row = dict(job)
+            row["job_gp"] = compute_job_gp(row)
+            jid = str((job or {}).get("id") or "").strip()
+            row["personnel"] = list(personnel_by_job.get(jid) or [])
+            jobs_with_gp.append(row)
+        return {"period": period, "jobs": jobs_with_gp}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to list period jobs for %s: %s", period_id, e)
+        raise HTTPException(500, "Failed to list period jobs")
+
+
+@app.get("/api/bonus/admin/periods/{period_id}/summary")
+def api_bonus_admin_period_summary(
+    period_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Period summary: period meta, total_team_pot, eligible_job_count, callback_cost_total (admin only, 59.16.2)."""
+    _ = user_id
+    try:
+        parsed_period_id = str(uuid_lib.UUID(period_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "period_id must be a valid UUID")
+    try:
+        supabase = get_supabase()
+        period, _ = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=[],
+            requested_period_id=parsed_period_id,
+        )
+        if not period:
+            raise HTTPException(404, "Bonus period not found")
+        period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
+        period_jobs = select_period_jobs(period, period_jobs_source)
+        eligible_jobs = filter_eligible_period_jobs(period_jobs)
+        total_team_pot = compute_period_pot(eligible_jobs)
+        callback_cost_total = round(
+            sum(float((j or {}).get("callback_cost") or 0.0) for j in eligible_jobs),
+            2,
+        )
+        return {
+            "period": period,
+            "total_team_pot": total_team_pot,
+            "eligible_job_count": len(eligible_jobs),
+            "callback_cost_total": callback_cost_total,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get period summary for %s: %s", period_id, e)
+        raise HTTPException(500, "Failed to get period summary")
+
+
+@app.get("/api/bonus/admin/periods/{period_id}/breakdown")
+def api_bonus_admin_period_breakdown(
+    period_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Per-tech breakdown for period: gp_contributed, share_of_team_pot, expected_payout (admin only, 59.16.2)."""
+    _ = user_id
+    try:
+        parsed_period_id = str(uuid_lib.UUID(period_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "period_id must be a valid UUID")
+    try:
+        supabase = get_supabase()
+        period, _ = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=[],
+            requested_period_id=parsed_period_id,
+        )
+        if not period:
+            raise HTTPException(404, "Bonus period not found")
+        period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
+        period_jobs = select_period_jobs(period, period_jobs_source)
+        eligible_jobs = filter_eligible_period_jobs(period_jobs)
+        team_pot = compute_period_pot(eligible_jobs)
+        job_ids = [str((j or {}).get("id") or "").strip() for j in eligible_jobs if str((j or {}).get("id") or "").strip()]
+        personnel_rows = _fetch_job_personnel_rows_for_jobs(supabase=supabase, job_performance_ids=job_ids)
+        personnel_by_job = group_personnel_by_job(personnel_rows)
+        total_contributed_gp = compute_total_contributed_gp(eligible_jobs, personnel_by_job)
+        technician_ids = set()
+        for rows in personnel_by_job.values():
+            for r in rows or []:
+                tid = str((r or {}).get("technician_id") or "").strip()
+                if tid:
+                    technician_ids.add(tid)
+        breakdown = []
+        for tech_id in sorted(technician_ids):
+            ledger_rows = build_canonical_ledger_rows(
+                eligible_jobs=eligible_jobs,
+                personnel_by_job=personnel_by_job,
+                technician_id=tech_id,
+            )
+            gp_contributed = compute_technician_contribution_total(ledger_rows)
+            if total_contributed_gp > 0:
+                share_of_team_pot = round(team_pot * (gp_contributed / total_contributed_gp), 2)
+            else:
+                share_of_team_pot = 0.0
+            breakdown.append({
+                "technician_id": tech_id,
+                "gp_contributed": gp_contributed,
+                "share_of_team_pot": share_of_team_pot,
+                "expected_payout": share_of_team_pot,
+                "display_name": None,
+            })
+        return {"period": period, "total_team_pot": team_pot, "breakdown": breakdown}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get period breakdown for %s: %s", period_id, e)
+        raise HTTPException(500, "Failed to get period breakdown")
+
+
+@app.get("/api/bonus/job-performance/{job_performance_id}/personnel")
+def api_bonus_job_performance_personnel(
+    job_performance_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """List job_personnel for one job_performance (admin only, 59.16.2)."""
+    _ = user_id
+    try:
+        parsed_id = str(uuid_lib.UUID(job_performance_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "job_performance_id must be a valid UUID")
+    try:
+        supabase = get_supabase()
+        personnel_rows = _fetch_job_personnel_rows_for_jobs(
+            supabase=supabase,
+            job_performance_ids=[parsed_id],
+        )
+        return {"job_performance_id": parsed_id, "personnel": personnel_rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to list personnel for job %s: %s", job_performance_id, e)
+        raise HTTPException(500, "Failed to list job personnel")
+
+
 @app.get("/api/bonus/job-performance/{job_performance_id}")
 def api_bonus_job_performance_get(
     job_performance_id: str,
@@ -1147,6 +1330,48 @@ def api_bonus_job_performance_get(
     except Exception as e:
         logger.exception("Failed to get job performance %s: %s", job_performance_id, e)
         raise HTTPException(500, "Failed to get job performance")
+
+
+@app.patch("/api/bonus/job-performance/{job_performance_id}")
+def api_bonus_job_performance_update(
+    job_performance_id: str,
+    body: UpdateJobPerformanceRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Update job_performance row (admin only, 59.16.2). Status, bonus_period_id, callbacks, parts runs, missed_materials_cost."""
+    _ = user_id
+    try:
+        parsed_id = str(uuid_lib.UUID(job_performance_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "job_performance_id must be a valid UUID")
+    if body.status is not None and body.status not in ("draft", "verified", "processed"):
+        raise HTTPException(400, "status must be draft, verified, or processed")
+    if body.bonus_period_id is not None:
+        try:
+            uuid_lib.UUID(body.bonus_period_id)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "bonus_period_id must be a valid UUID")
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(400, "At least one field required to update")
+    try:
+        supabase = get_supabase()
+        resp = (
+            supabase.table("job_performance")
+            .update(payload)
+            .eq("id", parsed_id)
+            .execute()
+        )
+        if not resp.data or len(resp.data) == 0:
+            raise HTTPException(404, "Job performance not found")
+        row = dict(resp.data[0])
+        row["job_gp"] = compute_job_gp(row)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update job performance %s: %s", job_performance_id, e)
+        raise HTTPException(500, "Failed to update job performance")
 
 
 @app.get("/api/bonus/technician/period-current")
