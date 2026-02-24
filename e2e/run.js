@@ -1628,6 +1628,39 @@ async function run() {
       }
       console.log('  ✓ Mobile orientation policy: canvas targets landscape');
 
+      const mobileBonusScaffoldCheck = await mobilePage.evaluate(() => {
+        const bonusBtn = document.getElementById('mobileBonusDashboardBtn');
+        const raceBoard = document.getElementById('bonusRaceBoardMobile');
+        const raceTooltip = document.getElementById('bonusBadgeTooltip');
+        const switchViewFn = typeof window.__quoteAppSwitchView === 'function' ? window.__quoteAppSwitchView : null;
+        if (switchViewFn) switchViewFn('view-technician-bonus');
+        const bonusVisible = !document.getElementById('view-technician-bonus')?.classList.contains('hidden');
+        const canvasVisible = !document.getElementById('view-canvas')?.classList.contains('hidden');
+        const raceBoardVisible = raceBoard ? getComputedStyle(raceBoard).display !== 'none' : false;
+        return {
+          hasBonusBtn: !!bonusBtn,
+          bonusBtnHidden: bonusBtn ? bonusBtn.hidden : true,
+          hasRaceBoard: !!raceBoard,
+          hasRaceTooltip: !!raceTooltip,
+          bonusVisible,
+          canvasVisible,
+          raceBoardVisible,
+        };
+      });
+      if (!mobileBonusScaffoldCheck.hasBonusBtn) throw new Error('Mobile GP Race: mobile bonus entry button missing');
+      if (!mobileBonusScaffoldCheck.hasRaceBoard) throw new Error('Mobile GP Race: race board container missing');
+      if (!mobileBonusScaffoldCheck.hasRaceTooltip) throw new Error('Mobile GP Race: badge tooltip container missing');
+      if (mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.raceBoardVisible) {
+        throw new Error('Mobile GP Race: race board should be visible when bonus view is active on mobile');
+      }
+      if (!mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.bonusBtnHidden) {
+        throw new Error('Mobile GP Race permissions: unauthorized mobile users should not see the GP Race entry button');
+      }
+      if (!mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.canvasVisible) {
+        throw new Error('Mobile GP Race permissions: unauthorized switch attempt should keep canvas view visible');
+      }
+      console.log('  ✓ Mobile GP Race scaffold exists and permission gate remains enforced');
+
       // Section 57: mobile fit inset + pan lock behavior
       const mobileFileInput = await mobilePage.$('#fileInput');
       if (!mobileFileInput) throw new Error('Mobile viewport regression: #fileInput missing for blueprint fit checks');

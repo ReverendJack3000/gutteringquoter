@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Optional
 
+from app.bonus_calc import ELIGIBLE_JOB_STATUSES
+
 PROVISIONAL_TEAM_POT_PERCENT = 0.10
 
 PENDING_REASON_MESSAGES = {
@@ -132,6 +134,20 @@ def select_period_jobs(period: dict[str, Any], jobs: list[dict[str, Any]]) -> li
         job["period_link_method"] = link_method
         selected.append(job)
     return selected
+
+
+def filter_eligible_period_jobs(period_jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Return only jobs with status in ('verified', 'processed') for period pot and canonical ledger.
+    Per BACKEND_DATABASE.md §4: only verified/processed rows in period pot.
+    """
+    if not period_jobs:
+        return []
+    statuses = {s.strip().lower() for s in ELIGIBLE_JOB_STATUSES}
+    return [
+        job for job in period_jobs
+        if str((job or {}).get("status") or "").strip().lower() in statuses
+    ]
 
 
 def compute_provisional_job_gp(job: dict[str, Any]) -> float:

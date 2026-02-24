@@ -124,6 +124,12 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 
 **Job GP calculation (59.9):** Base Job GP = `invoiced_revenue_exc_gst` − `materials_cost` − (`standard_parts_runs` × 20). Not subtracted here: `missed_materials_cost`, `callback_cost`, `seller_fault_parts_runs` (period-level or post-split). Computed on read (e.g. `GET /api/bonus/job-performance/{id}` returns row + `job_gp`). Bonus labour rate is read from `public.company_settings` (id=1) or env `BONUS_LABOUR_RATE` (default 35); not used in this formula but used by period pot / splits (59.10+).
 
+**Period pot eligibility (59.10):** Only jobs with `job_performance.status` IN ('verified', 'processed') are included in the period pot and in canonical technician GP. Periods used are those with `bonus_periods.status` IN ('open', 'processing').
+
+**Estimation accuracy (59.13):** Seller share applies only if actual labour (sum of `onsite_minutes` + `travel_shopping_minutes` across job_personnel for the job) is within 15% of `quoted_labor_minutes` or within 30 minutes, whichever is greater: tolerance = max(round(quoted × 0.15), 30). Edge cases: (1) quoted_labor_minutes = 0 → tolerance = 30 minutes; (2) rounding: tolerance and comparison use the same formula so behaviour is consistent.
+
+**Schedule Saver (59.15):** A seller who did not execute (is_seller true, is_executor false) keeps full 60% credit (or 60% ÷ number of sellers when truck-shared). The 60/40 split is by role only; there is no extra penalty for not executing. Implemented by `compute_job_base_splits`: sellers split 60% of Job GP, executors split 40%; a seller-only tech receives their share of the 60% with no reduction.
+
 ---
 
 ## Staff → technician_id mapping (Section 59.2)

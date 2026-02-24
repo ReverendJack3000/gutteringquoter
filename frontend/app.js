@@ -257,6 +257,13 @@ const technicianBonusState = {
   payload: null,
   selectedTechnicianId: '',
   adminTechnicianOptions: [],
+  pollTimerId: null,
+  lastTeamPot: null,
+  potPeak: 1,
+  lastRanks: new Map(),
+  tooltipBound: false,
+  tallyBound: false,
+  previousPayload: null,
 };
 
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
@@ -9942,11 +9949,7 @@ function initAuth() {
       if (profileDropdown) profileDropdown.hidden = true;
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
       e.stopPropagation();
-      if (!canAccessTechnicianBonusView()) {
-        showMessage('Your role does not allow access to the bonus dashboard.', 'error');
-        return;
-      }
-      switchView('view-technician-bonus', { triggerEl: userAvatar || menuItemTechnicianBonus });
+      openTechnicianBonusView(userAvatar || menuItemTechnicianBonus);
     });
   }
   if (menuItemSignOut) {
@@ -11487,7 +11490,8 @@ function initGlobalToolbar() {
   const mobileRedoBtn = document.getElementById('mobileRedoBtn');
   const mobileUndoRedoWrap = document.querySelector('.mobile-undo-redo-wrap');
   const mobileFitViewBtn = document.getElementById('mobileFitViewBtn');
-  if (mobileUndoRedoWrap || mobileFitViewBtn) {
+  const mobileBonusBtn = document.getElementById('mobileBonusDashboardBtn');
+  if (mobileUndoRedoWrap || mobileFitViewBtn || mobileBonusBtn) {
     if (globalToolbarUndoRedoAriaObserver) {
       globalToolbarUndoRedoAriaObserver.disconnect();
       globalToolbarUndoRedoAriaObserver = null;
@@ -11497,6 +11501,8 @@ function initGlobalToolbar() {
       const mobile = isMobile();
       if (mobileUndoRedoWrap) mobileUndoRedoWrap.setAttribute('aria-hidden', mobile ? 'false' : 'true');
       if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'true' : 'false');
+      if (mobileBonusBtn) mobileBonusBtn.setAttribute('aria-hidden', mobile ? 'false' : 'true');
+      updateMobileBonusButtonVisibility();
     };
     setAriaHidden();
     const observer = new MutationObserver(setAriaHidden);
@@ -11510,6 +11516,29 @@ function initGlobalToolbar() {
   window.updateUndoRedoButtons = updateUndoRedoButtons;
   if (mobileUndoBtn) mobileUndoBtn.addEventListener('click', () => { undo(); });
   if (mobileRedoBtn) mobileRedoBtn.addEventListener('click', () => { redo(); });
+  if (mobileBonusBtn) {
+    let lastActivateAt = 0;
+    const ACTIVATE_DEDUP_MS = 320;
+    const activateMobileBonus = (event) => {
+      const now = Date.now();
+      if (now - lastActivateAt < ACTIVATE_DEDUP_MS) return;
+      lastActivateAt = now;
+      if (event?.cancelable) event.preventDefault();
+      if (event) event.stopPropagation();
+      openTechnicianBonusView(mobileBonusBtn);
+    };
+    mobileBonusBtn.addEventListener('pointerup', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      activateMobileBonus(event);
+    });
+    mobileBonusBtn.addEventListener('click', (event) => {
+      activateMobileBonus(event);
+    });
+    mobileBonusBtn.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      activateMobileBonus(event);
+    });
+  }
   updateUndoRedoButtons();
 }
 
@@ -12531,9 +12560,25 @@ function updateTechnicianBonusMenuVisibility() {
   menuItem.hidden = !canAccessTechnicianBonusView();
 }
 
+function updateMobileBonusButtonVisibility() {
+  const btn = document.getElementById('mobileBonusDashboardBtn');
+  if (!btn) return;
+  const isMobile = layoutState.viewportMode === 'mobile';
+  btn.hidden = !(isMobile && canAccessTechnicianBonusView());
+}
+
+function openTechnicianBonusView(triggerEl) {
+  if (!canAccessTechnicianBonusView()) {
+    showMessage('Your role does not allow access to the bonus dashboard.', 'error');
+    return;
+  }
+  switchView('view-technician-bonus', { triggerEl });
+}
+
 function syncAdminDesktopAccess(options = {}) {
   updateUserPermissionsMenuVisibility();
   updateTechnicianBonusMenuVisibility();
+  updateMobileBonusButtonVisibility();
 
   const quoteTable = document.getElementById('quotePartsTable');
   if (!canUsePricingAdminControls() && quoteTable?.classList.contains('quote-parts-table--editing')) {
@@ -12994,6 +13039,395 @@ function formatBonusStatusLabel(status) {
   return normalized.toUpperCase();
 }
 
+function shouldReduceBonusMotion() {
+  if (document.body?.classList.contains('a11y-force-motion')) return false;
+  if (document.body?.classList.contains('a11y-reduce-motion')) return true;
+  try {
+    return !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (_) {
+    return false;
+  }
+}
+
+function getBonusDisplayName(payload) {
+  const explicit = String(payload?.technician_context?.display_name || '').trim();
+  if (explicit) return explicit;
+  const fullName = String(authState.user?.user_metadata?.full_name || '').trim();
+  if (fullName) return fullName;
+  return String(authState.email || 'You').trim();
+}
+
+function getBonusInitials(name) {
+  const clean = String(name || '').trim();
+  if (!clean) return '??';
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+}
+
+function formatBonusPercent(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return '0%';
+  return `${Math.max(0, Math.min(100, n * 100)).toFixed(1)}%`;
+}
+
+function animateBonusCurrencyValue(el, fromValue, toValue, durationMs = 680) {
+  if (!(el instanceof HTMLElement)) return;
+  const start = Number(fromValue || 0);
+  const end = Number(toValue || 0);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    el.textContent = formatCurrency(toValue || 0);
+    return;
+  }
+  if (shouldReduceBonusMotion() || start === end) {
+    el.textContent = formatCurrency(end);
+    return;
+  }
+  if (el.__bonusAnimFrameId) cancelAnimationFrame(el.__bonusAnimFrameId);
+  const startTs = performance.now();
+  const tick = (ts) => {
+    const p = Math.min(1, (ts - startTs) / durationMs);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const next = start + (end - start) * eased;
+    el.textContent = formatCurrency(next);
+    if (p < 1) {
+      el.__bonusAnimFrameId = requestAnimationFrame(tick);
+    } else {
+      el.__bonusAnimFrameId = 0;
+      el.textContent = formatCurrency(end);
+    }
+  };
+  el.__bonusAnimFrameId = requestAnimationFrame(tick);
+}
+
+function setBonusCurrencyValue(el, value, options = {}) {
+  if (!(el instanceof HTMLElement)) return;
+  const next = Number(value || 0);
+  const currentRaw = Number(el.dataset.currencyValue || 0);
+  const current = Number.isFinite(currentRaw) ? currentRaw : 0;
+  const shouldAnimate = options.animate === true && !shouldReduceBonusMotion();
+  if (shouldAnimate) {
+    animateBonusCurrencyValue(el, Number.isFinite(options.from) ? Number(options.from) : current, next);
+  } else {
+    el.textContent = formatCurrency(next);
+  }
+  el.dataset.currencyValue = String(next);
+}
+
+function hideBonusTooltip() {
+  const tooltipEl = document.getElementById('bonusBadgeTooltip');
+  if (!tooltipEl) return;
+  tooltipEl.hidden = true;
+  tooltipEl.textContent = '';
+}
+
+function showBonusTooltip(targetEl, tooltipText) {
+  const tooltipEl = document.getElementById('bonusBadgeTooltip');
+  if (!(targetEl instanceof HTMLElement) || !tooltipEl) return;
+  const text = String(tooltipText || '').trim();
+  if (!text) {
+    hideBonusTooltip();
+    return;
+  }
+  tooltipEl.textContent = text;
+  tooltipEl.hidden = false;
+  tooltipEl.style.left = '0px';
+  tooltipEl.style.top = '0px';
+  const tipRect = tooltipEl.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  let left = targetRect.left + (targetRect.width / 2) - (tipRect.width / 2);
+  left = Math.max(8, Math.min(window.innerWidth - tipRect.width - 8, left));
+  let top = targetRect.top - tipRect.height - 8;
+  if (top < 8) top = targetRect.bottom + 8;
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+}
+
+function bindBonusTooltipInteractions() {
+  if (technicianBonusState.tooltipBound) return;
+  technicianBonusState.tooltipBound = true;
+  const root = document.getElementById('view-technician-bonus');
+  if (!root) return;
+  const resolveTarget = (node) => {
+    if (!(node instanceof Element)) return null;
+    return node.closest('[data-bonus-tooltip]');
+  };
+  root.addEventListener('mouseover', (e) => {
+    const target = resolveTarget(e.target);
+    if (!target) return;
+    showBonusTooltip(target, target.getAttribute('data-bonus-tooltip') || '');
+  });
+  root.addEventListener('mouseout', (e) => {
+    const target = resolveTarget(e.target);
+    if (!target) return;
+    hideBonusTooltip();
+  });
+  root.addEventListener('focusin', (e) => {
+    const target = resolveTarget(e.target);
+    if (!target) return;
+    showBonusTooltip(target, target.getAttribute('data-bonus-tooltip') || '');
+  });
+  root.addEventListener('focusout', (e) => {
+    const target = resolveTarget(e.target);
+    if (!target) return;
+    hideBonusTooltip();
+  });
+  root.addEventListener('click', (e) => {
+    const target = resolveTarget(e.target);
+    if (!target) {
+      hideBonusTooltip();
+      return;
+    }
+    e.preventDefault();
+    const tooltipText = target.getAttribute('data-bonus-tooltip') || '';
+    showBonusTooltip(target, tooltipText);
+  });
+}
+
+function bindBonusTallyInteractions() {
+  if (technicianBonusState.tallyBound) return;
+  technicianBonusState.tallyBound = true;
+  const replay = (el) => {
+    if (!(el instanceof HTMLElement)) return;
+    const finalValue = Number(el.dataset.currencyValue || 0);
+    animateBonusCurrencyValue(el, 0, finalValue, 720);
+  };
+  const potBtn = document.getElementById('bonusPotTallyBtn');
+  const myGpBtn = document.getElementById('bonusMyGpTallyBtn');
+  const replayTargets = [
+    document.getElementById('bonusRaceTeamPotValue'),
+    document.getElementById('bonusRaceMyGpValue'),
+  ].filter(Boolean);
+  replayTargets.forEach((el) => {
+    el.addEventListener('click', () => replay(el));
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      replay(el);
+    });
+  });
+  potBtn?.addEventListener('click', () => replay(document.getElementById('bonusRaceTeamPotValue')));
+  myGpBtn?.addEventListener('click', () => replay(document.getElementById('bonusRaceMyGpValue')));
+}
+
+function announceBonusRace(message) {
+  const announcer = document.getElementById('bonusRaceAnnouncer');
+  if (!announcer) return;
+  announcer.textContent = '';
+  announcer.textContent = String(message || '');
+}
+
+function buildBonusLeaderboardRows(payload) {
+  const leaderboard = Array.isArray(payload?.leaderboard) ? payload.leaderboard.slice() : [];
+  if (leaderboard.length > 0) {
+    return leaderboard
+      .map((row, idx) => ({
+        technician_id: String(row?.technician_id || `row-${idx}`),
+        display_name: String(row?.display_name || row?.avatar_initials || `Tech ${idx + 1}`),
+        avatar_initials: String(row?.avatar_initials || ''),
+        gp_contributed: Number(row?.gp_contributed || 0),
+        share_of_team_pot: Number(row?.share_of_team_pot || 0),
+        rank: Number(row?.rank || (idx + 1)),
+        placeholder: false,
+      }))
+      .sort((a, b) => a.rank - b.rank);
+  }
+
+  const hero = payload?.hero || {};
+  const teamPot = Number(hero?.total_team_pot || 0);
+  const teamGp = teamPot > 0 ? teamPot / 0.10 : 0;
+  const myGp = Number(hero?.my_total_gp_contributed || 0);
+  const selfShare = teamGp > 0 ? myGp / teamGp : 0;
+  const myName = getBonusDisplayName(payload);
+  return [
+    {
+      technician_id: String(payload?.technician_context?.technician_id || 'self'),
+      display_name: myName,
+      avatar_initials: getBonusInitials(myName),
+      gp_contributed: myGp,
+      share_of_team_pot: selfShare,
+      rank: 1,
+      placeholder: false,
+    },
+    {
+      technician_id: 'placeholder-rank-2',
+      display_name: 'Challenger Slot',
+      avatar_initials: '--',
+      gp_contributed: 0,
+      share_of_team_pot: 0,
+      rank: 2,
+      placeholder: true,
+    },
+    {
+      technician_id: 'placeholder-rank-3',
+      display_name: 'Challenger Slot',
+      avatar_initials: '--',
+      gp_contributed: 0,
+      share_of_team_pot: 0,
+      rank: 3,
+      placeholder: true,
+    },
+  ];
+}
+
+function renderBonusRaceBoard(payload) {
+  const teamPot = Number(payload?.hero?.total_team_pot || 0);
+  const myGp = Number(payload?.hero?.my_total_gp_contributed || 0);
+  const previousPot = Number.isFinite(technicianBonusState.lastTeamPot) ? technicianBonusState.lastTeamPot : null;
+  const previousMyGp = Number(technicianBonusState.previousPayload?.hero?.my_total_gp_contributed || 0);
+  const delta = previousPot == null ? 0 : Math.round((teamPot - previousPot) * 100) / 100;
+  technicianBonusState.potPeak = Math.max(technicianBonusState.potPeak || 1, teamPot || 0, previousPot || 0, 1);
+  const fillPercent = Math.max(0, Math.min(100, (teamPot / technicianBonusState.potPeak) * 100));
+  const leakPercent = delta < 0
+    ? Math.max(0, Math.min(100, (Math.abs(delta) / technicianBonusState.potPeak) * 100))
+    : 0;
+  const fillEl = document.getElementById('bonusRacePotFill');
+  const leakEl = document.getElementById('bonusRacePotLeak');
+  const deltaEl = document.getElementById('bonusRacePotDelta');
+  const updatedEl = document.getElementById('bonusRaceLastUpdated');
+  const teamPotMobileEl = document.getElementById('bonusRaceTeamPotValue');
+  const myGpMobileEl = document.getElementById('bonusRaceMyGpValue');
+
+  if (fillEl) {
+    fillEl.style.width = `${fillPercent.toFixed(2)}%`;
+    fillEl.classList.toggle('bonus-pot-fill--gain', delta > 0);
+    fillEl.classList.toggle('bonus-pot-fill--leak', delta < 0);
+  }
+  if (leakEl) leakEl.style.width = `${leakPercent.toFixed(2)}%`;
+  if (deltaEl) {
+    if (delta > 0) {
+      deltaEl.textContent = `+${formatCurrency(delta)} added to the Team Pot.`;
+      deltaEl.dataset.tone = 'gain';
+    } else if (delta < 0) {
+      deltaEl.textContent = `Leak detected: ${formatCurrency(Math.abs(delta))} drained from the Team Pot.`;
+      deltaEl.dataset.tone = 'leak';
+    } else {
+      deltaEl.textContent = 'No team pot movement since last update.';
+      deltaEl.dataset.tone = 'neutral';
+    }
+  }
+  if (updatedEl) {
+    updatedEl.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  setBonusCurrencyValue(teamPotMobileEl, teamPot, { animate: previousPot != null, from: previousPot ?? 0 });
+  setBonusCurrencyValue(myGpMobileEl, myGp, { animate: Number.isFinite(previousMyGp), from: previousMyGp || 0 });
+
+  if (delta > 0) announceBonusRace(`Team pot increased by ${formatCurrency(delta)}.`);
+  if (delta < 0) announceBonusRace(`Team pot decreased by ${formatCurrency(Math.abs(delta))}.`);
+  technicianBonusState.lastTeamPot = teamPot;
+}
+
+function renderBonusRaceLeaderboard(payload) {
+  const listEl = document.getElementById('bonusRaceLeaderboard');
+  if (!listEl) return;
+  const rows = buildBonusLeaderboardRows(payload);
+  const nextRanks = new Map();
+  listEl.innerHTML = rows.map((row, index) => {
+    const rank = Number(row?.rank || (index + 1));
+    const id = String(row?.technician_id || `row-${index}`);
+    const prevRank = technicianBonusState.lastRanks.get(id);
+    const changedRank = Number.isFinite(prevRank) && prevRank !== rank;
+    nextRanks.set(id, rank);
+    const initials = String(row?.avatar_initials || getBonusInitials(row?.display_name || '') || '--');
+    const share = Math.max(0, Math.min(1, Number(row?.share_of_team_pot || 0)));
+    const barWidth = Math.max(0, Math.min(100, share * 100));
+    const crown = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#';
+    const tooltipText = row.placeholder
+      ? 'Peer leaderboard data will appear here after backend wiring.'
+      : `${row.display_name}: ${formatCurrency(row.gp_contributed)} contributed (${formatBonusPercent(share)} of team share).`;
+    return `<li class="bonus-racer${changedRank ? ' bonus-racer--overtake' : ''}" data-rank="${rank}">
+      <div class="bonus-racer-top">
+        <div class="bonus-racer-left">
+          <span class="bonus-racer-rank" aria-label="Rank ${rank}">${crown}</span>
+          <span class="bonus-racer-rank" aria-hidden="true">${escapeHtml(initials)}</span>
+          <span class="bonus-racer-name">${escapeHtml(String(row.display_name || 'Unknown'))}</span>
+        </div>
+        <span class="bonus-racer-gp">${escapeHtml(formatCurrency(row.gp_contributed || 0))}</span>
+      </div>
+      <div class="bonus-racer-bar-wrap"><div class="bonus-racer-bar" style="width:${barWidth.toFixed(2)}%"></div></div>
+      <div class="bonus-racer-meta">
+        <span>${escapeHtml(formatBonusPercent(share))} of team share</span>
+        ${changedRank ? '<span> • Overtake!</span>' : ''}
+      </div>
+      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
+    </li>`;
+  }).join('');
+  const previousSelfRank = technicianBonusState.lastRanks.get(String(payload?.technician_context?.technician_id || 'self'));
+  const selfRow = rows.find((row) => String(row.technician_id) === String(payload?.technician_context?.technician_id || 'self'));
+  if (selfRow && Number.isFinite(previousSelfRank) && previousSelfRank !== selfRow.rank) {
+    announceBonusRace(`Rank update: now in position ${selfRow.rank}.`);
+  }
+  technicianBonusState.lastRanks = nextRanks;
+}
+
+function renderBonusEffectsSummary(payload, jobs) {
+  const effectsEl = document.getElementById('bonusEffectsSummary');
+  if (!effectsEl) return;
+  let doItAllCount = 0;
+  let sniperCount = 0;
+  let flatTireCount = 0;
+  let redFlagCount = 0;
+  let sniperEvidence = 'You nailed the quote tolerance window.';
+  for (const job of jobs) {
+    const roleBadges = Array.isArray(job?.role_badges) ? job.role_badges : [];
+    const penalties = Array.isArray(job?.penalty_tags) ? job.penalty_tags : [];
+    const estimation = job?.estimation || null;
+    const explanations = Array.isArray(job?.explanations) ? job.explanations : [];
+    if (roleBadges.some((badge) => String(badge || '').toLowerCase().includes('do-it-all'))) doItAllCount += 1;
+    if (String(estimation?.status || '').toLowerCase() === 'pass') {
+      sniperCount += 1;
+      if (String(estimation?.message || '').trim()) sniperEvidence = String(estimation.message);
+      if (explanations.length > 0) sniperEvidence = explanations[0];
+    }
+    for (const penalty of penalties) {
+      const code = String(penalty?.code || '').toLowerCase();
+      if (code === 'seller_fault_parts_runs') flatTireCount += 1;
+      if (code === 'callback_bad_scoping' || code === 'callback_poor_workmanship') redFlagCount += 1;
+    }
+  }
+  const hotStreakCount = Number(payload?.streak?.hot_streak_count || 0);
+  const hotStreakActive = !!payload?.streak?.hot_streak_active;
+  const chips = [
+    {
+      label: `🏅 Do It All ${doItAllCount > 0 ? `x${doItAllCount}` : ''}`.trim(),
+      tone: doItAllCount > 0 ? 'positive' : 'pending',
+      tooltip: doItAllCount > 0
+        ? `${doItAllCount} job(s) where you sold and executed.`
+        : 'Unlock when you sell and execute the same job on one visit.',
+    },
+    {
+      label: `🎯 Sniper ${sniperCount > 0 ? `x${sniperCount}` : ''}`.trim(),
+      tone: sniperCount > 0 ? 'positive' : 'pending',
+      tooltip: sniperCount > 0 ? sniperEvidence : 'Unlock when actual labour lands inside tolerance.',
+    },
+    {
+      label: `🔥 Hot Streak ${hotStreakActive ? `x${hotStreakCount}` : ''}`.trim(),
+      tone: hotStreakActive ? 'positive' : 'pending',
+      tooltip: hotStreakActive
+        ? `${hotStreakCount} consecutive clean jobs.`
+        : 'Pending backend streak wiring (5 clean jobs target).',
+    },
+    {
+      label: `⚠️ Flat Tire ${flatTireCount > 0 ? `x${flatTireCount}` : ''}`.trim(),
+      tone: flatTireCount > 0 ? 'warning' : 'pending',
+      tooltip: flatTireCount > 0
+        ? `${flatTireCount} unscheduled parts run penalties recorded.`
+        : 'No unscheduled parts run penalties in this period.',
+    },
+    {
+      label: `🚩 Red Flag ${redFlagCount > 0 ? `x${redFlagCount}` : ''}`.trim(),
+      tone: redFlagCount > 0 ? 'warning' : 'pending',
+      tooltip: redFlagCount > 0
+        ? `${redFlagCount} callback-driven GP penalties recorded.`
+        : 'No callback voids recorded in this period.',
+    },
+  ];
+  effectsEl.innerHTML = chips.map((chip) => (
+    `<button type="button" class="bonus-badge-chip bonus-badge-chip--${escapeHtml(chip.tone)}" data-bonus-tooltip="${escapeHtml(chip.tooltip)}">${escapeHtml(chip.label)}</button>`
+  )).join('');
+}
+
 async function fetchAdminTechnicianOptions() {
   if (!isAdminRole()) {
     technicianBonusState.adminTechnicianOptions = [];
@@ -13056,6 +13490,7 @@ function renderTechnicianBonusAdminSelector() {
 }
 
 function renderTechnicianBonusDashboard(payload) {
+  hideBonusTooltip();
   const periodNameEl = document.getElementById('bonusPeriodName');
   const periodDatesEl = document.getElementById('bonusPeriodDates');
   const periodStatusEl = document.getElementById('bonusPeriodStatusBadge');
@@ -13071,6 +13506,12 @@ function renderTechnicianBonusDashboard(payload) {
   const hero = payload?.hero || {};
   const ledger = payload?.ledger || {};
   const jobs = Array.isArray(ledger?.jobs) ? ledger.jobs : [];
+  const previousPayload = technicianBonusState.previousPayload;
+  const previousTeamPot = Number(previousPayload?.hero?.total_team_pot || 0);
+  const previousMyGp = Number(previousPayload?.hero?.my_total_gp_contributed || 0);
+  const teamPot = Number(hero?.total_team_pot || 0);
+  const myGp = Number(hero?.my_total_gp_contributed || 0);
+  const isMobileBonusView = layoutState.viewportMode === 'mobile';
 
   if (periodNameEl) {
     periodNameEl.textContent = period?.period_name
@@ -13086,8 +13527,8 @@ function renderTechnicianBonusDashboard(payload) {
     periodStatusEl.textContent = formatBonusStatusLabel(period?.status);
     periodStatusEl.dataset.status = String(period?.status || '').trim().toLowerCase();
   }
-  if (teamPotEl) teamPotEl.textContent = formatCurrency(hero?.total_team_pot || 0);
-  if (myGpEl) myGpEl.textContent = formatCurrency(hero?.my_total_gp_contributed || 0);
+  if (teamPotEl) teamPotEl.textContent = formatCurrency(teamPot);
+  if (myGpEl) myGpEl.textContent = formatCurrency(myGp);
   if (expectedPayoutEl) expectedPayoutEl.textContent = 'Pending';
   if (expectedPayoutNoteEl) {
     expectedPayoutNoteEl.textContent = 'Expected payout unlocks after final rules and admin verification.';
@@ -13111,9 +13552,16 @@ function renderTechnicianBonusDashboard(payload) {
     emptyEl.textContent = '';
   }
 
+  renderBonusRaceBoard(payload || {});
+  renderBonusRaceLeaderboard(payload || {});
+  renderBonusEffectsSummary(payload || {}, jobs);
+  bindBonusTooltipInteractions();
+  bindBonusTallyInteractions();
+
   if (!ledgerListEl) return;
   if (!period || jobs.length === 0) {
     ledgerListEl.innerHTML = '';
+    technicianBonusState.previousPayload = payload || null;
     return;
   }
 
@@ -13123,10 +13571,36 @@ function renderTechnicianBonusDashboard(payload) {
     const pendingReasonMessages = Array.isArray(job?.pending_reason_messages) ? job.pending_reason_messages : [];
     const explanations = Array.isArray(job?.explanations) ? job.explanations : [];
     const estimation = job?.estimation || null;
-    const roleHtml = roleBadges.map((badge) => `<span class="bonus-role-badge">${escapeHtml(String(badge))}</span>`).join('');
-    const penaltyHtml = penalties.map((penalty) => (
-      `<span class="bonus-penalty-tag" title="${escapeHtml(String(penalty?.label || 'Penalty'))}">${escapeHtml(String(penalty?.label || 'Penalty'))}</span>`
-    )).join('');
+    const baseTooltip = explanations.length > 0
+      ? explanations.join(' ')
+      : 'No additional explanation recorded for this job.';
+    const roleHtml = isMobileBonusView
+      ? roleBadges.map((badge) => {
+          const raw = String(badge || '').trim();
+          const normalized = raw.toLowerCase();
+          let label = raw;
+          if (normalized.includes('do-it-all')) label = '🏅 Do It All';
+          if (normalized === 'seller') label = '🧾 Seller';
+          if (normalized === 'executor') label = '🛠 Executor';
+          if (normalized === 'co-seller') label = '🤝 Co-Seller';
+          if (normalized === 'co-executor') label = '🤝 Co-Executor';
+          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" data-bonus-tooltip="${escapeHtml(baseTooltip)}">${escapeHtml(label)}</button>`;
+        }).join('')
+      : roleBadges.map((badge) => `<span class="bonus-role-badge">${escapeHtml(String(badge))}</span>`).join('');
+    const sniperHtml = isMobileBonusView && String(estimation?.status || '').toLowerCase() === 'pass'
+      ? `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" data-bonus-tooltip="${escapeHtml(String(estimation?.message || 'Actual labour is inside tolerance.'))}">🎯 Sniper</button>`
+      : '';
+    const penaltyHtml = isMobileBonusView
+      ? penalties.map((penalty) => {
+          const code = String(penalty?.code || '').toLowerCase();
+          let label = String(penalty?.label || 'Penalty');
+          if (code === 'seller_fault_parts_runs') label = '⚠️ Flat Tire';
+          if (code === 'callback_bad_scoping' || code === 'callback_poor_workmanship') label = '🚩 Red Flag';
+          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--warning" data-bonus-tooltip="${escapeHtml(String(penalty?.label || baseTooltip))}">${escapeHtml(label)}</button>`;
+        }).join('')
+      : penalties.map((penalty) => (
+          `<span class="bonus-penalty-tag" title="${escapeHtml(String(penalty?.label || 'Penalty'))}">${escapeHtml(String(penalty?.label || 'Penalty'))}</span>`
+        )).join('');
     const pendingHtml = pendingReasonMessages.map((reason) => (
       `<span class="bonus-pending-tag">${escapeHtml(String(reason))}</span>`
     )).join('');
@@ -13149,7 +13623,7 @@ function renderTechnicianBonusDashboard(payload) {
         </div>
         <span class="bonus-job-date">${escapeHtml(formatBonusDateTime(job?.created_at))}</span>
       </div>
-      ${roleHtml ? `<div class="bonus-role-badges">${roleHtml}</div>` : ''}
+      ${(roleHtml || sniperHtml) ? `<div class="bonus-role-badges">${roleHtml}${sniperHtml}</div>` : ''}
       <div class="bonus-job-metrics">
         <div class="bonus-job-metric">
           <span class="bonus-job-metric-label">Job GP (provisional)</span>
@@ -13166,6 +13640,24 @@ function renderTechnicianBonusDashboard(payload) {
       ${explanationHtml}
     </article>`;
   }).join('');
+  technicianBonusState.previousPayload = payload || null;
+}
+
+function stopTechnicianBonusPolling() {
+  if (!technicianBonusState.pollTimerId) return;
+  clearInterval(technicianBonusState.pollTimerId);
+  technicianBonusState.pollTimerId = null;
+}
+
+function startTechnicianBonusPolling() {
+  stopTechnicianBonusPolling();
+  if (getVisibleViewId() !== 'view-technician-bonus') return;
+  technicianBonusState.pollTimerId = setInterval(() => {
+    if (getVisibleViewId() !== 'view-technician-bonus') return;
+    if (document.visibilityState !== 'visible') return;
+    if (technicianBonusState.loading) return;
+    void fetchTechnicianBonusDashboard({ skipAdminOptions: true, silent: true });
+  }, 30000);
 }
 
 async function fetchTechnicianBonusDashboard(options = {}) {
@@ -13173,10 +13665,11 @@ async function fetchTechnicianBonusDashboard(options = {}) {
     setBonusDashboardStatus('Your role does not allow bonus dashboard access.', 'error');
     return;
   }
+  const isSilent = options.silent === true;
   const refreshBtn = document.getElementById('btnBonusRefresh');
   technicianBonusState.loading = true;
-  if (refreshBtn) refreshBtn.disabled = true;
-  setBonusDashboardStatus('Loading bonus dashboard…');
+  if (refreshBtn && !isSilent) refreshBtn.disabled = true;
+  if (!isSilent) setBonusDashboardStatus('Loading bonus dashboard…');
 
   try {
     if (isAdminRole() && options.skipAdminOptions !== true) {
@@ -13211,13 +13704,14 @@ async function fetchTechnicianBonusDashboard(options = {}) {
     if (forcedSelf) {
       setBonusDashboardStatus('You can only view your own dashboard in this role.', 'info');
     } else {
-      setBonusDashboardStatus('');
+      if (!isSilent) setBonusDashboardStatus('');
     }
+    startTechnicianBonusPolling();
   } catch (err) {
     console.error('Failed to load technician bonus dashboard', err);
     technicianBonusState.payload = null;
     renderTechnicianBonusDashboard(null);
-    setBonusDashboardStatus(err?.message || 'Failed to load bonus dashboard.', 'error');
+    if (!isSilent) setBonusDashboardStatus(err?.message || 'Failed to load bonus dashboard.', 'error');
   } finally {
     technicianBonusState.loading = false;
     if (refreshBtn) refreshBtn.disabled = false;
@@ -13243,6 +13737,12 @@ function initTechnicianBonusView() {
   adminSelect?.addEventListener('change', () => {
     technicianBonusState.selectedTechnicianId = String(adminSelect.value || '').trim();
     void fetchTechnicianBonusDashboard({ skipAdminOptions: true });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (getVisibleViewId() !== 'view-technician-bonus') return;
+    if (document.visibilityState !== 'visible') return;
+    void fetchTechnicianBonusDashboard({ skipAdminOptions: true, silent: true });
   });
 }
 
@@ -13939,6 +14439,10 @@ function switchView(viewId, options = {}) {
   if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
     diagramToolbarDragCleanupIfNeeded();
   }
+  if (fromViewId === 'view-technician-bonus' && viewId !== 'view-technician-bonus') {
+    stopTechnicianBonusPolling();
+    hideBonusTooltip();
+  }
 
   document.querySelectorAll('.app-view').forEach((el) => {
     el.classList.add('hidden');
@@ -13958,6 +14462,7 @@ function switchView(viewId, options = {}) {
     } else if (viewId === 'view-technician-bonus') {
       initTechnicianBonusView();
       void fetchTechnicianBonusDashboard();
+      startTechnicianBonusPolling();
     }
     if (options.focus !== false) {
       const returnTarget = fromViewId && fromViewId !== viewId

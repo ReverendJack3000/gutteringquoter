@@ -110,12 +110,12 @@ The following are **locked decisions**. Full rationale and implementation notes:
   - [x] **59.9.1** Bonus labour rate: implement `get_bonus_labour_rate(supabase)` — read from `public.company_settings` (id=1), fallback to env `BONUS_LABOUR_RATE`, then 35.0. Document in .env.example.
   - [x] **59.9.2** Base Job GP formula: implement `compute_job_gp(job)` using **only** revenue − materials − (standard_parts_runs × $20); pure function; do not use `missed_materials_cost` or `callback_cost`.
   - [x] **59.9.3** Wire: expose computed Job GP (e.g. GET /api/bonus/job-performance/{id} returns row + job_gp; or shared helper for 59.10/59.11). No sync or job_personnel schema changes.
-- [ ] **59.10** **Period Pot (Step 2):** Period Pot = Sum(Job GP × 0.10) for eligible jobs in the period − **global_callback_costs** (callbacks deducted at period level, not from each Job GP). Respect bonus_periods status (e.g. only include jobs in periods with status open or processing as defined).
-- [ ] **59.11** **Tech GP and base splits (Step 3):** 60/40 and "Do it all, get it all": for each job, compute **Seller Base Cut** = Job GP × 0.60 and **Executor Base Cut** = Job GP × 0.40; if single tech is both seller and executor, 100% to that tech. Apply Truck Share (split by headcount) when multiple sellers and/or executors.
-- [ ] **59.12** Callback rules: if is_callback and callback_reason = poor_workmanship, void Executor GP credit for that job; if callback_reason = bad_scoping, void Seller GP credit. Deduct callback_cost from **period pot** (59.10), not from Base Job GP.
-- [ ] **59.13** **Estimation accuracy (Step 3):** Seller share applies only if actual labour (sum of onsite_minutes + travel_shopping_minutes across job_personnel for that job) is within 15% of quoted_labor_minutes or within 30 minutes, whichever is greater. Implement and document edge cases (zero quoted, rounding).
-- [ ] **59.14** **Post-split penalties (Step 4):** **Seller Final Cut** = Seller Base Cut − `missed_materials_cost` − (`seller_fault_parts_runs` × $20). Use `missed_materials_cost` **only** for Parts Run missed materials (Seller penalty). **Van stock:** no column — part is added to the job in ServiceM8 so `materials_cost` from sync already reflects it and Base Job GP is organically lower. Wire to job_performance and job_personnel data.
-- [ ] **59.15** Schedule Saver: ensure Seller keeps full 60% credit when they did not execute (is_seller true, is_executor false); no code change to split logic if already correct, but document and add test/check.
+- [x] **59.10** **Period Pot (Step 2):** Period Pot = Sum(Job GP × 0.10) for eligible jobs in the period − **global_callback_costs** (callbacks deducted at period level, not from each Job GP). Respect bonus_periods status (e.g. only include jobs in periods with status open or processing as defined).
+- [x] **59.11** **Tech GP and base splits (Step 3):** 60/40 and "Do it all, get it all": for each job, compute **Seller Base Cut** = Job GP × 0.60 and **Executor Base Cut** = Job GP × 0.40; if single tech is both seller and executor, 100% to that tech. Apply Truck Share (split by headcount) when multiple sellers and/or executors.
+- [x] **59.12** Callback rules: if is_callback and callback_reason = poor_workmanship, void Executor GP credit for that job; if callback_reason = bad_scoping, void Seller GP credit. Deduct callback_cost from **period pot** (59.10), not from Base Job GP.
+- [x] **59.13** **Estimation accuracy (Step 3):** Seller share applies only if actual labour (sum of onsite_minutes + travel_shopping_minutes across job_personnel for that job) is within 15% of quoted_labor_minutes or within 30 minutes, whichever is greater. Implement and document edge cases (zero quoted, rounding).
+- [x] **59.14** **Post-split penalties (Step 4):** **Seller Final Cut** = Seller Base Cut − `missed_materials_cost` − (`seller_fault_parts_runs` × $20). Use `missed_materials_cost` **only** for Parts Run missed materials (Seller penalty). **Van stock:** no column — part is added to the job in ServiceM8 so `materials_cost` from sync already reflects it and Base Job GP is organically lower. Wire to job_performance and job_personnel data.
+- [x] **59.15** Schedule Saver: ensure Seller keeps full 60% credit when they did not execute (is_seller true, is_executor false); no code change to split logic if already correct, but document and add test/check.
 
 ---
 
@@ -124,10 +124,20 @@ The following are **locked decisions**. Full rationale and implementation notes:
 - [ ] **59.16** Backend API: define endpoints for bonus feature (e.g. list periods, get period summary with pot and per-tech breakdown, get job list for period, create/update job_performance and job_personnel). **Include list/read job_personnel** (e.g. by job_performance_id or period) so Admin UI can display and edit personnel. Auth: who can read (admin + technician self?) and who can write (admin only for ledger, or tech for own time?). Implement after 59.1–59.8.
   - [x] **59.16.1** Prototype read API shipped: `GET /api/bonus/technician/period-current`, `GET /api/bonus/technician/dashboard`, `GET /api/bonus/technician/jobs` with role gates (`admin`, `editor`, `technician`) and self-context enforcement for non-admin users.
   - [ ] **59.16.2** Finalize full bonus API surface for Admin UI and payroll flow (period summary, per-tech breakdown, list/read job_personnel by period/job, and any required write endpoints beyond existing admin PATCH).
+  - [ ] **59.16.3** Leaderboard contract: return period `leaderboard[]` with `{ technician_id, display_name, avatar_url?, avatar_initials, gp_contributed, share_of_team_pot, rank, previous_rank? }`.
+  - [ ] **59.16.4** Pot momentum fields: `{ total_team_pot, team_pot_delta, team_pot_delta_reason, as_of }` with reason enum `job_finalized | callback_deduction | admin_adjustment`.
+  - [ ] **59.16.5** Streak fields: `{ hot_streak_count, hot_streak_active }` based on consecutive jobs with zero callbacks and zero parts runs.
+  - [ ] **59.16.6** Badge evidence payload: `badge_events[]` with `{ code, earned, evidence_text }` for tooltip-grade explanations.
+  - [ ] **59.16.7** Monotonic snapshot/version field (`snapshot_version` or `updated_at`) for deterministic frontend diff animations.
 - [ ] **59.17** Admin UI: views to manage periods, finalise jobs, assign personnel, enter callback/parts-run/missed-materials data, and view period pot and per-tech GP. Desktop-first; mobile later if needed. Depends on 59.16 list/read job_personnel for the personnel assign/verify screen.
 - [ ] **59.18** Technician UI (required): deliver technician-facing bonus dashboard. Read-only first, then final-rule payout once 59.9–59.15 are complete.
   - [x] **59.18.1** Prototype dashboard shipped (mobile-first, desktop-safe): period header/status, provisional Team Pot + My GP hero cards, pending Expected Payout, and transparent per-job ledger with role badges, estimation indicator, penalty tags, and pending reasons/explanations.
   - [ ] **59.18.2** Final dashboard pass: switch provisional metrics/ledger to canonical rule engine outputs (59.9–59.15), remove provisional placeholders where no longer needed, and lock payout display for closed periods.
+    - [ ] **59.18.2.1** Mobile GP Race layout pass (tracker + podium + status effects), desktop unchanged.
+    - [ ] **59.18.2.2** Pot motion states (gain/leak) with reduced-motion fallback.
+    - [ ] **59.18.2.3** Podium reorder + slice-bar animation on leaderboard changes.
+    - [ ] **59.18.2.4** Badge/streak/penalty icon mapping + tooltip UX.
+    - [ ] **59.18.2.5** Mobile accessibility and regression QA pass.
 
 ---
 

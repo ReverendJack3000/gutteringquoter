@@ -176,6 +176,22 @@ python3 scripts/create_fixtures.py   # once, creates scripts/fixtures/tiny.png
 - Resize the browser to **1280×720** and **1920×1080** and confirm: blueprint area uses ~2/3 width, right panel ~1/3, resizer drag works, panel collapses to a narrow strip with left-facing chevron and expands to show search + product grid.
 - Upload a photo, toggle **Technical drawing**, drag products onto the blueprint, select/move/resize/rotate an element, export PNG.
 
+**Backend unit tests:** Bonus calculation and other backend tests live in `backend/tests/` and must be run with `backend/` as the current working directory so the `app` package resolves. From the **project root**:
+
+```bash
+./scripts/run-backend-tests.sh
+```
+
+Or from the `backend` directory:
+
+```bash
+cd backend
+source .venv/bin/activate   # optional
+python3 -m unittest discover -s tests -p "test_*.py" -v
+```
+
+To run only the bonus calc tests: `python3 -m unittest tests.test_bonus_calc -v`.
+
 ## E2E tests (Puppeteer)
 
 **One-time setup:** from the project root:
