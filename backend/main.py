@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user_id, get_current_user_id_and_role, require_role
+from app.auth import get_current_user_id, get_current_user_id_and_role, get_validated_payload, is_super_admin_from_payload, require_role
 from app.bonus_dashboard import (
     build_badge_events,
     build_canonical_ledger_rows,
@@ -832,6 +832,21 @@ def api_config():
     anon = os.environ.get("SUPABASE_ANON_KEY", "").strip()
     pwa_enabled = _env_flag("PWA_ENABLED", True)
     return {"supabaseUrl": url or None, "anonKey": anon or None, "pwaEnabled": pwa_enabled}
+
+
+@app.get("/api/me")
+def api_me(
+    user_id_and_role: tuple[uuid_lib.UUID, str] = Depends(get_current_user_id_and_role),
+    payload: dict = Depends(get_validated_payload),
+):
+    """Current user info (Bearer required). Used so frontend can show bonus/admin entry for super admin."""
+    user_id, role = user_id_and_role
+    return {
+        "user_id": str(user_id),
+        "email": payload.get("email"),
+        "role": role,
+        "is_super_admin": is_super_admin_from_payload(payload),
+    }
 
 
 @app.get("/api/products")

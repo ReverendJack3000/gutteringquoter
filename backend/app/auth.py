@@ -117,12 +117,27 @@ def get_current_user_id(
     return UUID(payload["sub"])
 
 
+def _is_super_admin_from_payload(payload: dict) -> bool:
+    """True if JWT email matches SUPER_ADMIN_EMAIL (env). Allows super admin to access admin-only and bonus views."""
+    super_email = (os.environ.get("SUPER_ADMIN_EMAIL") or "").strip().lower()
+    if not super_email:
+        return False
+    email = (payload.get("email") or "").strip() if isinstance(payload.get("email"), str) else ""
+    return email.lower() == super_email
+
+
+def is_super_admin_from_payload(payload: dict) -> bool:
+    """Public helper for /api/me. True if JWT email matches SUPER_ADMIN_EMAIL."""
+    return _is_super_admin_from_payload(payload)
+
+
 def get_current_user_id_and_role(
     payload: dict = Depends(get_validated_payload),
 ) -> Tuple[UUID, str]:
     """
     Return (user_id, role) from validated JWT. Role from app_metadata.role (set by
     Custom Access Token Hook from public.profiles); defaults to 'viewer' if missing.
+    If SUPER_ADMIN_EMAIL is set and JWT email matches it, effective role is 'admin'.
     """
     user_id = UUID(payload["sub"])
     role = (payload.get("app_metadata") or {}).get("role")
@@ -130,6 +145,8 @@ def get_current_user_id_and_role(
         role = "viewer"
     else:
         role = role.strip().lower()
+    if _is_super_admin_from_payload(payload):
+        role = "admin"
     return (user_id, role)
 
 

@@ -94,7 +94,7 @@ const state = {
 };
 
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
-const authState = { token: null, email: null, user: null, role: 'viewer', supabase: null, recoveryLandingFromHash: false };
+const authState = { token: null, email: null, user: null, role: 'viewer', isSuperAdmin: false, supabase: null, recoveryLandingFromHash: false };
 
 const APP_ALLOWED_ROLES = new Set(['viewer', 'editor', 'admin', 'technician']);
 
@@ -183,6 +183,27 @@ function clearAuthState() {
   authState.email = null;
   authState.user = null;
   authState.role = 'viewer';
+  authState.isSuperAdmin = false;
+}
+
+/**
+ * Fetch /api/me and set authState.isSuperAdmin, then refresh auth UI (menu visibility for bonus/admin).
+ * Call after setAuthFromSession when token is present so super admin can access Bonus Admin and My Bonus.
+ */
+async function fetchMeAndUpdateAuth() {
+  if (!authState.token) {
+    authState.isSuperAdmin = false;
+    if (setAuthUIRef) setAuthUIRef();
+    return;
+  }
+  try {
+    const r = await fetch('/api/me', { headers: getAuthHeaders() });
+    const data = r.ok ? await r.json().catch(() => ({})) : {};
+    authState.isSuperAdmin = !!data.is_super_admin;
+  } catch (_) {
+    authState.isSuperAdmin = false;
+  }
+  if (setAuthUIRef) setAuthUIRef();
 }
 
 /** Set by initAuth so handleAuthFailure can refresh login UI when session is invalid. */
@@ -1506,12 +1527,12 @@ function isAdminRole() {
 }
 
 function canAccessDesktopAdminUi() {
-  return !!authState.token && isAdminRole() && isDesktopViewport();
+  return !!authState.token && (isAdminRole() || !!authState.isSuperAdmin) && isDesktopViewport();
 }
 
 function canAccessTechnicianBonusView() {
   const role = normalizeAppRole(authState.role);
-  return !!authState.token && (role === 'admin' || role === 'editor' || role === 'technician');
+  return !!authState.token && (role === 'admin' || role === 'editor' || role === 'technician' || !!authState.isSuperAdmin);
 }
 
 function canUsePricingAdminControls() {
@@ -10012,7 +10033,7 @@ function initAuth() {
       const { data, error } = await authState.supabase.auth.signInWithPassword({ email: authEmail.value.trim(), password: authPassword.value });
       if (error) throw error;
       setAuthFromSession(data.session, data.user ?? null);
-      setAuthUI();
+      void fetchMeAndUpdateAuth();
       switchView('view-canvas');
       maybePromptAutosaveRestore();
       await checkServiceM8Status();
@@ -10059,7 +10080,7 @@ function initAuth() {
       }
 
       setAuthFromSession(session, user ?? null);
-      setAuthUI();
+      void fetchMeAndUpdateAuth();
       switchView('view-canvas');
       maybePromptAutosaveRestore();
       await checkServiceM8Status();
@@ -10082,7 +10103,7 @@ function initAuth() {
       const { data, error } = await authState.supabase.auth.signUp({ email: authEmail.value.trim(), password: authPassword.value });
       if (error) throw error;
       setAuthFromSession(data.session, data.user ?? null);
-      setAuthUI();
+      void fetchMeAndUpdateAuth();
       switchView('view-canvas');
       checkServiceM8Status();
       showMessage('Account created. You can sign in and save diagrams.', 'success');
@@ -10164,7 +10185,10 @@ function initAuth() {
           return;
         }
       }
-      if (session) setAuthFromSession(session, session.user ?? null);
+      if (session) {
+        setAuthFromSession(session, session.user ?? null);
+        void fetchMeAndUpdateAuth();
+      }
       if (authForm) authForm.hidden = false;
       authSetPasswordForm.hidden = true;
       authNewPassword.value = '';
@@ -10200,7 +10224,7 @@ function initAuth() {
         refreshPasskeyUi().catch(() => {});
         authState.supabase.auth.onAuthStateChange((event, session) => {
           setAuthFromSession(session, session?.user ?? null);
-          setAuthUI();
+          void fetchMeAndUpdateAuth();
           if (!authState.token) {
             switchView('view-login');
             return;
@@ -10224,7 +10248,7 @@ function initAuth() {
         return authState.supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
             setAuthFromSession(session, session.user ?? null);
-            setAuthUI();
+            void fetchMeAndUpdateAuth();
             checkServiceM8Status();
           }
         });
