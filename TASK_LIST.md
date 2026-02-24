@@ -96,7 +96,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 59 | 59.9–59.23 | Technician quotes: team pool bonus. 59.9 done (Base Job GP, GET job-performance/{id}). 59.8 done (job_personnel + admin PATCH). Prototype dashboard + read API (59.16.1, 59.18.1). **Next:** 59.10 Period Pot → 59.11–59.15 splits/callbacks/estimation/penalties/Schedule Saver → 59.18.2 replace provisional dashboard. Plan: docs/plans/2026-02-24-section-59-10-to-59-15-calculation-engine-plan.md. See section-59.md. |
+| 59 | 59.9–59.24 | Technician quotes: team pool bonus. 59.9–59.15, 59.18.2, 59.18.2.1–59.18.2.5 done. **Remaining:** 59.16.2–59.16.7 (full API), 59.17 (Admin UI), 59.24 (remove dummy data). See section-59.md. |
 
 ---
 

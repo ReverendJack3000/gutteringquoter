@@ -13100,6 +13100,49 @@ function animateBonusCurrencyValue(el, fromValue, toValue, durationMs = 680) {
   el.__bonusAnimFrameId = requestAnimationFrame(tick);
 }
 
+function animateBonusCurrencySlotValue(el, toValue, durationMs = 560) {
+  if (!(el instanceof HTMLElement)) return;
+  const end = Number(toValue || 0);
+  if (!Number.isFinite(end)) {
+    el.textContent = formatCurrency(toValue || 0);
+    return;
+  }
+  if (shouldReduceBonusMotion()) {
+    el.textContent = formatCurrency(end);
+    return;
+  }
+  if (end < 0) {
+    animateBonusCurrencyValue(el, 0, end, durationMs);
+    return;
+  }
+  if (el.__bonusAnimFrameId) cancelAnimationFrame(el.__bonusAnimFrameId);
+  const startTs = performance.now();
+  const fastTarget = end * 0.9;
+  const stepSize = end >= 500 ? 25 : end >= 100 ? 5 : end >= 20 ? 1 : end >= 5 ? 0.25 : 0.05;
+  const tick = (ts) => {
+    const p = Math.min(1, (ts - startTs) / durationMs);
+    let next = 0;
+    if (p < 0.72) {
+      const fast = Math.pow(p / 0.72, 0.42);
+      next = fastTarget * fast;
+    } else {
+      const settle = (p - 0.72) / 0.28;
+      const easedSettle = 1 - Math.pow(1 - settle, 3);
+      next = fastTarget + ((end - fastTarget) * easedSettle);
+    }
+    if (p < 0.96) next = Math.round(next / stepSize) * stepSize;
+    next = Math.max(0, Math.min(end, next));
+    el.textContent = formatCurrency(next);
+    if (p < 1) {
+      el.__bonusAnimFrameId = requestAnimationFrame(tick);
+    } else {
+      el.__bonusAnimFrameId = 0;
+      el.textContent = formatCurrency(end);
+    }
+  };
+  el.__bonusAnimFrameId = requestAnimationFrame(tick);
+}
+
 function setBonusCurrencyValue(el, value, options = {}) {
   if (!(el instanceof HTMLElement)) return;
   const next = Number(value || 0);
@@ -13187,27 +13230,37 @@ function bindBonusTooltipInteractions() {
 function bindBonusTallyInteractions() {
   if (technicianBonusState.tallyBound) return;
   technicianBonusState.tallyBound = true;
-  const replay = (el) => {
+  const replay = (el, options = {}) => {
     if (!(el instanceof HTMLElement)) return;
     const finalValue = Number(el.dataset.currencyValue || 0);
-    animateBonusCurrencyValue(el, 0, finalValue, 720);
+    if (options.mode === 'slot') {
+      animateBonusCurrencySlotValue(el, finalValue, options.durationMs || 560);
+      return;
+    }
+    animateBonusCurrencyValue(el, 0, finalValue, options.durationMs || 720);
   };
   const potBtn = document.getElementById('bonusPotTallyBtn');
   const myGpBtn = document.getElementById('bonusMyGpTallyBtn');
-  const replayTargets = [
-    document.getElementById('bonusRaceTeamPotValue'),
-    document.getElementById('bonusRaceMyGpValue'),
-  ].filter(Boolean);
-  replayTargets.forEach((el) => {
-    el.addEventListener('click', () => replay(el));
-    el.addEventListener('keydown', (e) => {
+  const teamPotValueEl = document.getElementById('bonusRaceTeamPotValue');
+  const myGpValueEl = document.getElementById('bonusRaceMyGpValue');
+  if (teamPotValueEl) {
+    teamPotValueEl.addEventListener('click', () => replay(teamPotValueEl, { mode: 'slot', durationMs: 560 }));
+    teamPotValueEl.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       e.preventDefault();
-      replay(el);
+      replay(teamPotValueEl, { mode: 'slot', durationMs: 560 });
     });
-  });
-  potBtn?.addEventListener('click', () => replay(document.getElementById('bonusRaceTeamPotValue')));
-  myGpBtn?.addEventListener('click', () => replay(document.getElementById('bonusRaceMyGpValue')));
+  }
+  if (myGpValueEl) {
+    myGpValueEl.addEventListener('click', () => replay(myGpValueEl));
+    myGpValueEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      replay(myGpValueEl);
+    });
+  }
+  potBtn?.addEventListener('click', () => replay(teamPotValueEl, { mode: 'slot', durationMs: 560 }));
+  myGpBtn?.addEventListener('click', () => replay(myGpValueEl));
 }
 
 function announceBonusRace(message) {
@@ -13278,22 +13331,20 @@ function renderBonusRaceBoard(payload) {
   const delta = previousPot == null ? 0 : Math.round((teamPot - previousPot) * 100) / 100;
   technicianBonusState.potPeak = Math.max(technicianBonusState.potPeak || 1, teamPot || 0, previousPot || 0, 1);
   const fillPercent = Math.max(0, Math.min(100, (teamPot / technicianBonusState.potPeak) * 100));
-  const leakPercent = delta < 0
-    ? Math.max(0, Math.min(100, (Math.abs(delta) / technicianBonusState.potPeak) * 100))
-    : 0;
-  const fillEl = document.getElementById('bonusRacePotFill');
-  const leakEl = document.getElementById('bonusRacePotLeak');
+  const heatZone = fillPercent <= 30 ? 'cold' : fillPercent <= 70 ? 'warm' : 'hot';
+  const heatColor = heatZone === 'cold' ? '#3B82F6' : heatZone === 'warm' ? '#F97316' : '#EF4444';
+  const gaugeEl = document.getElementById('bonusRacePotGauge');
   const deltaEl = document.getElementById('bonusRacePotDelta');
   const updatedEl = document.getElementById('bonusRaceLastUpdated');
   const teamPotMobileEl = document.getElementById('bonusRaceTeamPotValue');
   const myGpMobileEl = document.getElementById('bonusRaceMyGpValue');
 
-  if (fillEl) {
-    fillEl.style.width = `${fillPercent.toFixed(2)}%`;
-    fillEl.classList.toggle('bonus-pot-fill--gain', delta > 0);
-    fillEl.classList.toggle('bonus-pot-fill--leak', delta < 0);
+  if (gaugeEl) {
+    gaugeEl.style.setProperty('--fill-percentage', fillPercent.toFixed(2));
+    gaugeEl.style.setProperty('--gauge-color', heatColor);
+    gaugeEl.dataset.heat = heatZone;
+    gaugeEl.setAttribute('aria-label', `Team pot gauge ${Math.round(fillPercent)} percent filled`);
   }
-  if (leakEl) leakEl.style.width = `${leakPercent.toFixed(2)}%`;
   if (deltaEl) {
     if (delta > 0) {
       deltaEl.textContent = `+${formatCurrency(delta)} added to the Team Pot.`;
@@ -13345,14 +13396,20 @@ function renderBonusRaceLeaderboard(payload) {
         </div>
         <span class="bonus-racer-gp">${escapeHtml(formatCurrency(row.gp_contributed || 0))}</span>
       </div>
-      <div class="bonus-racer-bar-wrap"><div class="bonus-racer-bar" style="width:${barWidth.toFixed(2)}%"></div></div>
+      <div class="bonus-racer-bar-wrap"><div class="bonus-racer-bar" style="--bar-width: ${barWidth.toFixed(2)}%;" role="presentation"></div></div>
       <div class="bonus-racer-meta">
         <span>${escapeHtml(formatBonusPercent(share))} of team share</span>
         ${changedRank ? '<span> • Overtake!</span>' : ''}
       </div>
-      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
+      <button type="button" class="bonus-badge-chip bonus-badge-chip--pending" aria-label="View details" title="${escapeHtml(tooltipText)}" data-bonus-tooltip="${escapeHtml(tooltipText)}">View details</button>
     </li>`;
   }).join('');
+  /* 59.18.2.3: slice-bar fill animation; respects reduced-motion via CSS */
+  requestAnimationFrame(() => {
+    listEl.querySelectorAll('.bonus-racer-bar').forEach((bar) => {
+      bar.classList.add('bonus-racer-bar--filled');
+    });
+  });
   const previousSelfRank = technicianBonusState.lastRanks.get(String(payload?.technician_context?.technician_id || 'self'));
   const selfRow = rows.find((row) => String(row.technician_id) === String(payload?.technician_context?.technician_id || 'self'));
   if (selfRow && Number.isFinite(previousSelfRank) && previousSelfRank !== selfRow.rank) {
@@ -13424,7 +13481,7 @@ function renderBonusEffectsSummary(payload, jobs) {
     },
   ];
   effectsEl.innerHTML = chips.map((chip) => (
-    `<button type="button" class="bonus-badge-chip bonus-badge-chip--${escapeHtml(chip.tone)}" data-bonus-tooltip="${escapeHtml(chip.tooltip)}">${escapeHtml(chip.label)}</button>`
+    `<button type="button" class="bonus-badge-chip bonus-badge-chip--${escapeHtml(chip.tone)}" title="${escapeHtml(chip.tooltip)}" data-bonus-tooltip="${escapeHtml(chip.tooltip)}">${escapeHtml(chip.label)}</button>`
   )).join('');
 }
 
@@ -13529,9 +13586,23 @@ function renderTechnicianBonusDashboard(payload) {
   }
   if (teamPotEl) teamPotEl.textContent = formatCurrency(teamPot);
   if (myGpEl) myGpEl.textContent = formatCurrency(myGp);
-  if (expectedPayoutEl) expectedPayoutEl.textContent = 'Pending';
+  const isProvisional = payload?.is_provisional === true;
+  const periodStatus = String(period?.status || '').trim().toLowerCase();
+  const isPeriodClosed = periodStatus === 'closed';
+  const expectedPayoutValue = hero?.my_expected_payout;
+  const hasExpectedPayout = typeof expectedPayoutValue === 'number' && !isProvisional;
+  if (expectedPayoutEl) {
+    expectedPayoutEl.textContent = hasExpectedPayout ? formatCurrency(expectedPayoutValue) : 'Pending';
+    expectedPayoutEl.dataset.locked = isPeriodClosed && hasExpectedPayout ? 'true' : '';
+  }
   if (expectedPayoutNoteEl) {
-    expectedPayoutNoteEl.textContent = 'Expected payout unlocks after final rules and admin verification.';
+    if (isPeriodClosed && hasExpectedPayout) {
+      expectedPayoutNoteEl.textContent = 'Final payout (period closed).';
+    } else if (hasExpectedPayout) {
+      expectedPayoutNoteEl.textContent = 'Payout may change until the period is closed.';
+    } else {
+      expectedPayoutNoteEl.textContent = 'Expected payout unlocks after final rules and admin verification.';
+    }
   }
 
   if (ledgerSubtitleEl) {
@@ -13584,11 +13655,11 @@ function renderTechnicianBonusDashboard(payload) {
           if (normalized === 'executor') label = '🛠 Executor';
           if (normalized === 'co-seller') label = '🤝 Co-Seller';
           if (normalized === 'co-executor') label = '🤝 Co-Executor';
-          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" data-bonus-tooltip="${escapeHtml(baseTooltip)}">${escapeHtml(label)}</button>`;
+          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" title="${escapeHtml(baseTooltip)}" data-bonus-tooltip="${escapeHtml(baseTooltip)}">${escapeHtml(label)}</button>`;
         }).join('')
       : roleBadges.map((badge) => `<span class="bonus-role-badge">${escapeHtml(String(badge))}</span>`).join('');
     const sniperHtml = isMobileBonusView && String(estimation?.status || '').toLowerCase() === 'pass'
-      ? `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" data-bonus-tooltip="${escapeHtml(String(estimation?.message || 'Actual labour is inside tolerance.'))}">🎯 Sniper</button>`
+      ? `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" title="${escapeHtml(String(estimation?.message || 'Actual labour is inside tolerance.'))}" data-bonus-tooltip="${escapeHtml(String(estimation?.message || 'Actual labour is inside tolerance.'))}">🎯 Sniper</button>`
       : '';
     const penaltyHtml = isMobileBonusView
       ? penalties.map((penalty) => {
@@ -13596,7 +13667,7 @@ function renderTechnicianBonusDashboard(payload) {
           let label = String(penalty?.label || 'Penalty');
           if (code === 'seller_fault_parts_runs') label = '⚠️ Flat Tire';
           if (code === 'callback_bad_scoping' || code === 'callback_poor_workmanship') label = '🚩 Red Flag';
-          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--warning" data-bonus-tooltip="${escapeHtml(String(penalty?.label || baseTooltip))}">${escapeHtml(label)}</button>`;
+          return `<button type="button" class="bonus-badge-chip bonus-badge-chip--warning" title="${escapeHtml(String(penalty?.label || baseTooltip))}" data-bonus-tooltip="${escapeHtml(String(penalty?.label || baseTooltip))}">${escapeHtml(label)}</button>`;
         }).join('')
       : penalties.map((penalty) => (
           `<span class="bonus-penalty-tag" title="${escapeHtml(String(penalty?.label || 'Penalty'))}">${escapeHtml(String(penalty?.label || 'Penalty'))}</span>`
@@ -13626,7 +13697,7 @@ function renderTechnicianBonusDashboard(payload) {
       ${(roleHtml || sniperHtml) ? `<div class="bonus-role-badges">${roleHtml}${sniperHtml}</div>` : ''}
       <div class="bonus-job-metrics">
         <div class="bonus-job-metric">
-          <span class="bonus-job-metric-label">Job GP (provisional)</span>
+          <span class="bonus-job-metric-label">${job?.is_provisional === false ? 'Job GP' : 'Job GP (provisional)'}</span>
           <span class="bonus-job-metric-value">${escapeHtml(formatCurrency(job?.job_gp || 0))}</span>
         </div>
         <div class="bonus-job-metric">

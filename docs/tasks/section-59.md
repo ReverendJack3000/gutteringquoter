@@ -132,12 +132,12 @@ The following are **locked decisions**. Full rationale and implementation notes:
 - [ ] **59.17** Admin UI: views to manage periods, finalise jobs, assign personnel, enter callback/parts-run/missed-materials data, and view period pot and per-tech GP. Desktop-first; mobile later if needed. Depends on 59.16 list/read job_personnel for the personnel assign/verify screen.
 - [ ] **59.18** Technician UI (required): deliver technician-facing bonus dashboard. Read-only first, then final-rule payout once 59.9–59.15 are complete.
   - [x] **59.18.1** Prototype dashboard shipped (mobile-first, desktop-safe): period header/status, provisional Team Pot + My GP hero cards, pending Expected Payout, and transparent per-job ledger with role badges, estimation indicator, penalty tags, and pending reasons/explanations.
-  - [ ] **59.18.2** Final dashboard pass: switch provisional metrics/ledger to canonical rule engine outputs (59.9–59.15), remove provisional placeholders where no longer needed, and lock payout display for closed periods.
-    - [ ] **59.18.2.1** Mobile GP Race layout pass (tracker + podium + status effects), desktop unchanged.
-    - [ ] **59.18.2.2** Pot motion states (gain/leak) with reduced-motion fallback.
-    - [ ] **59.18.2.3** Podium reorder + slice-bar animation on leaderboard changes.
-    - [ ] **59.18.2.4** Badge/streak/penalty icon mapping + tooltip UX.
-    - [ ] **59.18.2.5** Mobile accessibility and regression QA pass.
+  - [x] **59.18.2** Final dashboard pass: switch provisional metrics/ledger to canonical rule engine outputs (59.9–59.15), remove provisional placeholders where no longer needed, and lock payout display for closed periods.
+    - [x] **59.18.2.1** Mobile GP Race layout pass (tracker + podium + status effects), desktop unchanged.
+    - [x] **59.18.2.2** Pot motion states (gain/leak) with reduced-motion fallback.
+    - [x] **59.18.2.3** Podium reorder + slice-bar animation on leaderboard changes.
+    - [x] **59.18.2.4** Badge/streak/penalty icon mapping + tooltip UX.
+    - [x] **59.18.2.5** Mobile accessibility and regression QA pass.
 
 ---
 
@@ -154,3 +154,4 @@ The following are **locked decisions**. Full rationale and implementation notes:
 
 - [ ] **59.22** Document final data ownership and ServiceM8 field mapping in docs (e.g. docs/BONUS_SERVICEM8_DATA.md or section in BACKEND_DATABASE.md). Include: which job_performance/job_personnel fields are from API vs our entry; staff ↔ technician_id mapping.
 - [ ] **59.23** Update README or deployment docs if new env vars or permissions are required for bonus or ServiceM8 read usage.
+- [ ] **59.24** Remove dummy bonus data: delete the test rows added for 59.18.2 manual testing (bonus_periods “Feb 2026 Fortnight 1 (dummy)” and “Jan 2026 Fortnight 2 (dummy closed)”, job_performance JOB-DUM-001–004, and their job_personnel). Use Supabase MCP or SQL: delete job_personnel for those jobs, then job_performance, then bonus_periods. Do when manual checks are done and before production use of real bonus data.

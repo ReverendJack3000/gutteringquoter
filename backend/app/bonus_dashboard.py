@@ -12,13 +12,21 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Optional
 
-from app.bonus_calc import ELIGIBLE_JOB_STATUSES
+from app.bonus_calc import (
+    ELIGIBLE_JOB_STATUSES,
+    apply_callback_voids,
+    apply_estimation_accuracy,
+    apply_seller_penalties,
+    compute_job_base_splits,
+    compute_job_gp,
+)
 
 PROVISIONAL_TEAM_POT_PERCENT = 0.10
 
 PENDING_REASON_MESSAGES = {
     "final_rules_not_implemented": "Final bonus rules (59.9-59.15) are not fully applied yet.",
     "expected_payout_pending": "Expected payout is pending final rule validation.",
+    "payout_may_change_until_period_closed": "Payout may change until the period is closed.",
     "period_link_fallback_created_at": "Job linked to this period by created_at fallback (bonus_period_id not set).",
     "roles_unverified": "Seller/Executor roles are not verified for this job yet.",
     "quoted_labour_missing": "Quoted labour is missing, so estimation checks are provisional.",
@@ -363,6 +371,194 @@ def build_provisional_ledger_rows(
         reverse=True,
     )
     return rows
+
+
+def build_canonical_ledger_rows(
+    eligible_jobs: list[dict[str, Any]],
+    personnel_by_job: dict[str, list[dict[str, Any]]],
+    technician_id: str,
+) -> list[dict[str, Any]]:
+    """
+    Build technician job ledger rows using canonical rule engine (59.9–59.15).
+    Same row shape as build_provisional_ledger_rows for drop-in replacement.
+    Only includes jobs where the viewing technician is in personnel.
+    Pipeline: base_splits → callback_voids → estimation_accuracy → seller_penalties.
+    """
+    tech_id = _normalize_id(technician_id)
+    rows: list[dict[str, Any]] = []
+    for job in eligible_jobs or []:
+        job_id = _normalize_id((job or {}).get("id"))
+        if not job_id:
+            continue
+        personnel = list(personnel_by_job.get(job_id) or [])
+        if not personnel:
+            continue
+        personnel_by_tech: dict[str, dict[str, Any]] = {}
+        for person in personnel:
+            person_tech_id = _normalize_id(person.get("technician_id"))
+            if not person_tech_id:
+                continue
+            personnel_by_tech[person_tech_id] = person
+        if tech_id not in personnel_by_tech:
+            continue
+
+        splits0 = compute_job_base_splits(job, personnel)
+        splits1 = apply_callback_voids(job, splits0)
+        splits2 = apply_estimation_accuracy(job, personnel, splits1)
+        splits3 = apply_seller_penalties(job, personnel, splits2)
+
+        job_gp = compute_job_gp(job)
+        amounts = splits3.get(tech_id) or {}
+        my_job_gp_contribution = round(
+            _to_float(amounts.get("seller_base")) + _to_float(amounts.get("executor_base")),
+            2,
+        )
+
+        seller_ids = sorted({
+            _normalize_id(p.get("technician_id"))
+            for p in personnel
+            if p.get("is_seller") is True and _normalize_id(p.get("technician_id"))
+        })
+        executor_ids = sorted({
+            _normalize_id(p.get("technician_id"))
+            for p in personnel
+            if p.get("is_executor") is True and _normalize_id(p.get("technician_id"))
+        })
+        is_seller = tech_id in seller_ids
+        is_executor = tech_id in executor_ids
+        do_it_all = (
+            len(seller_ids) == 1
+            and len(executor_ids) == 1
+            and seller_ids[0] == executor_ids[0] == tech_id
+        )
+
+        role_badges: list[str] = []
+        if do_it_all:
+            role_badges.append("Do-It-All")
+        else:
+            if is_seller:
+                role_badges.append("Co-Seller" if len(seller_ids) > 1 else "Seller")
+            if is_executor:
+                role_badges.append("Co-Executor" if len(executor_ids) > 1 else "Executor")
+
+        actual_labor_minutes = sum(
+            _to_int(p.get("onsite_minutes")) + _to_int(p.get("travel_shopping_minutes"))
+            for p in personnel
+        )
+        quoted_labor_minutes = _to_int(job.get("quoted_labor_minutes"))
+        estimation = _build_estimation_payload(
+            is_seller=is_seller,
+            quoted_labor_minutes=quoted_labor_minutes,
+            actual_labor_minutes=actual_labor_minutes,
+        )
+
+        pending_reasons: list[str] = []
+        if str((job or {}).get("period_link_method") or "") == "created_at_fallback":
+            pending_reasons.append("period_link_fallback_created_at")
+        if (not is_seller) and (not is_executor):
+            pending_reasons.append("roles_unverified")
+        if is_seller and quoted_labor_minutes <= 0:
+            pending_reasons.append("quoted_labour_missing")
+        if str((job or {}).get("status") or "").strip().lower() not in ("verified", "processed"):
+            pending_reasons.append("job_not_verified")
+        pending_reasons = sorted(set(pending_reasons))
+
+        penalty_tags: list[dict[str, Any]] = []
+        explanations: list[str] = []
+
+        seller_fault_parts_runs = _to_int(job.get("seller_fault_parts_runs"))
+        if is_seller and seller_fault_parts_runs > 0:
+            amount = round(seller_fault_parts_runs * 20.0, 2)
+            penalty_tags.append({
+                "code": "seller_fault_parts_runs",
+                "label": f"Parts Run (-${amount:.2f})",
+                "amount": amount,
+            })
+            explanations.append(
+                f"Seller fault parts runs: {seller_fault_parts_runs} x $20 applied."
+            )
+
+        missed_materials_cost = _to_float(job.get("missed_materials_cost"))
+        if is_seller and missed_materials_cost > 0:
+            penalty_tags.append({
+                "code": "missed_materials",
+                "label": f"Missed Materials (-${missed_materials_cost:.2f})",
+                "amount": round(missed_materials_cost, 2),
+            })
+            explanations.append(f"Missed materials penalty: ${missed_materials_cost:.2f} applied.")
+
+        callback_reason = str((job or {}).get("callback_reason") or "").strip().lower()
+        is_callback = bool(job.get("is_callback"))
+        if is_callback and callback_reason == "poor_workmanship" and is_executor:
+            penalty_tags.append({
+                "code": "callback_poor_workmanship",
+                "label": "Callback: Poor Workmanship",
+                "amount": None,
+            })
+            explanations.append("Callback reason is poor workmanship (executor share voided).")
+        if is_callback and callback_reason == "bad_scoping" and is_seller:
+            penalty_tags.append({
+                "code": "callback_bad_scoping",
+                "label": "Callback: Bad Scoping",
+                "amount": None,
+            })
+            explanations.append("Callback reason is bad scoping (seller share voided).")
+
+        rows.append({
+            "job_performance_id": job_id,
+            "servicem8_job_id": _normalize_id(job.get("servicem8_job_id")),
+            "servicem8_job_uuid": _normalize_id(job.get("servicem8_job_uuid")),
+            "job_identifier": _normalize_id(job.get("servicem8_job_id")) or f"Job {job_id[:8]}",
+            "created_at": job.get("created_at"),
+            "status": job.get("status"),
+            "period_link_method": job.get("period_link_method"),
+            "is_provisional": False,
+            "role_badges": role_badges,
+            "seller_count": len(seller_ids),
+            "executor_count": len(executor_ids),
+            "truck_share_applied": (len(seller_ids) > 1) or (len(executor_ids) > 1),
+            "job_gp": job_gp,
+            "my_job_gp_contribution": my_job_gp_contribution,
+            "estimation": estimation,
+            "penalty_tags": penalty_tags,
+            "pending_reasons": pending_reasons,
+            "pending_reason_messages": [PENDING_REASON_MESSAGES.get(code, code) for code in pending_reasons],
+            "explanations": explanations,
+        })
+
+    rows.sort(
+        key=lambda row: (
+            _parse_datetime(row.get("created_at")) or datetime.min,
+            _normalize_id(row.get("job_performance_id")),
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+def compute_total_contributed_gp(
+    eligible_jobs: list[dict[str, Any]],
+    personnel_by_job: dict[str, list[dict[str, Any]]],
+) -> float:
+    """
+    Sum of all technicians' final contributions across eligible jobs (canonical pipeline).
+    Used to compute my_expected_payout = period_pot * (my_gp / total_contributed_gp).
+    """
+    total = 0.0
+    for job in eligible_jobs or []:
+        job_id = _normalize_id((job or {}).get("id"))
+        if not job_id:
+            continue
+        personnel = list(personnel_by_job.get(job_id) or [])
+        if not personnel:
+            continue
+        splits0 = compute_job_base_splits(job, personnel)
+        splits1 = apply_callback_voids(job, splits0)
+        splits2 = apply_estimation_accuracy(job, personnel, splits1)
+        splits3 = apply_seller_penalties(job, personnel, splits2)
+        for tech_id, amounts in splits3.items():
+            total += _to_float(amounts.get("seller_base")) + _to_float(amounts.get("executor_base"))
+    return round(total, 2)
 
 
 def compute_technician_contribution_total(ledger_rows: list[dict[str, Any]]) -> float:

@@ -16,9 +16,10 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user_id, get_current_user_id_and_role, require_role
 from app.bonus_dashboard import (
-    build_provisional_ledger_rows,
-    compute_provisional_team_pot,
+    build_canonical_ledger_rows,
     compute_technician_contribution_total,
+    compute_total_contributed_gp,
+    filter_eligible_period_jobs,
     group_personnel_by_job,
     select_current_period,
     select_period_jobs,
@@ -36,7 +37,7 @@ from app.gutter_accessories import expand_elements_with_gutter_accessories
 from app.pricing import get_product_pricing
 from app.products import get_products
 from app.bonus_periods import create_period, list_periods, update_period
-from app.bonus_calc import compute_job_gp
+from app.bonus_calc import compute_job_gp, compute_period_pot
 from app.quotes import QuoteMaterialLine, insert_quote_for_job
 from app.supabase_client import get_supabase
 from app import servicem8 as sm8
@@ -377,8 +378,8 @@ def _resolve_bonus_dashboard_period(
         raise HTTPException(404, "Bonus period not found")
     period = dict(rows[0] or {})
     status = str(period.get("status") or "").strip().lower()
-    if status not in BONUS_PERIOD_READ_STATUSES:
-        raise HTTPException(400, "period_id must reference an open or processing period")
+    if status not in ("open", "processing", "closed"):
+        raise HTTPException(400, "period_id must reference an open, processing, or closed period")
     return (period, "explicit_period_id")
 
 
@@ -483,9 +484,10 @@ def _build_provisional_technician_dashboard_payload(
         }
     period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
     period_jobs = select_period_jobs(period, period_jobs_source)
+    eligible_jobs = filter_eligible_period_jobs(period_jobs)
     period_job_ids = [
         str((job or {}).get("id") or "").strip()
-        for job in period_jobs
+        for job in eligible_jobs
         if str((job or {}).get("id") or "").strip()
     ]
     personnel_rows = _fetch_job_personnel_rows_for_jobs(
@@ -493,21 +495,32 @@ def _build_provisional_technician_dashboard_payload(
         job_performance_ids=period_job_ids,
     )
     personnel_by_job = group_personnel_by_job(personnel_rows)
-    ledger_rows = build_provisional_ledger_rows(
-        period_jobs=period_jobs,
+    team_pot = compute_period_pot(eligible_jobs)
+    ledger_rows = build_canonical_ledger_rows(
+        eligible_jobs=eligible_jobs,
         personnel_by_job=personnel_by_job,
         technician_id=technician_id,
     )
-    team_pot = compute_provisional_team_pot(period_jobs)
     technician_gp = compute_technician_contribution_total(ledger_rows)
+    total_contributed_gp = compute_total_contributed_gp(eligible_jobs, personnel_by_job)
+    my_expected_payout = (
+        round(team_pot * (technician_gp / total_contributed_gp), 2)
+        if total_contributed_gp > 0
+        else 0.0
+    )
     callback_cost_total = round(
-        sum(float((job or {}).get("callback_cost") or 0.0) for job in period_jobs),
+        sum(float((job or {}).get("callback_cost") or 0.0) for job in eligible_jobs),
         2,
     )
+    period_status = str((period or {}).get("status") or "").strip().lower()
+    expected_payout_status = "final" if period_status == "closed" else "computed"
+    hero_pending_reasons = (
+        [] if period_status == "closed" else ["payout_may_change_until_period_closed"]
+    )
     return {
-        "is_provisional": True,
+        "is_provisional": False,
         "selection_reason": selection_reason,
-        "expected_payout_status": "pending_final_rules",
+        "expected_payout_status": expected_payout_status,
         "period": period,
         "technician_context": {
             "technician_id": technician_id,
@@ -519,14 +532,11 @@ def _build_provisional_technician_dashboard_payload(
         "hero": {
             "total_team_pot": team_pot,
             "my_total_gp_contributed": technician_gp,
-            "my_expected_payout": None,
-            "period_job_count": len(period_jobs),
+            "my_expected_payout": my_expected_payout,
+            "period_job_count": len(eligible_jobs),
             "technician_job_count": len(ledger_rows),
             "callback_cost_total_raw": callback_cost_total,
-            "pending_reasons": [
-                "expected_payout_pending",
-                "final_rules_not_implemented",
-            ],
+            "pending_reasons": hero_pending_reasons,
         },
         "ledger": {
             "jobs": ledger_rows,
