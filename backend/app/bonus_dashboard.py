@@ -19,6 +19,7 @@ from app.bonus_calc import (
     apply_seller_penalties,
     compute_job_base_splits,
     compute_job_gp,
+    compute_job_spotter_splits,
 )
 
 PROVISIONAL_TEAM_POT_PERCENT = 0.10
@@ -144,18 +145,31 @@ def select_period_jobs(period: dict[str, Any], jobs: list[dict[str, Any]]) -> li
     return selected
 
 
+MIN_GP_MARGIN = 0.50  # Section 60.5: Job GP / Price to Customer >= 50% for pot eligibility
+
+
 def filter_eligible_period_jobs(period_jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Return only jobs with status in ('verified', 'processed') for period pot and canonical ledger.
+    Return only jobs with status in ('verified', 'processed') and minimum GP margin (60.5)
+    for period pot and canonical ledger.
     Per BACKEND_DATABASE.md §4: only verified/processed rows in period pot.
+    Section 60.5: Eligibility formula Job GP / Price to Customer (revenue) >= 0.50.
     """
     if not period_jobs:
         return []
     statuses = {s.strip().lower() for s in ELIGIBLE_JOB_STATUSES}
-    return [
-        job for job in period_jobs
-        if str((job or {}).get("status") or "").strip().lower() in statuses
-    ]
+    out = []
+    for job in period_jobs:
+        if str((job or {}).get("status") or "").strip().lower() not in statuses:
+            continue
+        revenue = _to_float(job.get("invoiced_revenue_exc_gst"))
+        if revenue <= 0:
+            continue
+        job_gp = compute_job_gp(job)
+        if job_gp / revenue < MIN_GP_MARGIN:
+            continue
+        out.append(job)
+    return out
 
 
 def compute_provisional_job_gp(job: dict[str, Any]) -> float:
@@ -197,7 +211,7 @@ def _build_estimation_payload(
             "tolerance_minutes": None,
             "message": "Quoted labour is missing.",
         }
-    tolerance = max(int(round(quoted_labor_minutes * 0.15)), 30)
+    tolerance = max(int(round(quoted_labor_minutes * 0.15)), 20)
     within = abs(actual_labor_minutes - quoted_labor_minutes) <= tolerance
     return {
         "status": "pass" if within else "fail",
@@ -303,14 +317,14 @@ def build_provisional_ledger_rows(
 
         seller_fault_parts_runs = _to_int(job.get("seller_fault_parts_runs"))
         if is_seller and seller_fault_parts_runs > 0:
-            amount = round(seller_fault_parts_runs * 20.0, 2)
+            amount = round(seller_fault_parts_runs * 10.0, 2)
             penalty_tags.append({
                 "code": "seller_fault_parts_runs",
                 "label": f"Parts Run (-${amount:.2f})",
                 "amount": amount,
             })
             explanations.append(
-                f"Seller fault parts runs: {seller_fault_parts_runs} x $20 provisional penalty."
+                f"Seller fault parts runs: {seller_fault_parts_runs} x $10 provisional penalty."
             )
 
         missed_materials_cost = _to_float(job.get("missed_materials_cost"))
@@ -402,15 +416,25 @@ def build_canonical_ledger_rows(
         if tech_id not in personnel_by_tech:
             continue
 
-        splits0 = compute_job_base_splits(job, personnel)
-        splits1 = apply_callback_voids(job, splits0)
-        splits2 = apply_estimation_accuracy(job, personnel, splits1)
-        splits3 = apply_seller_penalties(job, personnel, splits2)
+        # Section 60.4: If job has spotter(s), 20% to spotter(s), 80% to CSG; else normal 60/40.
+        spotter_splits = compute_job_spotter_splits(job, personnel)
+        if spotter_splits is not None:
+            splits0 = spotter_splits
+            splits1 = apply_callback_voids(job, splits0)
+            splits2 = apply_estimation_accuracy(job, personnel, splits1)
+            splits3 = apply_seller_penalties(job, personnel, splits2)
+        else:
+            splits0 = compute_job_base_splits(job, personnel)
+            splits1 = apply_callback_voids(job, splits0)
+            splits2 = apply_estimation_accuracy(job, personnel, splits1)
+            splits3 = apply_seller_penalties(job, personnel, splits2)
 
         job_gp = compute_job_gp(job)
         amounts = splits3.get(tech_id) or {}
         my_job_gp_contribution = round(
-            _to_float(amounts.get("seller_base")) + _to_float(amounts.get("executor_base")),
+            _to_float(amounts.get("seller_base"))
+            + _to_float(amounts.get("executor_base"))
+            + _to_float(amounts.get("spotter_base")),
             2,
         )
 
@@ -426,6 +450,7 @@ def build_canonical_ledger_rows(
         })
         is_seller = tech_id in seller_ids
         is_executor = tech_id in executor_ids
+        is_spotter = (personnel_by_tech.get(tech_id) or {}).get("is_spotter") is True
         do_it_all = (
             len(seller_ids) == 1
             and len(executor_ids) == 1
@@ -433,6 +458,8 @@ def build_canonical_ledger_rows(
         )
 
         role_badges: list[str] = []
+        if is_spotter:
+            role_badges.append("Spotter")
         if do_it_all:
             role_badges.append("Do-It-All")
         else:
@@ -468,14 +495,14 @@ def build_canonical_ledger_rows(
 
         seller_fault_parts_runs = _to_int(job.get("seller_fault_parts_runs"))
         if is_seller and seller_fault_parts_runs > 0:
-            amount = round(seller_fault_parts_runs * 20.0, 2)
+            amount = round(seller_fault_parts_runs * 10.0, 2)
             penalty_tags.append({
                 "code": "seller_fault_parts_runs",
                 "label": f"Parts Run (-${amount:.2f})",
                 "amount": amount,
             })
             explanations.append(
-                f"Seller fault parts runs: {seller_fault_parts_runs} x $20 applied."
+                f"Seller fault parts runs: {seller_fault_parts_runs} x $10 applied."
             )
 
         missed_materials_cost = _to_float(job.get("missed_materials_cost"))
@@ -543,6 +570,7 @@ def compute_total_contributed_gp(
     """
     Sum of all technicians' final contributions across eligible jobs (canonical pipeline).
     Used to compute my_expected_payout = period_pot * (my_gp / total_contributed_gp).
+    Includes spotter_base (60.4).
     """
     total = 0.0
     for job in eligible_jobs or []:
@@ -552,12 +580,20 @@ def compute_total_contributed_gp(
         personnel = list(personnel_by_job.get(job_id) or [])
         if not personnel:
             continue
-        splits0 = compute_job_base_splits(job, personnel)
+        spotter_splits = compute_job_spotter_splits(job, personnel)
+        if spotter_splits is not None:
+            splits0 = spotter_splits
+        else:
+            splits0 = compute_job_base_splits(job, personnel)
         splits1 = apply_callback_voids(job, splits0)
         splits2 = apply_estimation_accuracy(job, personnel, splits1)
         splits3 = apply_seller_penalties(job, personnel, splits2)
-        for tech_id, amounts in splits3.items():
-            total += _to_float(amounts.get("seller_base")) + _to_float(amounts.get("executor_base"))
+        for _tech_id, amounts in splits3.items():
+            total += (
+                _to_float(amounts.get("seller_base"))
+                + _to_float(amounts.get("executor_base"))
+                + _to_float(amounts.get("spotter_base"))
+            )
     return round(total, 2)
 
 

@@ -13062,12 +13062,14 @@ function populateBonusAdminEditPersonnelTable(personnel, jobIdentifier) {
     const travel = Math.max(0, parseInt(p.travel_shopping_minutes, 10) || 0);
     const seller = !!p.is_seller;
     const executor = !!p.is_executor;
+    const spotter = !!p.is_spotter;
     return `<tr data-personnel-id="${escapeHtml(pid)}">
       <td>${escapeHtml(label)}</td>
       <td><input type="number" min="0" step="1" value="${onsite}" aria-label="Onsite minutes for ${escapeHtml(label)}" class="bonus-admin-personnel-onsite" data-personnel-id="${escapeHtml(pid)}" /></td>
       <td><input type="number" min="0" step="1" value="${travel}" aria-label="Travel minutes for ${escapeHtml(label)}" class="bonus-admin-personnel-travel" data-personnel-id="${escapeHtml(pid)}" /></td>
       <td><input type="checkbox" ${seller ? 'checked' : ''} aria-label="Seller for ${escapeHtml(label)}" class="bonus-admin-personnel-seller" data-personnel-id="${escapeHtml(pid)}" /></td>
       <td><input type="checkbox" ${executor ? 'checked' : ''} aria-label="Executor for ${escapeHtml(label)}" class="bonus-admin-personnel-executor" data-personnel-id="${escapeHtml(pid)}" /></td>
+      <td><input type="checkbox" ${spotter ? 'checked' : ''} aria-label="Spotter for ${escapeHtml(label)}" class="bonus-admin-personnel-spotter" data-personnel-id="${escapeHtml(pid)}" /></td>
     </tr>`;
   }).join('');
 }
@@ -13094,6 +13096,7 @@ async function openBonusAdminEditPersonnelModal(jobId, jobIdentifier) {
       travel_shopping_minutes: Math.max(0, parseInt(p.travel_shopping_minutes, 10) || 0),
       is_seller: !!p.is_seller,
       is_executor: !!p.is_executor,
+      is_spotter: !!p.is_spotter,
     }));
     populateBonusAdminEditPersonnelTable(personnel, jobIdentifier || null);
     openAccessibleModal('bonusAdminEditPersonnelModal', { triggerEl });
@@ -13122,18 +13125,21 @@ async function saveBonusAdminEditPersonnel() {
       const travelInput = row.querySelector('.bonus-admin-personnel-travel');
       const sellerInput = row.querySelector('.bonus-admin-personnel-seller');
       const executorInput = row.querySelector('.bonus-admin-personnel-executor');
+      const spotterInput = row.querySelector('.bonus-admin-personnel-spotter');
       const onsite = Math.max(0, parseInt(onsiteInput?.value, 10) || 0);
       const travel = Math.max(0, parseInt(travelInput?.value, 10) || 0);
       const seller = !!(sellerInput && sellerInput.checked);
       const executor = !!(executorInput && executorInput.checked);
+      const spotter = !!(spotterInput && spotterInput.checked);
       const original = bonusAdminEditPersonnelData.find((p) => String(p.id) === String(pid));
       if (!original) continue;
       const changed =
         original.onsite_minutes !== onsite ||
         original.travel_shopping_minutes !== travel ||
         original.is_seller !== seller ||
-        original.is_executor !== executor;
-      if (changed) updates.push({ personnel_id: pid, body: { onsite_minutes: onsite, travel_shopping_minutes: travel, is_seller: seller, is_executor: executor } });
+        original.is_executor !== executor ||
+        original.is_spotter !== spotter;
+      if (changed) updates.push({ personnel_id: pid, body: { onsite_minutes: onsite, travel_shopping_minutes: travel, is_seller: seller, is_executor: executor, is_spotter: spotter } });
     }
     for (const { personnel_id, body } of updates) {
       const resp = await fetch(`/api/bonus/job-personnel/${encodeURIComponent(personnel_id)}`, {
@@ -14440,6 +14446,7 @@ function renderTechnicianBonusDashboard(payload) {
           if (normalized === 'executor') label = '🛠 Executor';
           if (normalized === 'co-seller') label = '🤝 Co-Seller';
           if (normalized === 'co-executor') label = '🤝 Co-Executor';
+          if (normalized === 'spotter') label = '👁 Spotter';
           return `<button type="button" class="bonus-badge-chip bonus-badge-chip--positive" title="${escapeHtml(baseTooltip)}" data-bonus-tooltip="${escapeHtml(baseTooltip)}">${escapeHtml(label)}</button>`;
         }).join('')
       : roleBadges.map((badge) => `<span class="bonus-role-badge">${escapeHtml(String(badge))}</span>`).join('');

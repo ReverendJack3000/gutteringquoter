@@ -1,6 +1,7 @@
 """
-Company settings (Section 59.9.1): read bonus labour rate from public.company_settings.
-Used by bonus calculation; fallback to env BONUS_LABOUR_RATE then 35.0.
+Company settings (Section 59.9.1, 60.1): read bonus labour rate from public.company_settings.
+Used by bonus calculation; fallback to env BONUS_LABOUR_RATE then 33.0.
+Stored rate is ex-GST ($ per man-hour); Job GP formula uses this rate × man-hours.
 """
 import logging
 import os
@@ -8,13 +9,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BONUS_LABOUR_RATE = 35.0
+DEFAULT_BONUS_LABOUR_RATE = 33.0  # Section 60.1: $33+GST per spec (stored ex-GST)
 
 
 def get_bonus_labour_rate(supabase: Any) -> float:
     """
     Read bonus labour rate from public.company_settings (id=1).
-    Fallback: env BONUS_LABOUR_RATE (float), then 35.0.
+    Fallback: env BONUS_LABOUR_RATE (float), then 33.0.
+    Rate is ex-GST ($ per man-hour); applied in Job GP as (rate × man-hours).
     """
     try:
         resp = (
@@ -42,5 +44,5 @@ def get_bonus_labour_rate(supabase: Any) -> float:
         except ValueError:
             pass
 
-    logger.info("Using default bonus labour rate: %s", DEFAULT_BONUS_LABOUR_RATE)
+    logger.info("Using default bonus labour rate (ex-GST): %s", DEFAULT_BONUS_LABOUR_RATE)
     return DEFAULT_BONUS_LABOUR_RATE

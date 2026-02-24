@@ -303,7 +303,7 @@ BONUS_JOB_PERFORMANCE_COLUMNS = (
     "seller_fault_parts_runs, missed_materials_cost"
 )
 BONUS_JOB_PERSONNEL_COLUMNS = (
-    "id, job_performance_id, technician_id, is_seller, is_executor, "
+    "id, job_performance_id, technician_id, is_seller, is_executor, is_spotter, "
     "onsite_minutes, travel_shopping_minutes"
 )
 
@@ -783,12 +783,13 @@ class UpdateBonusPeriodRequest(BaseModel):
 
 
 class UpdateJobPersonnelRequest(BaseModel):
-    """Update job_personnel row (admin only, 59.8). Admin verify/split onsite vs travel; assign seller/executor."""
+    """Update job_personnel row (admin only, 59.8, 60.4). Admin verify/split onsite vs travel; assign seller/executor/spotter."""
 
     onsite_minutes: Optional[int] = Field(None, ge=0)
     travel_shopping_minutes: Optional[int] = Field(None, ge=0)
     is_seller: Optional[bool] = None
     is_executor: Optional[bool] = None
+    is_spotter: Optional[bool] = None
 
 
 class UpdateJobPerformanceRequest(BaseModel):
@@ -1257,7 +1258,7 @@ def api_bonus_job_personnel_update(
         raise HTTPException(400, "personnel_id must be a valid UUID")
     payload = body.model_dump(exclude_unset=True)
     if not payload:
-        raise HTTPException(400, "At least one field required: onsite_minutes, travel_shopping_minutes, is_seller, is_executor")
+        raise HTTPException(400, "At least one field required: onsite_minutes, travel_shopping_minutes, is_seller, is_executor, is_spotter")
     try:
         supabase = get_supabase()
         resp = (

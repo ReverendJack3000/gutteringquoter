@@ -31,11 +31,11 @@ class TestCanonicalDashboardPayload(unittest.TestCase):
     """Verify canonical dashboard logic used by main.py payload builder."""
 
     def test_eligible_jobs_filter(self):
-        """Only verified/processed jobs are eligible for pot and ledger."""
+        """Only verified/processed jobs with 50% min margin (60.5) are eligible for pot and ledger."""
         jobs = [
-            {"id": "1", "status": "draft", "bonus_period_id": "p1", "period_link_method": "bonus_period_id"},
-            {"id": "2", "status": "verified", "bonus_period_id": "p1", "period_link_method": "bonus_period_id"},
-            {"id": "3", "status": "processed", "bonus_period_id": "p1", "period_link_method": "bonus_period_id"},
+            {"id": "1", "status": "draft", "bonus_period_id": "p1", "period_link_method": "bonus_period_id", "invoiced_revenue_exc_gst": 1000, "materials_cost": 200, "standard_parts_runs": 0},
+            {"id": "2", "status": "verified", "bonus_period_id": "p1", "period_link_method": "bonus_period_id", "invoiced_revenue_exc_gst": 1000, "materials_cost": 200, "standard_parts_runs": 0},
+            {"id": "3", "status": "processed", "bonus_period_id": "p1", "period_link_method": "bonus_period_id", "invoiced_revenue_exc_gst": 1000, "materials_cost": 200, "standard_parts_runs": 0},
         ]
         eligible = filter_eligible_period_jobs(jobs)
         self.assertEqual(len(eligible), 2)
