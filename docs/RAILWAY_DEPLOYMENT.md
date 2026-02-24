@@ -62,6 +62,8 @@ In the Railway dashboard: open your project → **Variables** (or **Settings →
 
 **Job performance sync (optional):** If you run the job_performance sync (Section 59, e.g. cron calling `scripts/run_job_performance_sync.py`), the company user must have connected ServiceM8 at least once. The app's default OAuth scope request includes `read_jobs` and `read_job_materials`, which the sync requires to list Completed/Invoiced jobs and job materials. Token expiry handling, recommended sync frequency, and additional sync/backfill: **[SERVICEM8_SYNC.md](SERVICEM8_SYNC.md)**.
 
+**Bonus (Section 59):** Bonus labour rate is read from `public.company_settings` (row id=1, `bonus_labour_rate`). Optional env `BONUS_LABOUR_RATE` (numeric) overrides when set (e.g. if company_settings row is missing). No other bonus-specific env vars or permissions are required for Bonus Admin or technician dashboard.
+
 Do **not** commit `.env` or paste these values into the repo. Railway injects them at runtime.
 
 ## 5. Deploy

@@ -246,6 +246,38 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 
 ---
 
+## Data ownership and ServiceM8 field mapping (Section 59.22)
+
+**Purpose:** Single reference for which fields in `job_performance` and `job_personnel` come from the ServiceM8 API (sync), from our app/admin entry, or from system logic. Staff ↔ technician_id mapping is in **"Staff → technician_id mapping"** above.
+
+### job_performance
+
+| Field / group | Source | Notes |
+|---------------|--------|-------|
+| **servicem8_job_id**, **servicem8_job_uuid** | API (sync) | From ServiceM8 job; sync sets both when creating/updating row. |
+| **invoiced_revenue_exc_gst**, **materials_cost** | API (sync) | Populated by cron sync from ServiceM8 job (e.g. total_invoice_amount, job materials). |
+| **quote_id**, **quoted_labor_minutes** | System / our app | quote_id matched by sync (last quote for that servicem8_job_id with is_final_quote or by updated_at). quoted_labor_minutes = round(quote.labour_hours * 60) from that quote. |
+| **bonus_period_id** | Admin / our app | Set by admin (Bonus Admin UI or API) when assigning job to a period. |
+| **status** | Admin / our app | draft (sync default) → verified (admin) → processed (when period closed). Only verified/processed in period pot. |
+| **standard_parts_runs**, **is_callback**, **callback_reason**, **callback_cost**, **seller_fault_parts_runs**, **missed_materials_cost** | Admin / our app | Admin enters or corrects in Bonus Admin (Edit job). Sync does not set these. |
+
+### job_personnel
+
+| Field | Source | Notes |
+|-------|--------|-------|
+| **job_performance_id** | Our app | FK to the job; set when creating personnel rows (sync or admin). |
+| **technician_id** | Our app (derived) | Resolved from ServiceM8 staff: match staff email to auth.users.email → auth.users.id. See **"Staff → technician_id mapping"** above. If no match, NULL until admin assigns. |
+| **onsite_minutes**, **travel_shopping_minutes** | Admin / our app | Admin verifies/splits from raw job activity data in Bonus Admin (Edit personnel). Sync may create rows with 0/0; admin fills. |
+| **is_seller**, **is_executor** | Admin / our app | Set by admin in Bonus Admin (Edit personnel). Not derived from API. |
+
+### Staff ↔ technician_id (summary)
+
+- **ServiceM8:** Staff has `uuid`, `email`, `first`, `last` (GET staff.json). No mapping table in first implementation.
+- **Resolution:** Match staff `email` (trimmed, case-insensitive) to `auth.users.email`; use that user's `id` as `job_personnel.technician_id`.
+- **No match:** technician_id NULL; admin can assign later or add app user with same email.
+
+---
+
 ## Audit: ServiceM8 job syncing (Section 59 / job_performance link)
 
 **Purpose:** Ensure we capture and persist ServiceM8 job identifiers so the payroll/bonus system can link finalized jobs back to the original estimate. `job_performance` uses `servicem8_job_id` (UNIQUE) to link to a ServiceM8 job; a `job_uuid` fallback supports API lookups (e.g. `fetch_job_by_uuid`).

@@ -8,12 +8,11 @@
 - Log in as a user with role **admin**, **editor**, or **technician**
 - At least one **open** or **processing** bonus period with **verified** or **processed** jobs linked (so the dashboard can show non-zero pot and expected payout)
 
-## Dummy data (Supabase)
+## Test data (Supabase)
 
-If you need test data, the following was inserted via Supabase MCP:
+Use real bonus periods and jobs, or create test data via Bonus Admin (Create period) and job sync/API. Dummy data was removed in task 59.24.
 
 - **bonus_periods:** 1 open period (“Feb 2026 Fortnight 1 (dummy)”), 1 closed period (“Jan 2026 Fortnight 2 (dummy closed)”).
-- **job_performance:** 3 verified jobs in the open period (JOB-DUM-001, JOB-DUM-002, JOB-DUM-003), 1 processed job in the closed period (JOB-DUM-004). Revenue/materials/quoted labour set so Job GP and period pot are non-zero.
 - **job_personnel:** Each job has one technician (seller + executor) — the user with `user_id = 9a98e732-d30d-49b1-bab1-d9b04e4f90ba` (admin in `public.profiles`, e.g. **jack@clearstreamguttering.co.nz**). Log in as that user to see “My Bonus” with your GP and expected payout.
 
 **Closed period UUID (for manual test step 3):** `67cc3896-0432-4a06-a842-076ed00b0912`. Request the dashboard with `?period_id=67cc3896-0432-4a06-a842-076ed00b0912` to see “Final payout (period closed).”
