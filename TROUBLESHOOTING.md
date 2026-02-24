@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## ServiceM8: no "estimated labour" or "quoted hours" field on job – 2026-02
+
+- **Symptom / context:** Section 59 (technician bonus) needs a source for `quoted_labor_minutes` per job. Option C was "sync from ServiceM8 if they expose estimated labour"; the API reference noted this as "to confirm via Try It!".
+- **Cause:** ServiceM8 does **not** expose a dedicated "estimated labour" or "quoted hours" field on the job object. Labour is treated as a **material** in ServiceM8 (same as in our project: REP-LAB as a line item). So we cannot sync quoted labour from a job-level field.
+- **Fix / workaround:** Use **Option A** (Section 59.3): persist to `public.quotes` when Add to Job / Create New Job and set `quoted_labor_minutes = round(quote.labour_hours * 60)` when creating `job_performance`. Do not rely on ServiceM8 for quoted labour. See BACKEND_DATABASE.md § "Source of quoted_labor_minutes (Section 59.3 decision)".
+
+---
+
 ## Mobile: app glitches after taking/uploading photo until returning to canvas – 2026-02
 
 - **Symptom:** On mobile (production or local), after taking a photo with the camera or choosing one to upload, the app glitches (freeze, heavy jank, or crash) until the user returns to the canvas view. The image may never appear; Add to Job etc. can still work for other data.

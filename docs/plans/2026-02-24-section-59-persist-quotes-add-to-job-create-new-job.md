@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement saving to `public.quotes` when Add to Job or Create New Job succeeds, including `labour_hours`, `servicem8_job_id`, `servicem8_job_uuid`, and material-only `items` (59.19.1), so that 59.6 (webhook creating job_performance) can later set `quote_id` and `quoted_labor_minutes` from the active quote. No breaking changes to existing Add to Job / Create New Job flows; Railway-safe.
+**Goal:** Implement saving to `public.quotes` when Add to Job or Create New Job succeeds, including `labour_hours`, `servicem8_job_id`, `servicem8_job_uuid`, and material-only `items` (59.19.1), so that 59.6 (cron sync creating job_performance) can later set `quote_id` and `quoted_labor_minutes` from the active quote. No breaking changes to existing Add to Job / Create New Job flows; Railway-safe.
 
 **Architecture:** Backend persists one quote row per successful Add to Job or Create New Job, after ServiceM8 calls succeed. Request bodies are extended with an optional `quote_materials` array (id, qty, optional name/item_number/servicem8_material_uuid) so we store material lines suitable for Missed Materials; labour is stored in `labour_hours`. Frontend sends `quote_materials` from `lastQuoteData.materials` (exclude REP-LAB) when present. Schema: ensure `public.quotes` has `labour_hours`, `servicem8_job_uuid` (nullable); `items` and `is_final_quote` already exist.
 
@@ -13,7 +13,7 @@
 ## Prerequisites
 
 - **Task list:** Section 59 → `docs/tasks/section-59.md`. Mark 59.19 and 59.19.1 [x] when done; if Section 59 uncompleted table row changes, update `TASK_LIST.md` per `.cursor/rules/task-list-completion.mdc`.
-- **Decisions:** Active quote = last quote (by updated_at) for that servicem8_job_id when job moves to Scheduled/In Progress; `is_final_quote` set by webhook (59.6 later). Quote items = material lines only, at least `{ id, qty }`; document shape in BACKEND_DATABASE.md.
+- **Decisions:** Active quote = last quote (by updated_at) for that servicem8_job_id when job moves to Scheduled/In Progress; `is_final_quote` set when job → Scheduled/In Progress (e.g. by future webhook or 59.6 sync). Quote items = material lines only, at least `{ id, qty }`; document shape in BACKEND_DATABASE.md.
 - **Key files:**
   - Backend: `backend/main.py` — Add to Job ~1064–1120, Create New Job ~1198–1331; request models ~329–361.
   - Backend: new or existing module for quote persistence (e.g. `backend/app/quotes.py`) or in main.py.
@@ -150,7 +150,7 @@
 
 ## Edge cases
 
-- **Multiple quotes per job:** Allowed; we insert one row per Add to Job / Create New Job. Active quote for 59.6 will be chosen by is_final_quote (set by future webhook) or “last by updated_at” for that servicem8_job_id.
+- **Multiple quotes per job:** Allowed; we insert one row per Add to Job / Create New Job. Active quote for 59.6 will be chosen by is_final_quote (set by future webhook or sync) or “last by updated_at” for that servicem8_job_id.
 - **quote_materials omitted or empty:** Backend persists quote with items = [] and labour_hours from body; job still linked via servicem8_job_id and servicem8_job_uuid.
 - **Supabase down or insert fails:** Backend fails the request (e.g. 503) so client can retry; do not return Add to Job success without persisting quote when we intend to persist.
 - **REP-LAB in lastQuoteData.materials:** Frontend must exclude labour from quote_materials; backend does not add labour to items (labour_hours is separate column).
@@ -168,4 +168,4 @@
 | 5 | Document items shape (59.19.1); mark 59.19 and 59.19.1 [x] in section-59.md; update TASK_LIST.md only if section complete |
 | 6 | Manual verification; confirm Railway-safe and no new env vars |
 
-After this plan, 59.6 (webhook creating job_performance in draft and setting quote_id from active quote) can use the persisted quotes; 59.5 (bonus period management) remains independent and can be implemented in parallel or next.
+After this plan, 59.6 (cron sync creating job_performance in draft and setting quote_id from active quote) can use the persisted quotes; 59.5 (bonus period management) remains independent and can be implemented in parallel or next.

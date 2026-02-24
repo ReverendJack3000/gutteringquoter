@@ -9,6 +9,7 @@ import logging
 import os
 import secrets
 import time
+import uuid as uuid_module
 from datetime import datetime, timezone
 from typing import Any, Optional
 from urllib.parse import urlencode
@@ -496,6 +497,141 @@ def list_jobs(access_token: str, status: str) -> list[dict[str, Any]]:
     except Exception as e:
         logger.warning("ServiceM8 list_jobs failed for status=%s: %s", status, e)
         return all_jobs  # Return what we have so far
+
+
+def list_staff(access_token: str) -> list[dict[str, Any]]:
+    """
+    List ServiceM8 staff. Used for job_personnel staff_uuid → technician_id resolution (59.8).
+    GET /api_1.0/staff.json. Returns list of staff dicts (uuid, email, first, last, etc.).
+    """
+    try:
+        resp = make_api_request("GET", "/api_1.0/staff.json", access_token)
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning("ServiceM8 list_staff failed: %s", e)
+        return []
+
+
+def get_staff_uuid_to_technician_id_map(access_token: str) -> dict[str, Optional[str]]:
+    """
+    Build staff_uuid → auth.users.id (technician_id) for job_personnel resolution (59.8).
+    Fetches staff from ServiceM8, then matches staff email to auth.users.email (case-insensitive).
+    Returns dict: staff_uuid -> technician_id (None if unmapped). Logs unmapped staff.
+    """
+    staff_list = list_staff(access_token)
+    if not staff_list:
+        return {}
+    # Build staff_uuid -> email (skip empty emails)
+    staff_uuid_to_email: dict[str, str] = {}
+    for s in staff_list:
+        uid = (s.get("uuid") or "").strip()
+        email = (s.get("email") or "").strip()
+        if uid:
+            staff_uuid_to_email[uid] = email
+    # Resolve all unique emails to auth user ids in one pass
+    unique_emails = {e for e in staff_uuid_to_email.values() if e}
+    email_to_user_id = _build_email_to_user_id_map(unique_emails)
+    result: dict[str, Optional[str]] = {}
+    for staff_uuid, email in staff_uuid_to_email.items():
+        if not email:
+            logger.debug("Staff %s has no email, skipping technician_id resolution", staff_uuid)
+            result[staff_uuid] = None
+            continue
+        user_id = email_to_user_id.get(email.lower())
+        if user_id:
+            result[staff_uuid] = user_id
+        else:
+            logger.warning("Unmapped staff for job_personnel: staff_uuid=%s (email omitted for log privacy)", staff_uuid)
+            result[staff_uuid] = None
+    return result
+
+
+def _build_email_to_user_id_map(emails: set[str]) -> dict[str, str]:
+    """Resolve multiple emails to auth user ids in one list_users call. Returns email_lower -> user_id."""
+    if not emails:
+        return {}
+    out: dict[str, str] = {}
+    try:
+        supabase = get_supabase()
+        try:
+            resp = supabase.auth.admin.list_users(per_page=1000)
+        except TypeError:
+            resp = supabase.auth.admin.list_users()
+        users = getattr(resp, "users", None) or (resp if isinstance(resp, list) else [])
+        if isinstance(resp, dict):
+            users = resp.get("users") or (resp.get("data") or {}).get("users")
+        if not users and hasattr(resp, "data"):
+            data = getattr(resp, "data", None)
+            if isinstance(data, dict):
+                users = data.get("users")
+        email_lower_to_id: dict[str, str] = {}
+        for u in users or []:
+            u_email = (getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)) or ""
+            uid = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
+            if u_email and uid:
+                email_lower_to_id[u_email.strip().lower()] = str(uid)
+        for e in emails:
+            key = e.strip().lower()
+            if key and key in email_lower_to_id:
+                out[key] = email_lower_to_id[key]
+    except Exception as e:
+        logger.warning("Failed to build email->user_id map: %s", e)
+    return out
+
+
+def list_job_materials(access_token: str, job_uuid: str) -> list[dict[str, Any]]:
+    """
+    List ServiceM8 job materials (line items) for a job. Used for job_performance.materials_cost (59.7).
+    GET /api_1.0/jobmaterial.json with $filter=job_uuid eq '<job_uuid>'. Returns list of raw JobMaterial dicts.
+    On error or invalid job_uuid returns [] so sync can continue with materials_cost=0.
+    """
+    job_uuid = str(job_uuid).strip()
+    if not job_uuid:
+        return []
+    try:
+        uuid_module.UUID(job_uuid)
+    except (ValueError, TypeError):
+        logger.debug("list_job_materials: invalid job_uuid format, skipping API call")
+        return []
+    filter_expr = f"job_uuid eq '{job_uuid}'"
+    try:
+        params: dict[str, Any] = {"$filter": filter_expr}
+        resp = make_api_request("GET", "/api_1.0/jobmaterial.json", access_token, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning("ServiceM8 list_job_materials failed for job_uuid=%s: %s", job_uuid, e)
+        return []
+
+
+def list_job_activities(access_token: str, job_uuid: str) -> list[dict[str, Any]]:
+    """
+    List ServiceM8 job activities (schedule/time) for a job. Used for job_personnel baseline (59.8).
+    GET /api_1.0/jobactivity.json with $filter=job_uuid eq '<job_uuid>'. Returns list of raw JobActivity dicts.
+    Assignee field: staff_uuid. Duration/start/end field names to be confirmed from API response.
+    On error or invalid job_uuid returns [] so sync can continue.
+    """
+    job_uuid = str(job_uuid).strip()
+    if not job_uuid:
+        return []
+    try:
+        uuid_module.UUID(job_uuid)
+    except (ValueError, TypeError):
+        logger.debug("list_job_activities: invalid job_uuid format, skipping API call")
+        return []
+    filter_expr = f"job_uuid eq '{job_uuid}'"
+    try:
+        params: dict[str, Any] = {"$filter": filter_expr}
+        resp = make_api_request("GET", "/api_1.0/jobactivity.json", access_token, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning("ServiceM8 list_job_activities failed for job_uuid=%s: %s", job_uuid, e)
+        return []
 
 
 def create_job(access_token: str, payload: dict[str, Any]) -> tuple[bool, Optional[str]]:

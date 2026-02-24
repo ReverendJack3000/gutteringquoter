@@ -102,6 +102,12 @@
               </svg>
               <span>User Permissions</span>
             </div>
+            <div class="profile-menu-item" id="menuItemTechnicianBonus" role="menuitem" hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2l3 6 7 .8-5 4.6 1.4 6.6L12 17l-6.4 3 1.4-6.6-5-4.6 7-.8 3-6z"></path>
+              </svg>
+              <span>My Bonus</span>
+            </div>
             <div class="profile-menu-item" id="menuItemServiceM8" role="menuitem" style="display: none;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -598,6 +604,65 @@
             </table>
             <div id="userPermissionsEmpty" class="permissions-empty" hidden>No users found.</div>
           </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="view-technician-bonus" class="app-view hidden" role="region" aria-label="Technician bonus dashboard">
+      <div class="technician-bonus-view-container">
+        <header class="technician-bonus-header">
+          <div class="technician-bonus-header-left">
+            <button type="button" id="btnBonusBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="technician-bonus-header-title">My Bonus</div>
+          <div class="technician-bonus-header-right">
+            <select id="bonusAdminTechnicianSelect" class="bonus-admin-tech-select" aria-label="Select technician" hidden></select>
+            <button type="button" id="btnBonusRefresh" class="btn-text-icon" aria-label="Refresh bonus dashboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.65-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.65 3.36L1 14"/></svg>
+              Refresh
+            </button>
+          </div>
+        </header>
+        <main class="technician-bonus-main">
+          <section class="bonus-period-banner" aria-live="polite">
+            <div class="bonus-period-row">
+              <h1 id="bonusPeriodName" class="bonus-period-name">Current Bonus Period</h1>
+              <span id="bonusPeriodStatusBadge" class="bonus-period-status-badge">OPEN</span>
+            </div>
+            <p id="bonusPeriodDates" class="bonus-period-dates"></p>
+          </section>
+
+          <section class="bonus-hero-grid" aria-label="Bonus summary">
+            <article class="bonus-hero-card bonus-hero-card--pot">
+              <h2>Total Team Pot</h2>
+              <p id="bonusHeroTeamPot" class="bonus-hero-value">$0.00</p>
+              <p class="bonus-hero-note">Provisional (10% of provisional team GP).</p>
+            </article>
+            <article class="bonus-hero-card bonus-hero-card--payout">
+              <h2>My Expected Payout</h2>
+              <p id="bonusHeroExpectedPayout" class="bonus-hero-value">Pending</p>
+              <p id="bonusHeroPayoutNote" class="bonus-hero-note">Awaiting final rules and admin verification.</p>
+            </article>
+            <article class="bonus-hero-card bonus-hero-card--gp">
+              <h2>My Total GP Contributed</h2>
+              <p id="bonusHeroMyGp" class="bonus-hero-value">$0.00</p>
+              <p class="bonus-hero-note">Provisional contribution for this period.</p>
+            </article>
+          </section>
+
+          <div id="bonusDashboardStatus" class="bonus-dashboard-status" role="status" aria-live="polite" hidden></div>
+          <div id="bonusDashboardEmpty" class="bonus-dashboard-empty" hidden></div>
+
+          <section class="bonus-ledger-section" aria-label="Job ledger">
+            <div class="bonus-ledger-header">
+              <h2>Job Ledger</h2>
+              <p id="bonusLedgerSubtitle"></p>
+            </div>
+            <div id="bonusLedgerList" class="bonus-ledger-list"></div>
+          </section>
         </main>
       </div>
     </div>

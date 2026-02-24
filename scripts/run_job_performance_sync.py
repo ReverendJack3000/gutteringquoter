@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run job_performance sync (Section 59.6): list Completed/Invoiced jobs from ServiceM8, resolve active quote, upsert job_performance.
+Run job_performance sync (Section 59.6/59.7): list Completed/Invoiced jobs from ServiceM8, resolve active quote, upsert job_performance (including invoiced_revenue_exc_gst and materials_cost).
 Usage (from project root): python scripts/run_job_performance_sync.py (requires backend deps; or run from backend/ with venv: python -c "from app.job_performance_sync import run_sync; print(run_sync())").
 Requires: backend/.env with SUPABASE_*, SERVICEM8_*, and SERVICEM8_COMPANY_USER_ID or SERVICEM8_COMPANY_EMAIL.
 ServiceM8 must be connected (OAuth) for the company user so tokens exist.

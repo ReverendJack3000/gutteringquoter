@@ -251,6 +251,14 @@ const userPermissionsState = {
   savingUserIds: new Set(),
 };
 
+const technicianBonusState = {
+  initialized: false,
+  loading: false,
+  payload: null,
+  selectedTechnicianId: '',
+  adminTechnicianOptions: [],
+};
+
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
 
@@ -1481,6 +1489,11 @@ function isAdminRole() {
 
 function canAccessDesktopAdminUi() {
   return !!authState.token && isAdminRole() && isDesktopViewport();
+}
+
+function canAccessTechnicianBonusView() {
+  const role = normalizeAppRole(authState.role);
+  return !!authState.token && (role === 'admin' || role === 'editor' || role === 'technician');
 }
 
 function canUsePricingAdminControls() {
@@ -9806,6 +9819,7 @@ function initAuth() {
   const profileDropdown = document.getElementById('profileDropdown');
   const menuItemProducts = document.getElementById('menuItemProducts');
   const menuItemUserPermissions = document.getElementById('menuItemUserPermissions');
+  const menuItemTechnicianBonus = document.getElementById('menuItemTechnicianBonus');
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
   const productsUserAvatar = document.getElementById('productsUserAvatar');
@@ -9921,6 +9935,18 @@ function initAuth() {
         return;
       }
       switchView('view-user-permissions', { triggerEl: userAvatar || menuItemUserPermissions });
+    });
+  }
+  if (menuItemTechnicianBonus) {
+    menuItemTechnicianBonus.addEventListener('click', (e) => {
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      e.stopPropagation();
+      if (!canAccessTechnicianBonusView()) {
+        showMessage('Your role does not allow access to the bonus dashboard.', 'error');
+        return;
+      }
+      switchView('view-technician-bonus', { triggerEl: userAvatar || menuItemTechnicianBonus });
     });
   }
   if (menuItemSignOut) {
@@ -12499,8 +12525,15 @@ function updateUserPermissionsMenuVisibility() {
   menuItem.hidden = !canAccessDesktopAdminUi();
 }
 
+function updateTechnicianBonusMenuVisibility() {
+  const menuItem = document.getElementById('menuItemTechnicianBonus');
+  if (!menuItem) return;
+  menuItem.hidden = !canAccessTechnicianBonusView();
+}
+
 function syncAdminDesktopAccess(options = {}) {
   updateUserPermissionsMenuVisibility();
+  updateTechnicianBonusMenuVisibility();
 
   const quoteTable = document.getElementById('quotePartsTable');
   if (!canUsePricingAdminControls() && quoteTable?.classList.contains('quote-parts-table--editing')) {
@@ -12523,6 +12556,19 @@ function syncAdminDesktopAccess(options = {}) {
           ? 'Only admin users can access User Permissions.'
           : 'User Permissions is available on desktop only.';
         showMessage(message, 'info');
+      }
+    }
+  }
+
+  if (getVisibleViewId() === 'view-technician-bonus' && !canAccessTechnicianBonusView()) {
+    if (!authState.token) {
+      closeAllModals({ restoreFocus: false });
+      switchView('view-login');
+      if (options.notify !== false) showMessage('Session expired. Please sign in again.', 'info');
+    } else {
+      switchView('view-canvas', { focus: options.focus !== false });
+      if (options.notify !== false) {
+        showMessage('Your role does not allow access to the bonus dashboard.', 'info');
       }
     }
   }
@@ -12908,6 +12954,295 @@ function initUserPermissionsView() {
     } finally {
       inviteSubmitBtn.disabled = false;
     }
+  });
+}
+
+function setBonusDashboardStatus(message, tone = 'info') {
+  const el = document.getElementById('bonusDashboardStatus');
+  if (!el) return;
+  const text = typeof message === 'string' ? message.trim() : '';
+  if (!text) {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.remove('permissions-status--error', 'permissions-status--success');
+  if (tone === 'error') el.classList.add('permissions-status--error');
+  if (tone === 'success') el.classList.add('permissions-status--success');
+}
+
+function formatBonusDateRange(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Dates not available';
+  const startText = start.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+  const endText = end.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+  return `${startText} - ${endText}`;
+}
+
+function formatBonusDateTime(value) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return 'Date unavailable';
+  return dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+}
+
+function formatBonusStatusLabel(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!normalized) return 'UNKNOWN';
+  return normalized.toUpperCase();
+}
+
+async function fetchAdminTechnicianOptions() {
+  if (!isAdminRole()) {
+    technicianBonusState.adminTechnicianOptions = [];
+    return;
+  }
+  try {
+    const resp = await fetch('/api/admin/user-permissions', {
+      headers: { ...getAuthHeaders() },
+    });
+    if (handleAuthFailure(resp)) return;
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(payload?.detail || 'Failed to load technicians.');
+    const users = Array.isArray(payload?.users) ? payload.users : [];
+    const options = users
+      .map((user) => ({
+        user_id: String(user?.user_id || '').trim(),
+        email: String(user?.email || '').trim(),
+        role: normalizeAppRole(user?.role),
+      }))
+      .filter((user) => user.user_id)
+      .sort((a, b) => a.email.localeCompare(b.email));
+    technicianBonusState.adminTechnicianOptions = options;
+  } catch (err) {
+    console.error('Failed to load admin technician options', err);
+    technicianBonusState.adminTechnicianOptions = [];
+  }
+}
+
+function renderTechnicianBonusAdminSelector() {
+  const select = document.getElementById('bonusAdminTechnicianSelect');
+  if (!select) return;
+  if (!isAdminRole()) {
+    select.hidden = true;
+    return;
+  }
+  const options = technicianBonusState.adminTechnicianOptions || [];
+  const selfId = String(authState.user?.id || '').trim();
+  const selectedCandidate = technicianBonusState.selectedTechnicianId || selfId;
+  let selected = selectedCandidate;
+  if (options.length > 0 && !options.some((option) => option.user_id === selected)) {
+    selected = options[0].user_id;
+  }
+  if (!selected && selfId) selected = selfId;
+  technicianBonusState.selectedTechnicianId = selected;
+  const hasSelf = options.some((option) => option.user_id === selfId);
+  const normalizedOptions = hasSelf || !selfId
+    ? options
+    : [{ user_id: selfId, email: authState.email || selfId, role: 'admin' }, ...options];
+  select.innerHTML = normalizedOptions.map((option) => {
+    const roleSuffix = option.role ? ` (${option.role})` : '';
+    return `<option value="${escapeHtml(option.user_id)}">${escapeHtml(option.email || option.user_id)}${escapeHtml(roleSuffix)}</option>`;
+  }).join('');
+  if (!select.innerHTML && selfId) {
+    select.innerHTML = `<option value="${escapeHtml(selfId)}">${escapeHtml(authState.email || selfId)} (self)</option>`;
+  }
+  if (technicianBonusState.selectedTechnicianId) {
+    select.value = technicianBonusState.selectedTechnicianId;
+  }
+  select.hidden = false;
+}
+
+function renderTechnicianBonusDashboard(payload) {
+  const periodNameEl = document.getElementById('bonusPeriodName');
+  const periodDatesEl = document.getElementById('bonusPeriodDates');
+  const periodStatusEl = document.getElementById('bonusPeriodStatusBadge');
+  const teamPotEl = document.getElementById('bonusHeroTeamPot');
+  const expectedPayoutEl = document.getElementById('bonusHeroExpectedPayout');
+  const expectedPayoutNoteEl = document.getElementById('bonusHeroPayoutNote');
+  const myGpEl = document.getElementById('bonusHeroMyGp');
+  const ledgerListEl = document.getElementById('bonusLedgerList');
+  const ledgerSubtitleEl = document.getElementById('bonusLedgerSubtitle');
+  const emptyEl = document.getElementById('bonusDashboardEmpty');
+
+  const period = payload?.period || null;
+  const hero = payload?.hero || {};
+  const ledger = payload?.ledger || {};
+  const jobs = Array.isArray(ledger?.jobs) ? ledger.jobs : [];
+
+  if (periodNameEl) {
+    periodNameEl.textContent = period?.period_name
+      ? String(period.period_name)
+      : 'No open bonus period';
+  }
+  if (periodDatesEl) {
+    periodDatesEl.textContent = period
+      ? formatBonusDateRange(period.start_date, period.end_date)
+      : 'Ask admin to create or open a bonus period.';
+  }
+  if (periodStatusEl) {
+    periodStatusEl.textContent = formatBonusStatusLabel(period?.status);
+    periodStatusEl.dataset.status = String(period?.status || '').trim().toLowerCase();
+  }
+  if (teamPotEl) teamPotEl.textContent = formatCurrency(hero?.total_team_pot || 0);
+  if (myGpEl) myGpEl.textContent = formatCurrency(hero?.my_total_gp_contributed || 0);
+  if (expectedPayoutEl) expectedPayoutEl.textContent = 'Pending';
+  if (expectedPayoutNoteEl) {
+    expectedPayoutNoteEl.textContent = 'Expected payout unlocks after final rules and admin verification.';
+  }
+
+  if (ledgerSubtitleEl) {
+    const periodJobs = Number(hero?.period_job_count || 0);
+    const myJobs = Number(hero?.technician_job_count || jobs.length || 0);
+    ledgerSubtitleEl.textContent = period
+      ? `${myJobs} of ${periodJobs} period job(s) linked to this technician.`
+      : 'No period selected.';
+  }
+
+  if (!period || jobs.length === 0) {
+    if (emptyEl) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = ledger?.empty_state || 'Zero jobs logged yet. Go close some deals!';
+    }
+  } else if (emptyEl) {
+    emptyEl.hidden = true;
+    emptyEl.textContent = '';
+  }
+
+  if (!ledgerListEl) return;
+  if (!period || jobs.length === 0) {
+    ledgerListEl.innerHTML = '';
+    return;
+  }
+
+  ledgerListEl.innerHTML = jobs.map((job) => {
+    const roleBadges = Array.isArray(job?.role_badges) ? job.role_badges : [];
+    const penalties = Array.isArray(job?.penalty_tags) ? job.penalty_tags : [];
+    const pendingReasonMessages = Array.isArray(job?.pending_reason_messages) ? job.pending_reason_messages : [];
+    const explanations = Array.isArray(job?.explanations) ? job.explanations : [];
+    const estimation = job?.estimation || null;
+    const roleHtml = roleBadges.map((badge) => `<span class="bonus-role-badge">${escapeHtml(String(badge))}</span>`).join('');
+    const penaltyHtml = penalties.map((penalty) => (
+      `<span class="bonus-penalty-tag" title="${escapeHtml(String(penalty?.label || 'Penalty'))}">${escapeHtml(String(penalty?.label || 'Penalty'))}</span>`
+    )).join('');
+    const pendingHtml = pendingReasonMessages.map((reason) => (
+      `<span class="bonus-pending-tag">${escapeHtml(String(reason))}</span>`
+    )).join('');
+    const estimationHtml = estimation
+      ? `<div class="bonus-estimation" data-status="${escapeHtml(String(estimation?.status || 'unknown'))}">
+          <strong>Estimation:</strong>
+          Quoted ${escapeHtml(String(estimation?.quoted_labor_minutes ?? 0))} min,
+          Actual ${escapeHtml(String(estimation?.actual_labor_minutes ?? 0))} min
+          ${estimation?.tolerance_minutes != null ? `, Tolerance ${escapeHtml(String(estimation.tolerance_minutes))} min` : ''}
+          <div>${escapeHtml(String(estimation?.message || ''))}</div>
+        </div>`
+      : '';
+    const explanationHtml = explanations.length > 0
+      ? `<ul class="bonus-explanations">${explanations.map((line) => `<li>${escapeHtml(String(line))}</li>`).join('')}</ul>`
+      : '';
+    return `<article class="bonus-job-card">
+      <div class="bonus-job-top">
+        <div>
+          <p class="bonus-job-id">${escapeHtml(String(job?.job_identifier || job?.servicem8_job_id || 'Unknown'))}</p>
+        </div>
+        <span class="bonus-job-date">${escapeHtml(formatBonusDateTime(job?.created_at))}</span>
+      </div>
+      ${roleHtml ? `<div class="bonus-role-badges">${roleHtml}</div>` : ''}
+      <div class="bonus-job-metrics">
+        <div class="bonus-job-metric">
+          <span class="bonus-job-metric-label">Job GP (provisional)</span>
+          <span class="bonus-job-metric-value">${escapeHtml(formatCurrency(job?.job_gp || 0))}</span>
+        </div>
+        <div class="bonus-job-metric">
+          <span class="bonus-job-metric-label">My contribution</span>
+          <span class="bonus-job-metric-value">${escapeHtml(formatCurrency(job?.my_job_gp_contribution || 0))}</span>
+        </div>
+      </div>
+      ${estimationHtml}
+      ${penaltyHtml ? `<div class="bonus-penalty-tags">${penaltyHtml}</div>` : ''}
+      ${pendingHtml ? `<div class="bonus-pending-tags">${pendingHtml}</div>` : ''}
+      ${explanationHtml}
+    </article>`;
+  }).join('');
+}
+
+async function fetchTechnicianBonusDashboard(options = {}) {
+  if (!canAccessTechnicianBonusView()) {
+    setBonusDashboardStatus('Your role does not allow bonus dashboard access.', 'error');
+    return;
+  }
+  const refreshBtn = document.getElementById('btnBonusRefresh');
+  technicianBonusState.loading = true;
+  if (refreshBtn) refreshBtn.disabled = true;
+  setBonusDashboardStatus('Loading bonus dashboard…');
+
+  try {
+    if (isAdminRole() && options.skipAdminOptions !== true) {
+      await fetchAdminTechnicianOptions();
+      renderTechnicianBonusAdminSelector();
+    }
+
+    const params = new URLSearchParams();
+    if (isAdminRole() && technicianBonusState.selectedTechnicianId) {
+      params.set('technician_id', technicianBonusState.selectedTechnicianId);
+    }
+    const query = params.toString();
+    const resp = await fetch(`/api/bonus/technician/dashboard${query ? `?${query}` : ''}`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (handleAuthFailure(resp)) return;
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const detail = typeof payload?.detail === 'string'
+        ? payload.detail
+        : (payload?.detail?.msg || 'Failed to load bonus dashboard.');
+      throw new Error(detail);
+    }
+    technicianBonusState.payload = payload;
+    const resolvedTechnicianId = String(payload?.technician_context?.technician_id || '').trim();
+    if (isAdminRole() && resolvedTechnicianId) {
+      technicianBonusState.selectedTechnicianId = resolvedTechnicianId;
+      renderTechnicianBonusAdminSelector();
+    }
+    renderTechnicianBonusDashboard(payload);
+    const forcedSelf = !!payload?.technician_context?.forced_self_context;
+    if (forcedSelf) {
+      setBonusDashboardStatus('You can only view your own dashboard in this role.', 'info');
+    } else {
+      setBonusDashboardStatus('');
+    }
+  } catch (err) {
+    console.error('Failed to load technician bonus dashboard', err);
+    technicianBonusState.payload = null;
+    renderTechnicianBonusDashboard(null);
+    setBonusDashboardStatus(err?.message || 'Failed to load bonus dashboard.', 'error');
+  } finally {
+    technicianBonusState.loading = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
+function initTechnicianBonusView() {
+  if (technicianBonusState.initialized) return;
+  technicianBonusState.initialized = true;
+
+  const backBtn = document.getElementById('btnBonusBackToCanvas');
+  const refreshBtn = document.getElementById('btnBonusRefresh');
+  const adminSelect = document.getElementById('bonusAdminTechnicianSelect');
+
+  backBtn?.addEventListener('click', () => {
+    switchView('view-canvas', { triggerEl: backBtn });
+  });
+
+  refreshBtn?.addEventListener('click', () => {
+    void fetchTechnicianBonusDashboard();
+  });
+
+  adminSelect?.addEventListener('change', () => {
+    technicianBonusState.selectedTechnicianId = String(adminSelect.value || '').trim();
+    void fetchTechnicianBonusDashboard({ skipAdminOptions: true });
   });
 }
 
@@ -13561,6 +13896,11 @@ function getPrimaryViewFocusTarget(viewId) {
       || document.getElementById('btnRefreshUserPermissions')
       || document.getElementById('btnPermissionsBackToCanvas');
   }
+  if (viewId === 'view-technician-bonus') {
+    return document.getElementById('btnBonusRefresh')
+      || document.getElementById('btnBonusBackToCanvas')
+      || document.getElementById('bonusAdminTechnicianSelect');
+  }
   if (viewId === 'view-canvas') {
     return document.getElementById('generateQuoteBtn')
       || document.getElementById('saveDiagramBtn')
@@ -13591,6 +13931,10 @@ function switchView(viewId, options = {}) {
     showMessage(message, 'error');
     return;
   }
+  if (viewId === 'view-technician-bonus' && !canAccessTechnicianBonusView()) {
+    showMessage('Your role does not allow access to the bonus dashboard.', 'error');
+    return;
+  }
 
   if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
     diagramToolbarDragCleanupIfNeeded();
@@ -13611,6 +13955,9 @@ function switchView(viewId, options = {}) {
     } else if (viewId === 'view-user-permissions') {
       initUserPermissionsView();
       void fetchUserPermissions();
+    } else if (viewId === 'view-technician-bonus') {
+      initTechnicianBonusView();
+      void fetchTechnicianBonusDashboard();
     }
     if (options.focus !== false) {
       const returnTarget = fromViewId && fromViewId !== viewId
@@ -13721,6 +14068,7 @@ function init() {
   initProducts();
   initProductsView();
   initUserPermissionsView();
+  initTechnicianBonusView();
 
   const authPromise = initAuth();
   const authReady = authPromise && typeof authPromise.then === 'function' ? authPromise : Promise.resolve();

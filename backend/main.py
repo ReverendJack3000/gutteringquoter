@@ -14,7 +14,15 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user_id, require_role
+from app.auth import get_current_user_id, get_current_user_id_and_role, require_role
+from app.bonus_dashboard import (
+    build_provisional_ledger_rows,
+    compute_provisional_team_pot,
+    compute_technician_contribution_total,
+    group_personnel_by_job,
+    select_current_period,
+    select_period_jobs,
+)
 from app.blueprint_processor import process_blueprint
 from app.csv_import import import_products_from_csv
 from app.diagrams import (
@@ -28,6 +36,7 @@ from app.gutter_accessories import expand_elements_with_gutter_accessories
 from app.pricing import get_product_pricing
 from app.products import get_products
 from app.bonus_periods import create_period, list_periods, update_period
+from app.bonus_calc import compute_job_gp
 from app.quotes import QuoteMaterialLine, insert_quote_for_job
 from app.supabase_client import get_supabase
 from app import servicem8 as sm8
@@ -282,6 +291,255 @@ def _ensure_not_removing_last_admin(supabase: Any, target_user_id: str) -> None:
         )
 
 
+BONUS_DASHBOARD_ALLOWED_ROLES = {"admin", "editor", "technician"}
+BONUS_PERIOD_READ_STATUSES = ("open", "processing")
+BONUS_JOB_PERFORMANCE_COLUMNS = (
+    "id, servicem8_job_id, servicem8_job_uuid, bonus_period_id, status, created_at, "
+    "invoiced_revenue_exc_gst, materials_cost, quoted_labor_minutes, "
+    "is_callback, callback_reason, callback_cost, standard_parts_runs, "
+    "seller_fault_parts_runs, missed_materials_cost"
+)
+BONUS_JOB_PERSONNEL_COLUMNS = (
+    "id, job_performance_id, technician_id, is_seller, is_executor, "
+    "onsite_minutes, travel_shopping_minutes"
+)
+
+
+def _require_bonus_dashboard_reader(
+    user_id_and_role: tuple[uuid_lib.UUID, str] = Depends(get_current_user_id_and_role),
+) -> tuple[str, str]:
+    user_id, role = user_id_and_role
+    normalized_role = _normalize_app_role(role)
+    if normalized_role not in BONUS_DASHBOARD_ALLOWED_ROLES:
+        raise HTTPException(
+            403,
+            "Insufficient permissions (required role: one of admin, editor, technician)",
+        )
+    return (str(user_id), normalized_role)
+
+
+def _resolve_bonus_dashboard_technician_id(
+    *,
+    requested_technician_id: Optional[str],
+    actor_user_id: str,
+    actor_role: str,
+) -> tuple[str, bool, bool]:
+    """
+    Resolve technician context for dashboard reads.
+    - admin can override technician_id,
+    - non-admin users are forced to self context.
+    """
+    requested = str(requested_technician_id or "").strip()
+    is_admin = actor_role == "admin"
+    if is_admin and requested:
+        try:
+            parsed = uuid_lib.UUID(requested)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "technician_id must be a valid UUID")
+        return (str(parsed), True, False)
+    forced_self = (not is_admin) and bool(requested) and requested != actor_user_id
+    return (actor_user_id, False, forced_self)
+
+
+def _fetch_bonus_dashboard_period_rows(supabase: Any) -> list[dict[str, Any]]:
+    resp = (
+        supabase.table("bonus_periods")
+        .select("id, period_name, start_date, end_date, status, created_at")
+        .in_("status", list(BONUS_PERIOD_READ_STATUSES))
+        .order("end_date", desc=True)
+        .execute()
+    )
+    return [dict(row or {}) for row in (resp.data or [])]
+
+
+def _resolve_bonus_dashboard_period(
+    *,
+    supabase: Any,
+    period_rows: list[dict[str, Any]],
+    requested_period_id: Optional[str],
+) -> tuple[Optional[dict[str, Any]], str]:
+    requested = str(requested_period_id or "").strip()
+    if not requested:
+        return select_current_period(period_rows)
+    try:
+        parsed_period_id = str(uuid_lib.UUID(requested))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "period_id must be a valid UUID")
+    resp = (
+        supabase.table("bonus_periods")
+        .select("id, period_name, start_date, end_date, status, created_at")
+        .eq("id", parsed_period_id)
+        .limit(1)
+        .execute()
+    )
+    rows = resp.data or []
+    if not rows:
+        raise HTTPException(404, "Bonus period not found")
+    period = dict(rows[0] or {})
+    status = str(period.get("status") or "").strip().lower()
+    if status not in BONUS_PERIOD_READ_STATUSES:
+        raise HTTPException(400, "period_id must reference an open or processing period")
+    return (period, "explicit_period_id")
+
+
+def _fetch_period_jobs_with_fallback(
+    *,
+    supabase: Any,
+    period: dict[str, Any],
+) -> list[dict[str, Any]]:
+    period_id = str((period or {}).get("id") or "").strip()
+    if not period_id:
+        return []
+    linked_resp = (
+        supabase.table("job_performance")
+        .select(BONUS_JOB_PERFORMANCE_COLUMNS)
+        .eq("bonus_period_id", period_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    start_date = str((period or {}).get("start_date") or "").strip()
+    end_date = str((period or {}).get("end_date") or "").strip()
+    fallback_rows: list[dict[str, Any]] = []
+    if start_date and end_date:
+        start_ts = f"{start_date}T00:00:00+00:00"
+        end_ts = f"{end_date}T23:59:59.999999+00:00"
+        fallback_resp = (
+            supabase.table("job_performance")
+            .select(BONUS_JOB_PERFORMANCE_COLUMNS)
+            .is_("bonus_period_id", "null")
+            .gte("created_at", start_ts)
+            .lte("created_at", end_ts)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        fallback_rows = [dict(row or {}) for row in (fallback_resp.data or [])]
+    merged_by_id: dict[str, dict[str, Any]] = {}
+    for row in (linked_resp.data or []):
+        row_dict = dict(row or {})
+        row_id = str(row_dict.get("id") or "").strip()
+        if row_id:
+            merged_by_id[row_id] = row_dict
+    for row_dict in fallback_rows:
+        row_id = str(row_dict.get("id") or "").strip()
+        if row_id and row_id not in merged_by_id:
+            merged_by_id[row_id] = row_dict
+    return list(merged_by_id.values())
+
+
+def _fetch_job_personnel_rows_for_jobs(
+    *,
+    supabase: Any,
+    job_performance_ids: list[str],
+) -> list[dict[str, Any]]:
+    ids = [str(v or "").strip() for v in job_performance_ids if str(v or "").strip()]
+    if not ids:
+        return []
+    resp = (
+        supabase.table("job_personnel")
+        .select(BONUS_JOB_PERSONNEL_COLUMNS)
+        .in_("job_performance_id", ids)
+        .execute()
+    )
+    return [dict(row or {}) for row in (resp.data or [])]
+
+
+def _build_provisional_technician_dashboard_payload(
+    *,
+    supabase: Any,
+    period: Optional[dict[str, Any]],
+    selection_reason: str,
+    technician_id: str,
+    actor_user_id: str,
+    actor_role: str,
+    forced_self_context: bool,
+) -> dict[str, Any]:
+    if not period:
+        return {
+            "is_provisional": True,
+            "selection_reason": selection_reason,
+            "expected_payout_status": "pending_final_rules",
+            "period": None,
+            "technician_context": {
+                "technician_id": technician_id,
+                "actor_user_id": actor_user_id,
+                "actor_role": actor_role,
+                "is_admin_override": False,
+                "forced_self_context": forced_self_context,
+            },
+            "hero": {
+                "total_team_pot": 0.0,
+                "my_total_gp_contributed": 0.0,
+                "my_expected_payout": None,
+                "pending_reasons": [
+                    "expected_payout_pending",
+                    "final_rules_not_implemented",
+                ],
+            },
+            "ledger": {
+                "jobs": [],
+                "job_count": 0,
+                "empty_state": "No open or processing bonus period was found.",
+            },
+        }
+    period_jobs_source = _fetch_period_jobs_with_fallback(supabase=supabase, period=period)
+    period_jobs = select_period_jobs(period, period_jobs_source)
+    period_job_ids = [
+        str((job or {}).get("id") or "").strip()
+        for job in period_jobs
+        if str((job or {}).get("id") or "").strip()
+    ]
+    personnel_rows = _fetch_job_personnel_rows_for_jobs(
+        supabase=supabase,
+        job_performance_ids=period_job_ids,
+    )
+    personnel_by_job = group_personnel_by_job(personnel_rows)
+    ledger_rows = build_provisional_ledger_rows(
+        period_jobs=period_jobs,
+        personnel_by_job=personnel_by_job,
+        technician_id=technician_id,
+    )
+    team_pot = compute_provisional_team_pot(period_jobs)
+    technician_gp = compute_technician_contribution_total(ledger_rows)
+    callback_cost_total = round(
+        sum(float((job or {}).get("callback_cost") or 0.0) for job in period_jobs),
+        2,
+    )
+    return {
+        "is_provisional": True,
+        "selection_reason": selection_reason,
+        "expected_payout_status": "pending_final_rules",
+        "period": period,
+        "technician_context": {
+            "technician_id": technician_id,
+            "actor_user_id": actor_user_id,
+            "actor_role": actor_role,
+            "is_admin_override": actor_role == "admin" and technician_id != actor_user_id,
+            "forced_self_context": forced_self_context,
+        },
+        "hero": {
+            "total_team_pot": team_pot,
+            "my_total_gp_contributed": technician_gp,
+            "my_expected_payout": None,
+            "period_job_count": len(period_jobs),
+            "technician_job_count": len(ledger_rows),
+            "callback_cost_total_raw": callback_cost_total,
+            "pending_reasons": [
+                "expected_payout_pending",
+                "final_rules_not_implemented",
+            ],
+        },
+        "ledger": {
+            "jobs": ledger_rows,
+            "job_count": len(ledger_rows),
+            "empty_state": (
+                "No jobs linked to this technician in the current period."
+                if not ledger_rows
+                else None
+            ),
+        },
+    }
+
+
 class QuoteElement(BaseModel):
     assetId: str = Field(..., min_length=1, description="Product ID (e.g. gutter, bracket)")
     quantity: float = Field(..., ge=0, description="Quantity for this product")
@@ -381,6 +639,15 @@ class UpdateBonusPeriodRequest(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     status: Optional[str] = Field(None, description="open | processing | closed")
+
+
+class UpdateJobPersonnelRequest(BaseModel):
+    """Update job_personnel row (admin only, 59.8). Admin verify/split onsite vs travel; assign seller/executor."""
+
+    onsite_minutes: Optional[int] = Field(None, ge=0)
+    travel_shopping_minutes: Optional[int] = Field(None, ge=0)
+    is_seller: Optional[bool] = None
+    is_executor: Optional[bool] = None
 
 
 app = FastAPI(
@@ -806,6 +1073,204 @@ def api_bonus_periods_update(
     except Exception as e:
         logger.exception("Failed to update bonus period %s: %s", period_id, e)
         raise HTTPException(500, "Failed to update bonus period")
+
+
+@app.patch("/api/bonus/job-personnel/{personnel_id}")
+def api_bonus_job_personnel_update(
+    personnel_id: str,
+    body: UpdateJobPersonnelRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Update a job_personnel row (admin only, 59.8). For verify/split onsite vs travel and assign is_seller/is_executor."""
+    try:
+        uuid_lib.UUID(personnel_id)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "personnel_id must be a valid UUID")
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(400, "At least one field required: onsite_minutes, travel_shopping_minutes, is_seller, is_executor")
+    try:
+        supabase = get_supabase()
+        resp = (
+            supabase.table("job_personnel")
+            .update(payload)
+            .eq("id", personnel_id)
+            .execute()
+        )
+        if not resp.data or len(resp.data) == 0:
+            raise HTTPException(404, "Job personnel row not found")
+        return resp.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update job_personnel %s: %s", personnel_id, e)
+        raise HTTPException(500, "Failed to update job personnel")
+
+
+@app.get("/api/bonus/job-performance/{job_performance_id}")
+def api_bonus_job_performance_get(
+    job_performance_id: str,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    """Get one job_performance row with computed job_gp (admin only, 59.9)."""
+    try:
+        parsed_id = str(uuid_lib.UUID(job_performance_id))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "job_performance_id must be a valid UUID")
+    try:
+        supabase = get_supabase()
+        resp = (
+            supabase.table("job_performance")
+            .select(BONUS_JOB_PERFORMANCE_COLUMNS)
+            .eq("id", parsed_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            raise HTTPException(404, "Job performance not found")
+        row = dict(rows[0])
+        row["job_gp"] = compute_job_gp(row)
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get job performance %s: %s", job_performance_id, e)
+        raise HTTPException(500, "Failed to get job performance")
+
+
+@app.get("/api/bonus/technician/period-current")
+def api_bonus_technician_period_current(
+    period_id: Optional[str] = Query(
+        None,
+        description="Optional explicit period UUID. Must be open or processing.",
+    ),
+    actor_context: tuple[str, str] = Depends(_require_bonus_dashboard_reader),
+):
+    """Technician dashboard period selection (open first, else processing)."""
+    actor_user_id, actor_role = actor_context
+    try:
+        supabase = get_supabase()
+        period_rows = _fetch_bonus_dashboard_period_rows(supabase)
+        period, selection_reason = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=period_rows,
+            requested_period_id=period_id,
+        )
+        return {
+            "is_provisional": True,
+            "selection_reason": selection_reason,
+            "allowed_statuses": list(BONUS_PERIOD_READ_STATUSES),
+            "period": period,
+            "reader": {
+                "actor_user_id": actor_user_id,
+                "actor_role": actor_role,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to read technician current period: %s", e)
+        raise HTTPException(500, "Failed to read current bonus period")
+
+
+@app.get("/api/bonus/technician/dashboard")
+def api_bonus_technician_dashboard(
+    period_id: Optional[str] = Query(
+        None,
+        description="Optional explicit period UUID (open or processing).",
+    ),
+    technician_id: Optional[str] = Query(
+        None,
+        description="Admin-only override to view another technician UUID.",
+    ),
+    actor_context: tuple[str, str] = Depends(_require_bonus_dashboard_reader),
+):
+    """
+    Technician-facing dashboard payload (prototype/provisional).
+    Non-admin users are forced to self technician context.
+    """
+    actor_user_id, actor_role = actor_context
+    resolved_technician_id, _, forced_self_context = _resolve_bonus_dashboard_technician_id(
+        requested_technician_id=technician_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    try:
+        supabase = get_supabase()
+        period_rows = _fetch_bonus_dashboard_period_rows(supabase)
+        period, selection_reason = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=period_rows,
+            requested_period_id=period_id,
+        )
+        return _build_provisional_technician_dashboard_payload(
+            supabase=supabase,
+            period=period,
+            selection_reason=selection_reason,
+            technician_id=resolved_technician_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            forced_self_context=forced_self_context,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to read technician dashboard: %s", e)
+        raise HTTPException(500, "Failed to read technician dashboard")
+
+
+@app.get("/api/bonus/technician/jobs")
+def api_bonus_technician_jobs(
+    period_id: Optional[str] = Query(
+        None,
+        description="Optional explicit period UUID (open or processing).",
+    ),
+    technician_id: Optional[str] = Query(
+        None,
+        description="Admin-only override to view another technician UUID.",
+    ),
+    actor_context: tuple[str, str] = Depends(_require_bonus_dashboard_reader),
+):
+    """Technician period jobs ledger rows (prototype/provisional)."""
+    actor_user_id, actor_role = actor_context
+    resolved_technician_id, _, forced_self_context = _resolve_bonus_dashboard_technician_id(
+        requested_technician_id=technician_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+    )
+    try:
+        supabase = get_supabase()
+        period_rows = _fetch_bonus_dashboard_period_rows(supabase)
+        period, selection_reason = _resolve_bonus_dashboard_period(
+            supabase=supabase,
+            period_rows=period_rows,
+            requested_period_id=period_id,
+        )
+        payload = _build_provisional_technician_dashboard_payload(
+            supabase=supabase,
+            period=period,
+            selection_reason=selection_reason,
+            technician_id=resolved_technician_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            forced_self_context=forced_self_context,
+        )
+        return {
+            "is_provisional": True,
+            "selection_reason": payload.get("selection_reason"),
+            "expected_payout_status": payload.get("expected_payout_status"),
+            "period": payload.get("period"),
+            "technician_context": payload.get("technician_context"),
+            "jobs": (payload.get("ledger") or {}).get("jobs", []),
+            "job_count": (payload.get("ledger") or {}).get("job_count", 0),
+            "empty_state": (payload.get("ledger") or {}).get("empty_state"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to read technician jobs: %s", e)
+        raise HTTPException(500, "Failed to read technician jobs")
 
 
 @app.get("/api/labour-rates")

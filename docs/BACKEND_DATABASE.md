@@ -94,7 +94,7 @@ Quote estimates; persisted when Add to Job or Create New Job succeeds (Section 5
 | `servicem8_job_uuid` | uuid | ServiceM8 job UUID (nullable). Migration: `add_quotes_servicem8_job_uuid`. |
 | `created_at` | timestamptz | default now() |
 | `updated_at` | timestamptz | default now() |
-| `is_final_quote` | boolean | NOT NULL default false; set by webhook when job → Scheduled/In Progress (Section 59.4). |
+| `is_final_quote` | boolean | NOT NULL default false; set when job → Scheduled/In Progress (e.g. by future webhook or job-status sync). |
 
 **items (JSONB) shape (Section 59.19.1):** When persisting a quote (Add to Job / Create New Job), `items` is set to an array of **material** lines only (exclude labour/REP-LAB). Each element: at least `{ "id": "<product_id>", "qty": <number> }`; optionally `name`, `item_number`, `servicem8_material_uuid`. Used for Missed Materials comparison with ServiceM8 job materials. See “Audit: Material quoting and public.quotes.items”.
 
@@ -118,9 +118,11 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 
 **Section 59.4 additions (implemented):**
 
-- **`public.job_performance.status`** — `varchar` with `CHECK (status IN ('draft','verified','processed'))`, default `'draft'`. Webhook-created rows are `draft`; after admin review → `verified`; when period closed → `processed`. Only verified/processed rows in period pot. Migration: `add_job_performance_status`.
-- **`public.quotes.is_final_quote`** — `boolean` NOT NULL default `false`. When a job moves to Scheduled/In Progress (webhook), backend sets `is_final_quote = true` on the most recently updated quote for that `servicem8_job_id`. That quote is used for `quoted_labor_minutes`. Migration: `add_quotes_is_final_quote`.
+- **`public.job_performance.status`** — `varchar` with `CHECK (status IN ('draft','verified','processed'))`, default `'draft'`. Sync-created rows are `draft`; after admin review → `verified`; when period closed → `processed`. Only verified/processed rows in period pot. Migration: `add_job_performance_status`.
+- **`public.quotes.is_final_quote`** — `boolean` NOT NULL default `false`. When a job moves to Scheduled/In Progress (e.g. via webhook or sync), backend sets `is_final_quote = true` on the most recently updated quote for that `servicem8_job_id`. That quote is used for `quoted_labor_minutes`. Migration: `add_quotes_is_final_quote`.
 - **`public.company_settings`** — Single-row table for app config (no hardcoded bonus rate). Columns: `id` (integer PK, check id = 1), `bonus_labour_rate` (numeric NOT NULL default 35.00), `updated_at` (timestamptz). Backend reads at calculation time; Admin UI can update. Migration: `add_company_settings_bonus_rate`.
+
+**Job GP calculation (59.9):** Base Job GP = `invoiced_revenue_exc_gst` − `materials_cost` − (`standard_parts_runs` × 20). Not subtracted here: `missed_materials_cost`, `callback_cost`, `seller_fault_parts_runs` (period-level or post-split). Computed on read (e.g. `GET /api/bonus/job-performance/{id}` returns row + `job_gp`). Bonus labour rate is read from `public.company_settings` (id=1) or env `BONUS_LABOUR_RATE` (default 35); not used in this formula but used by period pot / splits (59.10+).
 
 ---
 
@@ -142,6 +144,7 @@ Full field list: see `docs/SERVICEM8_API_REFERENCE.md` §5.
 
 - **auth.users:** `id` (UUID), `email` (from Supabase Auth; set at sign-up/invite).
 - **public.profiles:** `user_id` → auth.users.id, `role` (viewer | editor | technician | admin). Role is for app permissions; any app user can be a “technician” for bonus if we assign them to jobs.
+- **`public.servicem8_staff`** (optional reference cache): Columns `servicem8_staff_uuid` (PK), `email`, `first_name`, `last_name`, `active`, `job_title`, `updated_at`. Populated by **local script only**: `scripts/servicem8-api-key-local/sync_staff_to_supabase.py` (uses ServiceM8 API key; run from project root with backend/.env). RLS off. Used for reference/admin visibility; **technician_id resolution still uses email match** to auth.users (no requirement to read this table). Migration: `add_servicem8_staff_reference_table`.
 
 ### Mapping decision: derive from email (no mapping table)
 
@@ -226,9 +229,9 @@ No migration for this until required.
 
 The following are **locked decisions** for bonus ledger and calculation. Full rationale and implementation notes: **`docs/plans/2026-02-23-section-59-data-flow-decisions.md`**. Summary:
 
-- **job_performance creation:** Triggered by **ServiceM8 webhook** when job status → Completed or Invoiced (webhook to be set up later). New rows created with **status = 'draft'**; admin verifies → **verified**; period closed → **processed**. Schema: **status** column added (draft/verified/processed). Only verified/processed in period pot.
-- **Data ownership:** ServiceM8 auto-populates: invoiced_revenue_exc_gst, materials_cost, servicem8_job_id. Admin/System: quote_id (matched automatically), bonus_period_id. Tech/Admin manual: callbacks, seller_fault_parts_runs, onsite_minutes vs travel_shopping_minutes (admin verifies/splits from raw JobActivity before locking period).
-- **Active quote (multiple quotes per job):** The active quote is the **last** quote (by updated_at) for that servicem8_job_id when the job moves to Scheduled or In Progress. **`is_final_quote`** (boolean) added to `public.quotes`; when webhook reports job → Scheduled/In Progress, backend sets `is_final_quote = true` on that most recent quote.
+- **job_performance creation:** Triggered by **scheduled cron sync** (lists Completed/Invoiced jobs from ServiceM8 API; no inbound webhook). New rows created with **status = 'draft'**; admin verifies → **verified**; period closed → **processed**. Schema: **status** column (draft/verified/processed). Only verified/processed in period pot. Plan: `docs/plans/2026-02-24-section-59-cron-sync-job-performance.md`.
+- **Data ownership:** ServiceM8 API (via sync) populates: invoiced_revenue_exc_gst, materials_cost, servicem8_job_id. Admin/System: quote_id (matched automatically by sync), bonus_period_id. Tech/Admin manual: callbacks, seller_fault_parts_runs, onsite_minutes vs travel_shopping_minutes (admin verifies/splits from raw JobActivity before locking period).
+- **Active quote (multiple quotes per job):** The active quote is the **last** quote (by updated_at) for that servicem8_job_id when the job moves to Scheduled or In Progress. **`is_final_quote`** (boolean) on `public.quotes`; when we learn job → Scheduled/In Progress (e.g. future webhook or sync), backend sets `is_final_quote = true` on that most recent quote.
 - **Revenue for GP:** Base on **job.total_invoice_amount** (invoiced amount).
 - **Job Materials:** Use JobMaterial endpoint; pull pricing/GP from our DB, fall back to ServiceM8 if missing.
 - **Job Activities:** Pull raw data as baseline for total hours; **Admin verifies/splits** into onsite_minutes and travel_shopping_minutes in our app before locking period (do not rely on API to distinguish onsite vs travel).
@@ -326,6 +329,7 @@ Current migrations in **Jacks Quote App** (see Supabase dashboard or `list_migra
 3. **add_job_performance_status** (Section 59.4) – Adds `status` to `job_performance`: draft | verified | processed, default 'draft'.
 4. **add_quotes_is_final_quote** (Section 59.4) – Adds `is_final_quote` boolean (default false) to `public.quotes` for active-quote rule.
 5. **add_quotes_servicem8_job_uuid** (Section 59.19) – Adds nullable `servicem8_job_uuid` (uuid) to `public.quotes` for API lookups and quote–job link.
+6. **add_job_personnel_unique_job_performance_technician** (Section 59.8.4) – Adds UNIQUE(job_performance_id, technician_id) on `public.job_personnel` to prevent duplicates and support insert-only baseline from sync.
 
 (Other migrations omitted for brevity; see Supabase dashboard or `list_migrations` MCP for full list.)
 

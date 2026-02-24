@@ -1,0 +1,15 @@
+---
+description: ServiceM8 authentication — OAuth in app; API key for local dev only; API-key scripts in one folder
+globs: backend/app/servicem8.py, scripts/servicem8-api-key-local/**/*, backend/main.py, docs/SERVICEM8*.md
+alwaysApply: false
+---
+
+# ServiceM8 authentication
+
+- **App and production:** The Quote App uses **OAuth 2.0 only** for ServiceM8 (Add to Job, Create New Job, job lookup, attachments, etc.). Do not move away from OAuth or add API-key auth to the application or to Railway/deployed code.
+
+- **API key:** `SERVICEM8_API_KEY` (in `backend/.env`) is for **local dev and testing only**. All scripts that use the API key must live in **`scripts/servicem8-api-key-local/`** (see that folder’s README). Do not add API-key-based ServiceM8 scripts elsewhere.
+
+- **Never rewrite project files for these scripts.** Do not change app code, backend routes, or shared config to support local API-key scripts. Keep them self-contained; they may only read `backend/.env` for the key.
+
+- **Do not:** Use the API key in the FastAPI app, in any production code path, or in Railway env vars. The key must not be committed (`.env` is in `.gitignore`).
