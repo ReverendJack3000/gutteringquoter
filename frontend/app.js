@@ -343,6 +343,12 @@ const materialRulesState = {
   productIds: [],
   productMetaById: new Map(),
 };
+const MATERIAL_RULES_SORT_STEP = 10;
+const materialRulesDragState = {
+  activeRow: null,
+  activeBody: null,
+  dropTargetRow: null,
+};
 
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
@@ -14794,12 +14800,13 @@ function updateMaterialRulesActionButtons() {
   const reloadBtn = document.getElementById('btnMaterialRulesReload');
   const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
   const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
-  const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
   const disableAll = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
   if (reloadBtn) reloadBtn.disabled = disableAll;
   if (saveQuickQuoterBtn) saveQuickQuoterBtn.disabled = disableAll;
   if (saveMeasuredBtn) saveMeasuredBtn.disabled = disableAll;
-  if (addTemplateBtn) addTemplateBtn.disabled = disableAll;
+  document.querySelectorAll('.material-rules-add-template-btn').forEach((button) => {
+    if (button instanceof HTMLButtonElement) button.disabled = disableAll;
+  });
 }
 
 function isMaterialRulesDisallowedProductId(productId) {
@@ -14847,6 +14854,50 @@ function getMaterialRulesProductSelectOptionsHtml(selectedId) {
     parts.unshift(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(`⚠ Invalid: ${selected}`)}</option>`);
   }
   return parts.join('');
+}
+
+function getMaterialRulesTemplateGroupsContainer() {
+  const el = document.getElementById('materialRulesTemplateGroups');
+  return el instanceof HTMLElement ? el : null;
+}
+
+function getMaterialRulesTemplateSections() {
+  const repairTypes = Array.isArray(materialRulesState.repairTypes) ? materialRulesState.repairTypes : [];
+  const templates = Array.isArray(materialRulesState.templates) ? materialRulesState.templates : [];
+  const templatesByRepairTypeId = new Map();
+
+  templates.forEach((template) => {
+    const repairTypeId = String(template?.repair_type_id || '').trim();
+    if (!templatesByRepairTypeId.has(repairTypeId)) templatesByRepairTypeId.set(repairTypeId, []);
+    templatesByRepairTypeId.get(repairTypeId).push(template);
+  });
+
+  const sections = [];
+  repairTypes.forEach((repairType) => {
+    const repairTypeId = String(repairType?.id || '').trim();
+    if (!repairTypeId) return;
+    const label = String(repairType?.label || '').trim() || repairTypeId;
+    sections.push({
+      repairTypeId,
+      label,
+      isUnknown: false,
+      rows: templatesByRepairTypeId.get(repairTypeId) || [],
+    });
+    templatesByRepairTypeId.delete(repairTypeId);
+  });
+
+  Array.from(templatesByRepairTypeId.entries())
+    .sort((a, b) => String(a[0] || '').localeCompare(String(b[0] || '')))
+    .forEach(([repairTypeId, rows]) => {
+      sections.push({
+        repairTypeId,
+        label: String(repairTypeId || 'missing'),
+        isUnknown: true,
+        rows,
+      });
+    });
+
+  return sections;
 }
 
 function renderMaterialRulesMeasuredProductSelects(rules = null) {
@@ -14899,12 +14950,112 @@ function getMaterialRulesDataWarnings() {
 
 let materialRulesLocalTemplateCounter = 0;
 
+function getMaterialRulesDragHandleHtml(label) {
+  return `
+    <button
+      type="button"
+      class="material-rules-row-drag-handle"
+      draggable="true"
+      aria-label="${escapeHtml(label)}"
+      title="${escapeHtml(label)}"
+    >::</button>
+  `;
+}
+
+function clearMaterialRulesDropTarget() {
+  if (materialRulesDragState.dropTargetRow) {
+    materialRulesDragState.dropTargetRow.classList.remove('material-rules-row--drop-target');
+    materialRulesDragState.dropTargetRow = null;
+  }
+}
+
+function resetMaterialRulesDragState() {
+  if (materialRulesDragState.activeRow) {
+    materialRulesDragState.activeRow.classList.remove('material-rules-row--dragging');
+  }
+  clearMaterialRulesDropTarget();
+  materialRulesDragState.activeRow = null;
+  materialRulesDragState.activeBody = null;
+}
+
+function getMaterialRulesDropTargetRow(tableBody, draggingRow, clientY) {
+  const rows = Array.from(tableBody.querySelectorAll('tr')).filter((row) => row !== draggingRow);
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    const midpoint = rect.top + (rect.height / 2);
+    if (clientY < midpoint) return row;
+  }
+  return null;
+}
+
+function setMaterialRulesDropTargetRow(row) {
+  if (materialRulesDragState.dropTargetRow === row) return;
+  clearMaterialRulesDropTarget();
+  if (row) {
+    row.classList.add('material-rules-row--drop-target');
+    materialRulesDragState.dropTargetRow = row;
+  }
+}
+
+function bindMaterialRulesTableRowReorder(tableBody) {
+  if (!(tableBody instanceof HTMLElement) || tableBody.dataset.materialRulesDragBound === 'true') return;
+  tableBody.dataset.materialRulesDragBound = 'true';
+
+  tableBody.addEventListener('dragstart', (event) => {
+    if (!isDesktopViewport()) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const handle = target?.closest('.material-rules-row-drag-handle');
+    if (!handle) return;
+    const row = handle.closest('tr');
+    if (!(row instanceof HTMLTableRowElement)) return;
+
+    materialRulesDragState.activeRow = row;
+    materialRulesDragState.activeBody = tableBody;
+    row.classList.add('material-rules-row--dragging');
+    clearMaterialRulesDropTarget();
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', row.dataset.repairTypeId || row.dataset.templateId || 'material-rules-row');
+    }
+  });
+
+  tableBody.addEventListener('dragover', (event) => {
+    if (!isDesktopViewport()) return;
+    const activeRow = materialRulesDragState.activeRow;
+    if (!(activeRow instanceof HTMLTableRowElement) || materialRulesDragState.activeBody !== tableBody) return;
+
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const dropTarget = getMaterialRulesDropTargetRow(tableBody, activeRow, event.clientY);
+    setMaterialRulesDropTargetRow(dropTarget);
+  });
+
+  tableBody.addEventListener('drop', (event) => {
+    if (!isDesktopViewport()) return;
+    const activeRow = materialRulesDragState.activeRow;
+    if (!(activeRow instanceof HTMLTableRowElement) || materialRulesDragState.activeBody !== tableBody) return;
+
+    event.preventDefault();
+    const dropTarget = getMaterialRulesDropTargetRow(tableBody, activeRow, event.clientY);
+    if (dropTarget) {
+      tableBody.insertBefore(activeRow, dropTarget);
+    } else {
+      tableBody.appendChild(activeRow);
+    }
+    resetMaterialRulesDragState();
+  });
+
+  tableBody.addEventListener('dragend', () => {
+    if (materialRulesDragState.activeBody === tableBody) resetMaterialRulesDragState();
+  });
+}
+
 function appendMaterialRulesRepairTypeRow(row = {}) {
   const tbody = document.getElementById('materialRulesRepairTypesBody');
   if (!tbody) return;
   const id = String(row?.id || '').trim();
   const label = String(row?.label || '').trim();
-  const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : 0;
   const requiresProfile = !!row?.requires_profile;
   const requiresSize = !!row?.requires_size_mm;
   const active = row?.active !== false;
@@ -14913,8 +15064,10 @@ function appendMaterialRulesRepairTypeRow(row = {}) {
   tr.dataset.materialRulesRepairRow = 'true';
   tr.dataset.repairTypeId = id;
   tr.innerHTML = `
+    <td class="material-rules-reorder-cell">
+      ${getMaterialRulesDragHandleHtml('Drag to reorder repair type row')}
+    </td>
     <td><input type="text" class="material-rules-repair-label" value="${escapeHtml(label)}" aria-label="Repair type label" /></td>
-    <td><input type="number" class="material-rules-repair-sort" value="${escapeHtml(String(sortOrder))}" step="1" aria-label="Repair type sort order" /></td>
     <td><input type="checkbox" class="material-rules-repair-requires-profile" ${requiresProfile ? 'checked' : ''} aria-label="Requires profile" /></td>
     <td><input type="checkbox" class="material-rules-repair-requires-size" ${requiresSize ? 'checked' : ''} aria-label="Requires size" /></td>
     <td><input type="checkbox" class="material-rules-repair-active" ${active ? 'checked' : ''} aria-label="Active" /></td>
@@ -14922,30 +15075,36 @@ function appendMaterialRulesRepairTypeRow(row = {}) {
   tbody.appendChild(tr);
 }
 
-function appendMaterialRulesTemplateRow(row = {}) {
-  const tbody = document.getElementById('materialRulesTemplatesBody');
+function appendMaterialRulesTemplateRow(row = {}, options = {}) {
+  const tbody = options?.tbody instanceof HTMLTableSectionElement ? options.tbody : null;
   if (!tbody) return;
 
   const existingId = String(row?.id || '').trim();
   const localId = existingId || `new-${++materialRulesLocalTemplateCounter}`;
-  const repairTypeId = String(row?.repair_type_id || '').trim();
+  const lockedRepairTypeId = String(options?.repairTypeId || row?.repair_type_id || '').trim();
   const productId = String(row?.product_id || '').trim();
   const qtyPerUnit = Number.isFinite(Number(row?.qty_per_unit)) ? Number(row.qty_per_unit) : 0;
   const conditionProfile = String(row?.condition_profile || '').trim().toUpperCase();
   const conditionSize = row?.condition_size_mm == null ? '' : String(row.condition_size_mm).trim();
-  const lengthMode = String(row?.length_mode || 'none').trim().toLowerCase();
-  const fixedLength = row?.fixed_length_mm == null ? '' : String(row.fixed_length_mm).trim();
+  const rawLengthMode = String(row?.length_mode || 'none').trim().toLowerCase();
   const active = row?.active !== false;
-  const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : 0;
+  const legacyFixedLengthMm = Number.isFinite(Number(row?.fixed_length_mm)) ? parseInt(String(row.fixed_length_mm), 10) : null;
+  const isLegacyFixedMm = rawLengthMode === 'fixed_mm' && Number.isFinite(legacyFixedLengthMm) && legacyFixedLengthMm > 0;
+  const lengthMode = rawLengthMode === 'missing_measurement' || isLegacyFixedMm
+    ? 'missing_measurement'
+    : 'none';
 
   const tr = document.createElement('tr');
   tr.dataset.materialRulesTemplateRow = 'true';
   tr.dataset.templateId = localId;
+  tr.dataset.repairTypeId = lockedRepairTypeId;
+  tr.dataset.legacyFixedMm = isLegacyFixedMm ? 'true' : 'false';
+  tr.dataset.legacyLengthMode = isLegacyFixedMm ? 'fixed_mm' : '';
+  tr.dataset.legacyFixedLengthMm = isLegacyFixedMm ? String(legacyFixedLengthMm) : '';
+  tr.dataset.rowDirty = 'false';
   tr.innerHTML = `
-    <td>
-      <select class="material-rules-template-repair-type-id" aria-label="Template repair type ID">
-        ${getMaterialRulesRepairTypeSelectOptionsHtml(repairTypeId)}
-      </select>
+    <td class="material-rules-reorder-cell">
+      ${getMaterialRulesDragHandleHtml('Drag to reorder part template row')}
     </td>
     <td>
       <select class="material-rules-template-product-id" aria-label="Template product ID">
@@ -14971,27 +15130,25 @@ function appendMaterialRulesTemplateRow(row = {}) {
       <select class="material-rules-template-length-mode" aria-label="Template length mode">
         <option value="none" ${lengthMode === 'none' ? 'selected' : ''}>none</option>
         <option value="missing_measurement" ${lengthMode === 'missing_measurement' ? 'selected' : ''}>missing_measurement</option>
-        <option value="fixed_mm" ${lengthMode === 'fixed_mm' ? 'selected' : ''}>fixed_mm</option>
       </select>
+      ${isLegacyFixedMm ? '<div class="material-rules-template-legacy-note">Legacy fixed_mm preserved until edited.</div>' : ''}
     </td>
-    <td><input type="number" class="material-rules-template-fixed-length" min="1" step="1" value="${escapeHtml(fixedLength)}" aria-label="Template fixed length mm" /></td>
     <td><input type="checkbox" class="material-rules-template-active" ${active ? 'checked' : ''} aria-label="Template active" /></td>
-    <td><input type="number" class="material-rules-template-sort" step="1" value="${escapeHtml(String(sortOrder))}" aria-label="Template sort order" /></td>
     <td class="material-rules-template-actions-cell">
       <button type="button" class="material-rules-row-remove-btn" aria-label="Remove template row">Remove</button>
     </td>
   `;
 
-  const lengthModeSelect = tr.querySelector('.material-rules-template-length-mode');
-  const fixedLengthInput = tr.querySelector('.material-rules-template-fixed-length');
-  const syncFixedLengthState = () => {
-    if (!lengthModeSelect || !fixedLengthInput) return;
-    const enabled = String(lengthModeSelect.value || 'none') === 'fixed_mm';
-    fixedLengthInput.disabled = !enabled;
-    if (!enabled) fixedLengthInput.value = '';
+  const markRowDirty = () => {
+    tr.dataset.rowDirty = 'true';
   };
-  lengthModeSelect?.addEventListener('change', syncFixedLengthState);
-  syncFixedLengthState();
+  tr.querySelectorAll('input, select').forEach((control) => {
+    if (!(control instanceof HTMLElement)) return;
+    control.addEventListener('change', markRowDirty);
+    if (control instanceof HTMLInputElement && control.type !== 'checkbox') {
+      control.addEventListener('input', markRowDirty);
+    }
+  });
 
   const removeBtn = tr.querySelector('.material-rules-row-remove-btn');
   removeBtn?.addEventListener('click', () => {
@@ -15001,19 +15158,71 @@ function appendMaterialRulesTemplateRow(row = {}) {
   tbody.appendChild(tr);
 }
 
+function renderMaterialRulesTemplateSections() {
+  const groups = getMaterialRulesTemplateGroupsContainer();
+  if (!groups) return;
+  groups.innerHTML = '';
+  const disableActions = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
+
+  const fragment = document.createDocumentFragment();
+  getMaterialRulesTemplateSections().forEach((section) => {
+    const sectionEl = document.createElement('section');
+    sectionEl.className = 'material-rules-template-section';
+    if (section.isUnknown) sectionEl.classList.add('material-rules-template-section--unknown');
+    sectionEl.dataset.repairTypeId = section.repairTypeId;
+    const sectionTitle = section.isUnknown
+      ? `Unknown repair type: ${section.label}`
+      : `${section.label} (${section.repairTypeId})`;
+    sectionEl.innerHTML = `
+      <div class="material-rules-template-section-head">
+        <h4>${escapeHtml(sectionTitle)}</h4>
+        ${section.isUnknown ? '' : `<button type="button" class="btn material-rules-add-template-btn" data-repair-type-id="${escapeHtml(section.repairTypeId)}" ${disableActions ? 'disabled' : ''}>Add Template</button>`}
+      </div>
+      <div class="material-rules-table-wrap">
+        <table class="material-rules-table material-rules-table--templates" aria-label="Templates for ${escapeHtml(sectionTitle)}">
+          <thead>
+            <tr>
+              <th scope="col">Reorder</th>
+              <th scope="col">Product ID</th>
+              <th scope="col">Qty/Unit</th>
+              <th scope="col">Profile</th>
+              <th scope="col">Size</th>
+              <th scope="col">Length Mode</th>
+              <th scope="col">Active</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody data-material-rules-template-section-body="true" data-repair-type-id="${escapeHtml(section.repairTypeId)}"></tbody>
+        </table>
+      </div>
+    `;
+    const tbody = sectionEl.querySelector('tbody[data-material-rules-template-section-body="true"]');
+    if (tbody instanceof HTMLTableSectionElement) {
+      section.rows.forEach((row) => appendMaterialRulesTemplateRow(row, {
+        tbody,
+        repairTypeId: section.repairTypeId,
+      }));
+      bindMaterialRulesTableRowReorder(tbody);
+    }
+    fragment.appendChild(sectionEl);
+  });
+
+  groups.appendChild(fragment);
+}
+
 function renderMaterialRulesQuickQuoterTables() {
   const repairTypesBody = document.getElementById('materialRulesRepairTypesBody');
-  const templatesBody = document.getElementById('materialRulesTemplatesBody');
-  if (!repairTypesBody || !templatesBody) return;
+  const templateGroups = getMaterialRulesTemplateGroupsContainer();
+  if (!repairTypesBody || !templateGroups) return;
 
+  resetMaterialRulesDragState();
   repairTypesBody.innerHTML = '';
-  templatesBody.innerHTML = '';
+  templateGroups.innerHTML = '';
 
   const repairTypes = Array.isArray(materialRulesState.repairTypes) ? materialRulesState.repairTypes : [];
-  const templates = Array.isArray(materialRulesState.templates) ? materialRulesState.templates : [];
 
   repairTypes.forEach((row) => appendMaterialRulesRepairTypeRow(row));
-  templates.forEach((row) => appendMaterialRulesTemplateRow(row));
+  renderMaterialRulesTemplateSections();
 }
 
 function populateMaterialRulesMeasuredForm(rules) {
@@ -15055,8 +15264,7 @@ function collectMaterialRulesRepairTypesPayload() {
   rows.forEach((row, index) => {
     const id = String(row.dataset.repairTypeId || '').trim();
     const label = String(row.querySelector('.material-rules-repair-label')?.value || '').trim();
-    const sortOrderRaw = String(row.querySelector('.material-rules-repair-sort')?.value || '').trim();
-    const sortOrder = parseInt(sortOrderRaw, 10);
+    const sortOrder = (index + 1) * MATERIAL_RULES_SORT_STEP;
     const requiresProfile = !!row.querySelector('.material-rules-repair-requires-profile')?.checked;
     const requiresSize = !!row.querySelector('.material-rules-repair-requires-size')?.checked;
     const active = !!row.querySelector('.material-rules-repair-active')?.checked;
@@ -15066,11 +15274,10 @@ function collectMaterialRulesRepairTypesPayload() {
 
     if (!id) errors.push(`Repair type row ${rowNumber}: ID is required.`);
     if (!label) errors.push(`Repair type row ${rowNumber}: Label is required.`);
-    if (!Number.isFinite(sortOrder)) errors.push(`Repair type row ${rowNumber}: Sort order must be an integer.`);
     if (duplicateId) errors.push(`Repair type row ${rowNumber}: Duplicate ID '${id}'.`);
     if (id) seenIds.add(id);
 
-    if (id && label && Number.isFinite(sortOrder) && !duplicateId) {
+    if (id && label && !duplicateId) {
       payload.push({
         id,
         label,
@@ -15086,16 +15293,17 @@ function collectMaterialRulesRepairTypesPayload() {
 }
 
 function collectMaterialRulesTemplatesPayload() {
-  const rows = Array.from(document.querySelectorAll('#materialRulesTemplatesBody tr[data-material-rules-template-row="true"]'));
+  const rows = Array.from(document.querySelectorAll('#materialRulesTemplateGroups tr[data-material-rules-template-row="true"]'));
   const payload = [];
   const errors = [];
   const seenIds = new Set();
+  const sortOrderByRepairTypeId = new Map();
 
   rows.forEach((row, index) => {
     const localId = String(row.dataset.templateId || '').trim();
     const isPersistedId = !!localId && !localId.startsWith('new-');
     const duplicateTemplateId = isPersistedId && seenIds.has(localId);
-    const repairTypeId = String(row.querySelector('.material-rules-template-repair-type-id')?.value || '').trim();
+    const repairTypeId = String(row.dataset.repairTypeId || '').trim();
     const productId = String(row.querySelector('.material-rules-template-product-id')?.value || '').trim();
     const qtyRaw = String(row.querySelector('.material-rules-template-qty')?.value || '').trim();
     const qtyPerUnit = parseFloat(qtyRaw);
@@ -15103,13 +15311,19 @@ function collectMaterialRulesTemplatesPayload() {
     const conditionProfile = conditionProfileValue || null;
     const conditionSizeRaw = String(row.querySelector('.material-rules-template-size')?.value || '').trim();
     const conditionSize = conditionSizeRaw ? parseInt(conditionSizeRaw, 10) : null;
-    const lengthMode = String(row.querySelector('.material-rules-template-length-mode')?.value || 'none').trim().toLowerCase();
-    const fixedLengthRaw = String(row.querySelector('.material-rules-template-fixed-length')?.value || '').trim();
-    const fixedLength = fixedLengthRaw ? parseInt(fixedLengthRaw, 10) : null;
+    const selectedLengthMode = String(row.querySelector('.material-rules-template-length-mode')?.value || 'none').trim().toLowerCase();
+    const isLegacyFixedMm = row.dataset.legacyFixedMm === 'true';
+    const rowDirty = row.dataset.rowDirty === 'true';
+    const legacyFixedLength = parseInt(String(row.dataset.legacyFixedLengthMm || '').trim(), 10);
+    const effectiveLengthMode = isLegacyFixedMm && !rowDirty ? 'fixed_mm' : selectedLengthMode;
+    const effectiveFixedLength = effectiveLengthMode === 'fixed_mm' && Number.isFinite(legacyFixedLength) ? legacyFixedLength : null;
     const active = !!row.querySelector('.material-rules-template-active')?.checked;
-    const sortOrderRaw = String(row.querySelector('.material-rules-template-sort')?.value || '').trim();
-    const sortOrder = parseInt(sortOrderRaw, 10);
+    const sortOrder = (
+      (sortOrderByRepairTypeId.get(repairTypeId) || 0)
+      + MATERIAL_RULES_SORT_STEP
+    );
     const rowNumber = index + 1;
+    if (repairTypeId) sortOrderByRepairTypeId.set(repairTypeId, sortOrder);
 
     if (duplicateTemplateId) errors.push(`Template row ${rowNumber}: Duplicate template ID '${localId}'.`);
     if (isPersistedId) seenIds.add(localId);
@@ -15125,10 +15339,9 @@ function collectMaterialRulesTemplatesPayload() {
     if (!Number.isFinite(qtyPerUnit) || qtyPerUnit < 0) errors.push(`Template row ${rowNumber}: Qty per unit must be a number >= 0.`);
     if (conditionProfile && conditionProfile !== 'SC' && conditionProfile !== 'CL') errors.push(`Template row ${rowNumber}: Profile must be SC, CL, or empty.`);
     if (conditionSize !== null && conditionSize !== 65 && conditionSize !== 80) errors.push(`Template row ${rowNumber}: Size must be 65, 80, or empty.`);
-    if (!['none', 'missing_measurement', 'fixed_mm'].includes(lengthMode)) errors.push(`Template row ${rowNumber}: Length mode is invalid.`);
-    if (!Number.isFinite(sortOrder)) errors.push(`Template row ${rowNumber}: Sort order must be an integer.`);
-    if (lengthMode === 'fixed_mm' && (!Number.isFinite(fixedLength) || fixedLength <= 0)) {
-      errors.push(`Template row ${rowNumber}: Fixed length must be a positive integer for fixed_mm mode.`);
+    if (!['none', 'missing_measurement'].includes(selectedLengthMode)) errors.push(`Template row ${rowNumber}: Length mode is invalid.`);
+    if (effectiveLengthMode === 'fixed_mm' && (!Number.isFinite(effectiveFixedLength) || effectiveFixedLength <= 0)) {
+      errors.push(`Template row ${rowNumber}: Legacy fixed_mm row has invalid fixed length.`);
     }
 
     if (
@@ -15138,9 +15351,8 @@ function collectMaterialRulesTemplatesPayload() {
       && qtyPerUnit >= 0
       && (!conditionProfile || conditionProfile === 'SC' || conditionProfile === 'CL')
       && (conditionSize === null || conditionSize === 65 || conditionSize === 80)
-      && ['none', 'missing_measurement', 'fixed_mm'].includes(lengthMode)
-      && Number.isFinite(sortOrder)
-      && (lengthMode !== 'fixed_mm' || (Number.isFinite(fixedLength) && fixedLength > 0))
+      && ['none', 'missing_measurement', 'fixed_mm'].includes(effectiveLengthMode)
+      && (effectiveLengthMode !== 'fixed_mm' || (Number.isFinite(effectiveFixedLength) && effectiveFixedLength > 0))
       && !duplicateTemplateId
     ) {
       const template = {
@@ -15149,8 +15361,8 @@ function collectMaterialRulesTemplatesPayload() {
         qty_per_unit: qtyPerUnit,
         condition_profile: conditionProfile,
         condition_size_mm: conditionSize,
-        length_mode: lengthMode,
-        fixed_length_mm: lengthMode === 'fixed_mm' ? fixedLength : null,
+        length_mode: effectiveLengthMode,
+        fixed_length_mm: effectiveLengthMode === 'fixed_mm' ? effectiveFixedLength : null,
         active,
         sort_order: sortOrder,
       };
@@ -15415,7 +15627,8 @@ function initMaterialRulesView() {
   const reloadBtn = document.getElementById('btnMaterialRulesReload');
   const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
   const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
-  const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
+  const repairTypesBody = document.getElementById('materialRulesRepairTypesBody');
+  const templateGroups = getMaterialRulesTemplateGroupsContainer();
 
   backBtn?.addEventListener('click', () => {
     switchView('view-canvas', { triggerEl: backBtn });
@@ -15433,10 +15646,17 @@ function initMaterialRulesView() {
     void saveMaterialRulesMeasured();
   });
 
-  addTemplateBtn?.addEventListener('click', () => {
+  templateGroups?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const addBtn = target?.closest('.material-rules-add-template-btn');
+    if (!(addBtn instanceof HTMLButtonElement)) return;
+    const section = addBtn.closest('.material-rules-template-section');
+    const tbody = section?.querySelector('tbody[data-material-rules-template-section-body="true"]');
+    const repairTypeId = String(addBtn.dataset.repairTypeId || section?.dataset.repairTypeId || '').trim();
+    if (!(tbody instanceof HTMLTableSectionElement) || !repairTypeId) return;
     appendMaterialRulesTemplateRow({
       id: '',
-      repair_type_id: '',
+      repair_type_id: repairTypeId,
       product_id: '',
       qty_per_unit: 0,
       condition_profile: null,
@@ -15445,8 +15665,14 @@ function initMaterialRulesView() {
       fixed_length_mm: null,
       active: true,
       sort_order: 0,
+    }, {
+      tbody,
+      repairTypeId,
     });
+    bindMaterialRulesTableRowReorder(tbody);
   });
+
+  bindMaterialRulesTableRowReorder(repairTypesBody);
 
   updateMaterialRulesActionButtons();
 }

@@ -213,10 +213,40 @@ async function run() {
     await page.evaluate(() => {
       if (window.__quoteAppE2eMaterialRulesFetchPatch) return;
       const originalFetch = window.fetch.bind(window);
-      window.__quoteAppE2eMaterialRulesFetchPatch = { originalFetch };
-      window.fetch = async (input, init) => {
+      window.__quoteAppE2eMaterialRulesFetchPatch = {
+        originalFetch,
+        capturedRepairTypesPayload: null,
+        capturedTemplatesPayload: null,
+      };
+      window.fetch = async (input, init = {}) => {
         const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         const href = String(url || '');
+        const method = String(init?.method || '').trim().toUpperCase() || 'GET';
+        const parseJsonBody = () => {
+          try {
+            return JSON.parse(String(init?.body || '{}'));
+          } catch (_) {
+            return {};
+          }
+        };
+        if (href.includes('/api/admin/material-rules/quick-quoter/repair-types') && method === 'PUT') {
+          const body = parseJsonBody();
+          const rows = Array.isArray(body?.repair_types) ? body.repair_types : [];
+          window.__quoteAppE2eMaterialRulesFetchPatch.capturedRepairTypesPayload = body;
+          return new Response(JSON.stringify({ repair_types: rows }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (href.includes('/api/admin/material-rules/quick-quoter/templates') && method === 'PUT') {
+          const body = parseJsonBody();
+          const rows = Array.isArray(body?.templates) ? body.templates : [];
+          window.__quoteAppE2eMaterialRulesFetchPatch.capturedTemplatesPayload = body;
+          return new Response(JSON.stringify({ templates: rows }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         if (href.includes('/api/admin/material-rules/quick-quoter')) {
           return new Response(JSON.stringify({
             repair_types: [
@@ -228,6 +258,14 @@ async function run() {
                 requires_profile: true,
                 requires_size_mm: false,
               },
+              {
+                id: 'outlet_reseal',
+                label: 'Outlet Reseal',
+                active: true,
+                sort_order: 20,
+                requires_profile: false,
+                requires_size_mm: true,
+              },
             ],
             templates: [
               {
@@ -237,10 +275,34 @@ async function run() {
                 qty_per_unit: 0.25,
                 condition_profile: null,
                 condition_size_mm: null,
+                length_mode: 'fixed_mm',
+                fixed_length_mm: 1200,
+                active: true,
+                sort_order: 10,
+              },
+              {
+                id: '33333333-3333-3333-3333-333333333333',
+                repair_type_id: 'joiner_replacement',
+                product_id: 'SCR-SS',
+                qty_per_unit: 1.5,
+                condition_profile: null,
+                condition_size_mm: null,
                 length_mode: 'none',
                 fixed_length_mm: null,
                 active: true,
-                sort_order: 10,
+                sort_order: 20,
+              },
+              {
+                id: '22222222-2222-2222-2222-222222222222',
+                repair_type_id: 'outlet_reseal',
+                product_id: 'BRK-SC-MAR',
+                qty_per_unit: 0.5,
+                condition_profile: null,
+                condition_size_mm: null,
+                length_mode: 'none',
+                fixed_length_mm: null,
+                active: true,
+                sort_order: 20,
               },
             ],
           }), {
@@ -276,14 +338,20 @@ async function run() {
       };
     });
     await clickSelectorViaDom(page, '#menuItemMaterialRules');
-    await delay(320);
+    await page.waitForSelector('#materialRulesRepairTypesBody tr[data-material-rules-repair-row="true"]', { timeout: 5000 });
+    await page.waitForSelector('tbody[data-material-rules-template-section-body="true"] tr[data-material-rules-template-row="true"]', { timeout: 5000 });
     const desktopMaterialRulesViewState = await page.evaluate(() => {
       const visible = document.querySelector('.app-view:not(.hidden)');
       const repairTypeRow = document.querySelector('#materialRulesRepairTypesBody tr[data-material-rules-repair-row="true"]');
       const repairIdInput = document.querySelector('#materialRulesRepairTypesBody .material-rules-repair-id');
-      const templateRepairTypeInput = document.querySelector('#materialRulesTemplatesBody .material-rules-template-repair-type-id');
-      const templateProductInput = document.querySelector('#materialRulesTemplatesBody .material-rules-template-product-id');
-      const templateRowIdBadge = document.querySelector('#materialRulesTemplatesBody .material-rules-row-id');
+      const templateGroups = Array.from(document.querySelectorAll('.material-rules-template-section'));
+      const templateSectionBodies = Array.from(document.querySelectorAll('tbody[data-material-rules-template-section-body="true"]'));
+      const templateRepairTypeInput = document.querySelector('.material-rules-template-section .material-rules-template-repair-type-id');
+      const templateProductInput = document.querySelector('.material-rules-template-section .material-rules-template-product-id');
+      const templateFixedLengthInput = document.querySelector('.material-rules-template-section .material-rules-template-fixed-length');
+      const templateRowIdBadge = document.querySelector('.material-rules-template-section .material-rules-row-id');
+      const repairHeaders = Array.from(document.querySelectorAll('.material-rules-table--repair-types thead th'));
+      const templateHeaders = Array.from(document.querySelectorAll('.material-rules-template-section .material-rules-table--templates thead th'));
       const measuredSelectors = [
         document.getElementById('materialRulesScrewProductId'),
         document.getElementById('materialRulesBracketProductIdSc'),
@@ -310,6 +378,17 @@ async function run() {
         templateRowIdBadgeVisible: !!templateRowIdBadge,
         templateRepairTypeTag: templateRepairTypeInput ? templateRepairTypeInput.tagName : null,
         templateProductTag: templateProductInput ? templateProductInput.tagName : null,
+        templateFixedLengthVisible: !!templateFixedLengthInput,
+        templateGroupCount: templateGroups.length,
+        templateSectionBodyCount: templateSectionBodies.length,
+        templateAddButtonCount: document.querySelectorAll('.material-rules-add-template-btn').length,
+        globalAddTemplateBtnExists: !!document.getElementById('btnMaterialRulesAddTemplate'),
+        repairSortHeaderVisible: repairHeaders.some((th) => String(th.textContent || '').trim().toLowerCase() === 'sort'),
+        templateSortHeaderVisible: templateHeaders.some((th) => String(th.textContent || '').trim().toLowerCase() === 'sort'),
+        templateRepairTypeHeaderVisible: templateHeaders.some((th) => String(th.textContent || '').trim().toLowerCase() === 'repair type id'),
+        templateFixedMmHeaderVisible: templateHeaders.some((th) => String(th.textContent || '').trim().toLowerCase() === 'fixed mm'),
+        repairDragHandleCount: document.querySelectorAll('#materialRulesRepairTypesBody .material-rules-row-drag-handle').length,
+        templateDragHandleCount: document.querySelectorAll('.material-rules-template-section .material-rules-row-drag-handle').length,
         measuredSelectorsAllSelect: measuredSelectors.every((el) => !!el && el.tagName === 'SELECT'),
         hasLabourInTemplateProduct,
         hasLabourInMeasured,
@@ -336,11 +415,37 @@ async function run() {
     if (desktopMaterialRulesViewState.templateRowIdBadgeVisible) {
       throw new Error('Desktop Material Rules regression: template internal row ID badge should not be visible');
     }
-    if (desktopMaterialRulesViewState.templateRepairTypeTag !== 'SELECT') {
-      throw new Error('Desktop Material Rules regression: template repair type control should be a dropdown');
+    if (desktopMaterialRulesViewState.templateRepairTypeTag !== null) {
+      throw new Error('Desktop Material Rules regression: template repair type control should not be visible');
     }
     if (desktopMaterialRulesViewState.templateProductTag !== 'SELECT') {
       throw new Error('Desktop Material Rules regression: template product control should be a dropdown');
+    }
+    if (desktopMaterialRulesViewState.templateFixedLengthVisible) {
+      throw new Error('Desktop Material Rules regression: template fixed length control should not be visible');
+    }
+    if (desktopMaterialRulesViewState.globalAddTemplateBtnExists) {
+      throw new Error('Desktop Material Rules regression: global Add Template button should not be present');
+    }
+    if (desktopMaterialRulesViewState.templateGroupCount < 2 || desktopMaterialRulesViewState.templateSectionBodyCount < 2) {
+      throw new Error('Desktop Material Rules regression: grouped template sections should render per repair type');
+    }
+    if (desktopMaterialRulesViewState.templateAddButtonCount < 2) {
+      throw new Error('Desktop Material Rules regression: each repair type section should have an Add Template button');
+    }
+    if (
+      desktopMaterialRulesViewState.repairSortHeaderVisible
+      || desktopMaterialRulesViewState.templateSortHeaderVisible
+      || desktopMaterialRulesViewState.templateRepairTypeHeaderVisible
+      || desktopMaterialRulesViewState.templateFixedMmHeaderVisible
+    ) {
+      throw new Error('Desktop Material Rules regression: hidden template/reorder columns should not be visible');
+    }
+    if (desktopMaterialRulesViewState.repairDragHandleCount < 2) {
+      throw new Error('Desktop Material Rules regression: repair type rows should have drag handles');
+    }
+    if (desktopMaterialRulesViewState.templateDragHandleCount < 2) {
+      throw new Error('Desktop Material Rules regression: template rows should have drag handles');
     }
     if (!desktopMaterialRulesViewState.measuredSelectorsAllSelect) {
       throw new Error('Desktop Material Rules regression: measured product controls should all be dropdowns');
@@ -350,6 +455,150 @@ async function run() {
     }
     if (desktopMaterialRulesViewState.hasLabourInMeasured) {
       throw new Error('Desktop Material Rules regression: measured product dropdowns should exclude REP-LAB');
+    }
+    const desktopMaterialRulesReorderState = await page.evaluate(async () => {
+      const legacyTemplateId = '11111111-1111-1111-1111-111111111111';
+      const patchState = window.__quoteAppE2eMaterialRulesFetchPatch;
+      const saveBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
+
+      const reorderByHandleToEnd = (tbody, idField) => {
+        if (!(tbody instanceof HTMLElement)) return { before: [], after: [], moved: false };
+        const readOrder = () => Array.from(tbody.querySelectorAll('tr'))
+          .map((row) => String(row?.dataset?.[idField] || '').trim())
+          .filter(Boolean);
+        const before = readOrder();
+        const sourceRow = tbody.querySelector('tr');
+        const handle = sourceRow?.querySelector('.material-rules-row-drag-handle');
+        if (!(sourceRow instanceof HTMLTableRowElement) || !(handle instanceof HTMLElement)) {
+          return { before, after: readOrder(), moved: false };
+        }
+        const dataTransfer = typeof DataTransfer === 'function' ? new DataTransfer() : null;
+        const bodyRect = tbody.getBoundingClientRect();
+        const dropY = bodyRect.bottom + 40;
+        handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+        tbody.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: dropY }));
+        tbody.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientY: dropY }));
+        handle.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
+        const after = readOrder();
+        return {
+          before,
+          after,
+          moved: before.length > 1 && before[0] === after[after.length - 1],
+        };
+      };
+
+      const repairBody = document.querySelector('#materialRulesRepairTypesBody');
+      const templateBodies = Array.from(document.querySelectorAll('tbody[data-material-rules-template-section-body="true"]'));
+      const targetTemplateBody = templateBodies.find((body) => String(body?.dataset?.repairTypeId || '').trim() === 'joiner_replacement')
+        || templateBodies.find((body) => body.querySelectorAll('tr').length > 1)
+        || templateBodies[0];
+      const targetTemplateRepairTypeId = String(targetTemplateBody?.dataset?.repairTypeId || '').trim();
+
+      const repair = reorderByHandleToEnd(repairBody, 'repairTypeId');
+      const templates = reorderByHandleToEnd(targetTemplateBody, 'templateId');
+
+      if (patchState) {
+        patchState.capturedRepairTypesPayload = null;
+        patchState.capturedTemplatesPayload = null;
+      }
+      saveBtn?.click();
+
+      const waitForCapture = async () => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 4000) {
+          const capturedRepair = patchState?.capturedRepairTypesPayload;
+          const capturedTemplates = patchState?.capturedTemplatesPayload;
+          if (capturedRepair && capturedTemplates) {
+            return {
+              repair: (capturedRepair?.repair_types || []).slice(),
+              templates: (capturedTemplates?.templates || []).slice(),
+            };
+          }
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        return { repair: [], templates: [] };
+      };
+
+      const firstSave = await waitForCapture();
+
+      const legacyRow = document.querySelector(`tr[data-template-id="${legacyTemplateId}"]`);
+      const legacyQtyInput = legacyRow?.querySelector('.material-rules-template-qty');
+      if (legacyQtyInput instanceof HTMLInputElement) {
+        legacyQtyInput.value = '0.75';
+        legacyQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+        legacyQtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      if (patchState) {
+        patchState.capturedRepairTypesPayload = null;
+        patchState.capturedTemplatesPayload = null;
+      }
+      saveBtn?.click();
+      const secondSave = await waitForCapture();
+
+      return {
+        repair,
+        templates,
+        targetTemplateRepairTypeId,
+        legacyTemplateId,
+        firstSave,
+        secondSave,
+      };
+    });
+    if (!desktopMaterialRulesReorderState.repair.moved) {
+      throw new Error('Desktop Material Rules regression: repair type drag reorder did not change row order');
+    }
+    if (!desktopMaterialRulesReorderState.templates.moved) {
+      throw new Error('Desktop Material Rules regression: template drag reorder did not change row order');
+    }
+    const capturedRepairTypes = desktopMaterialRulesReorderState.firstSave?.repair || [];
+    if (capturedRepairTypes.length !== desktopMaterialRulesReorderState.repair.after.length) {
+      throw new Error('Desktop Material Rules regression: repair type save payload row count mismatch');
+    }
+    const repairPayloadOrder = capturedRepairTypes.map((row) => String(row?.id || '').trim());
+    if (JSON.stringify(repairPayloadOrder) !== JSON.stringify(desktopMaterialRulesReorderState.repair.after)) {
+      throw new Error('Desktop Material Rules regression: repair type save payload order should match reordered DOM order');
+    }
+    const repairSortOrders = capturedRepairTypes.map((row) => Number(row?.sort_order));
+    if (JSON.stringify(repairSortOrders) !== JSON.stringify(capturedRepairTypes.map((_, idx) => (idx + 1) * 10))) {
+      throw new Error('Desktop Material Rules regression: repair type save payload sort_order should be sequential 10-step values');
+    }
+    const capturedTemplatesFirst = desktopMaterialRulesReorderState.firstSave?.templates || [];
+    const capturedTemplatesSecond = desktopMaterialRulesReorderState.secondSave?.templates || [];
+    if (!capturedTemplatesFirst.length || !capturedTemplatesSecond.length) {
+      throw new Error('Desktop Material Rules regression: template save payloads should be captured for both saves');
+    }
+    const templatesByRepairTypeFirst = new Map();
+    capturedTemplatesFirst.forEach((row) => {
+      const repairTypeId = String(row?.repair_type_id || '').trim();
+      if (!templatesByRepairTypeFirst.has(repairTypeId)) templatesByRepairTypeFirst.set(repairTypeId, []);
+      templatesByRepairTypeFirst.get(repairTypeId).push(row);
+    });
+    templatesByRepairTypeFirst.forEach((rowsForType) => {
+      const expected = rowsForType.map((_, idx) => (idx + 1) * 10);
+      const actual = rowsForType.map((row) => Number(row?.sort_order));
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error('Desktop Material Rules regression: template sort_order should be sequential per repair type section');
+      }
+    });
+    const targetRepairTypeId = String(desktopMaterialRulesReorderState.targetTemplateRepairTypeId || '').trim();
+    const targetPayloadRows = templatesByRepairTypeFirst.get(targetRepairTypeId) || [];
+    const targetPayloadOrder = targetPayloadRows.map((row) => String(row?.id || '').trim());
+    if (JSON.stringify(targetPayloadOrder) !== JSON.stringify(desktopMaterialRulesReorderState.templates.after)) {
+      throw new Error('Desktop Material Rules regression: template payload order should match reordered section row order');
+    }
+    const legacyTemplateId = String(desktopMaterialRulesReorderState.legacyTemplateId || '').trim();
+    const legacyTemplateFirst = capturedTemplatesFirst.find((row) => String(row?.id || '').trim() === legacyTemplateId);
+    const legacyTemplateSecond = capturedTemplatesSecond.find((row) => String(row?.id || '').trim() === legacyTemplateId);
+    if (!legacyTemplateFirst || !legacyTemplateSecond) {
+      throw new Error('Desktop Material Rules regression: legacy fixed_mm row missing from save payload');
+    }
+    if (String(legacyTemplateFirst.length_mode || '').trim() !== 'fixed_mm' || Number(legacyTemplateFirst.fixed_length_mm) !== 1200) {
+      throw new Error('Desktop Material Rules regression: untouched legacy fixed_mm row should remain fixed_mm with original fixed_length_mm');
+    }
+    if (String(legacyTemplateSecond.length_mode || '').trim() !== 'missing_measurement' || legacyTemplateSecond.fixed_length_mm !== null) {
+      throw new Error('Desktop Material Rules regression: edited legacy fixed_mm row should convert to missing_measurement with null fixed_length_mm');
     }
     await page.evaluate(() => {
       if (window.__quoteAppE2eMaterialRulesFetchPatch?.originalFetch) {

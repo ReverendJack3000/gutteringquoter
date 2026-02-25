@@ -750,8 +750,8 @@
                 <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
                   <thead>
                     <tr>
+                      <th scope="col">Reorder</th>
                       <th scope="col">Label</th>
-                      <th scope="col">Sort</th>
                       <th scope="col">Needs Profile</th>
                       <th scope="col">Needs Size</th>
                       <th scope="col">Active</th>
@@ -765,27 +765,8 @@
             <div class="material-rules-subsection">
               <div class="material-rules-subsection-head">
                 <h3>Part Templates</h3>
-                <button type="button" id="btnMaterialRulesAddTemplate" class="btn">Add Template</button>
               </div>
-              <div class="material-rules-table-wrap">
-                <table class="material-rules-table material-rules-table--templates" aria-label="Quick Quoter templates table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Repair Type ID</th>
-                      <th scope="col">Product ID</th>
-                      <th scope="col">Qty/Unit</th>
-                      <th scope="col">Profile</th>
-                      <th scope="col">Size</th>
-                      <th scope="col">Length Mode</th>
-                      <th scope="col">Fixed mm</th>
-                      <th scope="col">Active</th>
-                      <th scope="col">Sort</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="materialRulesTemplatesBody"></tbody>
-                </table>
-              </div>
+              <div id="materialRulesTemplateGroups" class="material-rules-template-groups" aria-label="Quick Quoter templates sections"></div>
             </div>
           </section>
         </main>
