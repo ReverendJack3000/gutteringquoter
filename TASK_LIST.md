@@ -56,19 +56,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/61-1-technician-create-new-job-only
-- Based on: main
-- Status: In Progress
-- Related Tasks:
-  - [x] 61.1 Technician: Create New Job only (no Add to Job)
-  - [x] 61.2 Mandatory "Are you doing it now?" modal
-  - [x] 61.3 Co-seller dropdown in that modal
-  - [x] 61.4 Default labour cost $33; technician quantity-only (no edit labour cost)
-  - [x] 61.5 Labour stepper 0.25
-  - [x] 61.6 Show minutes when total labour &lt; 1 hr
-  - [x] 61.7 Regression and role safety
-  - [x] QA audit fixes (touch 44px, No button label, co-seller selfId, quote-close Promise/listener cleanup)
-  - [x] QA audit follow-up: closeAllModals invokes doing-it-now abort (Promise/listener cleanup when modal closed by any path)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
