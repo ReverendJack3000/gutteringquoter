@@ -12438,6 +12438,7 @@ function initGlobalToolbar() {
   }
 
   function applyState() {
+    const activeEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     toolbar.classList.toggle('toolbar--collapsed', collapsed);
     wrap.classList.remove('global-toolbar-wrap--bottom');
     const viewCanvas = document.getElementById('view-canvas');
@@ -12450,7 +12451,34 @@ function initGlobalToolbar() {
     collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
     const span = collapseBtn.querySelector('.toolbar-collapse-btn-text');
     if (span) span.textContent = collapsed ? '+' : '−';
-    requestAnimationFrame(applyGlobalToolbarPadding);
+    requestAnimationFrame(() => {
+      applyGlobalToolbarPadding();
+      if (!collapsed || !activeEl || !toolbar.contains(activeEl)) return;
+      let activeStillVisible = false;
+      try {
+        const styles = window.getComputedStyle(activeEl);
+        activeStillVisible = activeEl.isConnected && activeEl.getClientRects().length > 0 && styles.display !== 'none' && styles.visibility !== 'hidden';
+      } catch (_) {}
+      if (activeStillVisible) return;
+
+      const generateQuoteBtn = document.getElementById('generateQuoteBtn');
+      const focusTarget = [collapseBtn, generateQuoteBtn].find((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        if (!el.isConnected || el.hidden || el.hasAttribute('disabled')) return false;
+        try {
+          const styles = window.getComputedStyle(el);
+          return el.getClientRects().length > 0 && styles.display !== 'none' && styles.visibility !== 'hidden';
+        } catch (_) {
+          return false;
+        }
+      });
+      if (!focusTarget) return;
+      try {
+        focusTarget.focus({ preventScroll: true });
+      } catch (_) {
+        focusTarget.focus();
+      }
+    });
   }
 
   globalToolbarController = {

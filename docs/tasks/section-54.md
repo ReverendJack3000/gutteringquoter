@@ -479,6 +479,15 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.109.3** **Desktop crop flow remains unchanged.** Preserve existing desktop crop modal behavior (`#cropModal`, `#cropUseFull`, `#cropApply`) and non-mobile upload UX.
 - [ ] **54.109.4** **Verification + manual QA + Railway safety sign-off.** E2E: desktop upload asserts crop modal appears, mobile upload asserts crop modal does not appear, mobile Quick Quoter entry visible pre-upload and hidden post-upload. Manual mobile QA (iOS Safari + Android Chrome) pending; confirm Railway deploy safety (frontend/docs-only diff, no env/build/config changes).
 
+**54.110 Mobile global header: collapsed state keeps Generate Quote visible (mobile-only, desktop unchanged, Railway-safe)**
+
+*Scope: In mobile `#globalToolbar` collapsed state, keep exactly Projects trigger + collapse/expand button + Generate Quote visible. Hide Save and other header actions while collapsed. Preserve desktop behavior and backend/deploy configuration.*
+
+- [x] **54.110.1** **CSS mobile collapsed header contract.** In `frontend/styles.css` under `body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed`, keep `#toolbarBreadcrumbsNav`, `#toolbarCollapseBtn`, and `#generateQuoteBtn` visible; hide `#newCanvasBtn`, `#saveDiagramBtn`, Undo/Redo, and all other `.toolbar-right` controls. Keep collapsed row readable by hiding `.breadcrumb-project-input` and maintaining 44px touch targets for visible controls.
+- [x] **54.110.2** **Focus safety on collapse.** In `frontend/app.js` `initGlobalToolbar()` `applyState()`, when collapse hides the current focused control, move focus to a visible target (`#toolbarCollapseBtn`, fallback `#generateQuoteBtn`) with prevent-scroll fallback, so focus never remains on hidden controls.
+- [x] **54.110.3** **E2E regression coverage for collapsed Generate Quote behavior.** In `e2e/run.js`, assert mobile collapsed header keeps `#generateQuoteBtn` visible and `#saveDiagramBtn` hidden, including products-panel auto-collapse path; assert tapping `#generateQuoteBtn` while collapsed opens the quote modal.
+- [ ] **54.110.4** **Manual mobile QA + Railway safety sign-off.** Verify iOS Safari + Android Chrome at 320/360/390 widths (portrait/landscape, 200% zoom): collapsed header shows Projects + collapse + Generate, no horizontal overflow, Generate remains tappable, desktop unchanged; confirm no Railway env/build/config changes.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

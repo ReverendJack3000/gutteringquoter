@@ -2810,6 +2810,22 @@ async function run() {
       }
       if (!headerCollapsedOnProductsOpen.panelExpanded) throw new Error('Mobile navigation: products panel should open from collapsed toggle');
       if (!headerCollapsedOnProductsOpen.headerCollapsed) throw new Error('Mobile navigation: opening products should auto-collapse global toolbar');
+      const collapsedHeaderActionState = await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        const generateBtn = document.getElementById('generateQuoteBtn');
+        const saveBtn = document.getElementById('saveDiagramBtn');
+        const isVisible = (el) => !!el && el.getClientRects().length > 0
+          && window.getComputedStyle(el).display !== 'none'
+          && window.getComputedStyle(el).visibility !== 'hidden';
+        return {
+          collapsed: !!toolbar && toolbar.classList.contains('toolbar--collapsed'),
+          generateVisible: isVisible(generateBtn),
+          saveVisible: isVisible(saveBtn),
+        };
+      });
+      if (!collapsedHeaderActionState.collapsed) throw new Error('Mobile header collapsed state expected while products panel is open');
+      if (!collapsedHeaderActionState.generateVisible) throw new Error('Mobile collapsed header: Generate Quote should stay visible');
+      if (collapsedHeaderActionState.saveVisible) throw new Error('Mobile collapsed header: Save should be hidden');
       await pointerTapSelector(mobilePage, '#panelClose');
       await delay(320);
       const headerRestoredAfterProductsClose = await mobilePage.evaluate(() => {
@@ -2823,6 +2839,63 @@ async function run() {
       if (!headerRestoredAfterProductsClose.panelCollapsed) throw new Error('Mobile navigation: products panel should close');
       if (!headerRestoredAfterProductsClose.headerExpanded) throw new Error('Mobile navigation: global toolbar should restore expanded state after products close');
       console.log('  ✓ Mobile products panel auto-collapses global toolbar and restores previous state');
+
+      // Mobile collapsed header contract: Generate visible, Save hidden, and Generate opens quote.
+      await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        const collapseBtn = document.getElementById('toolbarCollapseBtn');
+        if (toolbar && collapseBtn && !toolbar.classList.contains('toolbar--collapsed')) collapseBtn.click();
+      });
+      await delay(260);
+      const collapsedGenerateLaunchState = await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        const generateBtn = document.getElementById('generateQuoteBtn');
+        const saveBtn = document.getElementById('saveDiagramBtn');
+        const isVisible = (el) => !!el && el.getClientRects().length > 0
+          && window.getComputedStyle(el).display !== 'none'
+          && window.getComputedStyle(el).visibility !== 'hidden';
+        return {
+          collapsed: !!toolbar && toolbar.classList.contains('toolbar--collapsed'),
+          generateVisible: isVisible(generateBtn),
+          saveVisible: isVisible(saveBtn),
+        };
+      });
+      if (!collapsedGenerateLaunchState.collapsed) throw new Error('Mobile collapsed-header quote launch: expected toolbar collapsed');
+      if (!collapsedGenerateLaunchState.generateVisible) throw new Error('Mobile collapsed-header quote launch: Generate Quote should be visible');
+      if (collapsedGenerateLaunchState.saveVisible) throw new Error('Mobile collapsed-header quote launch: Save should be hidden');
+      await clickSelectorViaDom(mobilePage, '#generateQuoteBtn');
+      await delay(700);
+      const quoteOpenedFromCollapsedHeader = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('quoteModal');
+        return !!modal && !modal.hasAttribute('hidden');
+      });
+      if (!quoteOpenedFromCollapsedHeader) {
+        throw new Error('Mobile collapsed-header quote launch: tapping Generate Quote should open quote modal');
+      }
+      await mobilePage.evaluate(() => {
+        const backBtn = document.getElementById('quoteModalBackBtn');
+        const closeBtn = document.getElementById('closeQuoteBtn');
+        if (backBtn && !backBtn.closest('[hidden]')) {
+          backBtn.click();
+          return;
+        }
+        if (closeBtn) closeBtn.click();
+      });
+      await delay(260);
+      const quoteClosedAfterCollapsedLaunch = await mobilePage.evaluate(() => {
+        const modal = document.getElementById('quoteModal');
+        return !modal || modal.hasAttribute('hidden');
+      });
+      if (!quoteClosedAfterCollapsedLaunch) {
+        throw new Error('Mobile collapsed-header quote launch: quote modal should close after tapping back/close');
+      }
+      await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('globalToolbar');
+        const collapseBtn = document.getElementById('toolbarCollapseBtn');
+        if (toolbar && collapseBtn && toolbar.classList.contains('toolbar--collapsed')) collapseBtn.click();
+      });
+      await delay(240);
+      console.log('  ✓ Mobile collapsed header keeps Generate Quote visible, hides Save, and opens quote modal');
 
       // Mobile floating toolbar should stay below global header safe area.
       const movedNearTop = await mobilePage.evaluate((id) => {

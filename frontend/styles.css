@@ -2130,6 +2130,49 @@ body[data-viewport-mode="mobile"] #globalToolbar .btn-save-diagram {
   font-size: clamp(0.8125rem, 0.2vw + 0.75rem, 0.9375rem);
 }
 
+/* 54.110: Mobile collapsed header keeps Projects + Collapse + Generate Quote visible. */
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed > #newCanvasBtn.toolbar-new-canvas-btn {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .breadcrumb-project-input,
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed #breadcrumbGoBackBtn {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-right {
+  display: flex !important;
+  flex-basis: auto;
+  flex: 0 0 auto;
+  order: 1;
+  margin-top: 0;
+  margin-left: 0;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-collapse-btn {
+  order: 2;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed .toolbar-right > :not(#generateQuoteBtn) {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] #globalToolbar.toolbar--collapsed #generateQuoteBtn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 0.875rem;
+  white-space: nowrap;
+}
+
 body[data-viewport-mode="mobile"] .workspace {
   position: relative;
 }
@@ -2727,8 +2770,9 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floatin
   background: transparent;
 }
 
-/* 54.72: Placeholder – 44px tap target for icon area (Camera/instruction entry point) */
+/* 54.72: Placeholder – 44px tap target for icon area; width 92% to match Quick Quote button below */
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
+  width: 92%;
   max-width: 92%;
   min-height: 7.5rem;
   padding: 1.5rem 1.25rem;
@@ -2736,11 +2780,27 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
 body[data-viewport-mode="mobile"] .quick-quoter-entry {
   display: flex;
 }
-/* 62.16: Same vertical padding as camera section; blue button (non–high-contrast) below */
+/* 62.16: 44px height compact button, same width as camera card (92%); blue (non–high-contrast) below */
 body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card {
+  width: 92%;
   max-width: 92%;
-  min-height: 3.75rem;
-  padding: 1.5rem 1.25rem;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card .placeholder-steps {
+  display: none;
+}
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card .placeholder-icon,
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card .placeholder-icon svg {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  margin-bottom: 0;
 }
 body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-card {
   background: #007aff;
@@ -2782,6 +2842,48 @@ body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-title {
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps,
 body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-steps {
   font-size: var(--font-size-small);
+}
+
+/* 62.17: Desktop Quick Quote entry – same blue button treatment as mobile; 44px height, row layout, same width as camera */
+body[data-viewport-mode="desktop"] .canvas-placeholder .placeholder-card {
+  width: 100%;
+  max-width: 500px;
+}
+body[data-viewport-mode="desktop"] .quick-quoter-entry .placeholder-card {
+  width: 100%;
+  max-width: 500px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+body[data-viewport-mode="desktop"] .quick-quoter-entry .placeholder-card .placeholder-steps {
+  display: none;
+}
+body[data-viewport-mode="desktop"] .quick-quoter-entry .placeholder-card .placeholder-icon,
+body[data-viewport-mode="desktop"] .quick-quoter-entry .placeholder-card .placeholder-icon svg {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  margin-bottom: 0;
+}
+body[data-viewport-mode="desktop"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-card {
+  background: #007aff;
+  border-color: transparent;
+  color: #fff;
+}
+body[data-viewport-mode="desktop"]:not(.a11y-high-contrast) .quick-quoter-entry .quick-quoter-entry-icon {
+  color: #fff;
+}
+body[data-viewport-mode="desktop"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-title,
+body[data-viewport-mode="desktop"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-steps {
+  color: #fff;
+}
+body[data-viewport-mode="desktop"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-card:focus-visible {
+  outline-color: #fff;
 }
 
 body[data-viewport-mode="mobile"] .measurement-deck {

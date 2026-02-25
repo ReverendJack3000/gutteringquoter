@@ -99,8 +99,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.102.1–54.102.4 | (Mobile-only) Prevent double-tap zoom on canvas view; Fit in global toolbar; double-tap empty canvas → Fit; QA. Plan: docs/plans/2026-02-22-mobile-double-tap-zoom-and-graceful-zoom-out.md. |
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
+| 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 62 | 62.15, 62.16 | (62.15) Quick Quoter desktop parity follow-up verification; manual QA/sign-off pending. (62.16) Mobile Quick Quoter entry: blue button (#007aff), white SVG/text, same vertical padding as camera section (1.5rem); mobile-only CSS. |
+| 62 | 62.15, 62.16, 62.17 | (62.15) Quick Quoter desktop parity follow-up verification; manual QA/sign-off pending. (62.16) Mobile Quick Quote entry: blue button, 44px height, same width as camera; done. (62.17) Desktop Quick Quote entry: same blue button treatment as mobile; CSS under body[data-viewport-mode="desktop"]. |
 | 63 | 63.9, 63.16, **63.17** | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). **(63.17) Material Rules section order: Measured-Length first, Quick Quoter second (HTML reorder only).** |
 ---
 
