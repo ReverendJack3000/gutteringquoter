@@ -777,11 +777,21 @@ function setMobileOrientationTargetDataAttr(target) {
   if (document.documentElement) document.documentElement.dataset.mobileOrientationTarget = normalizedTarget;
 }
 
+function hasVisibleAccessibleModalInStack() {
+  for (let i = modalA11yState.stack.length - 1; i >= 0; i -= 1) {
+    const entry = modalA11yState.stack[i];
+    const cfg = modalA11yState.registry.get(entry.id);
+    const modalEl = cfg?.element;
+    if (modalEl instanceof HTMLElement && !modalEl.hasAttribute('hidden')) return true;
+  }
+  return false;
+}
+
 function getMobileOrientationTarget() {
   if (layoutState.viewportMode !== 'mobile') return 'none';
   const visibleViewId = getVisibleViewId();
   if (visibleViewId !== 'view-canvas') return 'portrait';
-  if (modalA11yState.stack.length > 0) return 'portrait';
+  if (hasVisibleAccessibleModalInStack()) return 'portrait';
   return 'landscape';
 }
 
@@ -1999,13 +2009,20 @@ function syncMobileQuoteLineSummaries() {
         plusBtn.setAttribute('aria-label', isLabourRow ? 'Increase hours' : 'Increase quantity');
         plusBtn.textContent = '+';
         stepperWrap.appendChild(minusBtn);
-        stepperWrap.appendChild(valueSpan);
-        stepperWrap.appendChild(plusBtn);
         const step = qtyMeta.step;
         let updateStepperValue;
         let applyStep;
         if (isLabourRow) {
           const hoursInput = row.querySelector('.quote-labour-hours-input');
+          const unitSpan = document.createElement('span');
+          unitSpan.className = 'quote-labour-stepper-unit';
+          unitSpan.setAttribute('aria-hidden', 'true');
+          const valueBlock = document.createElement('span');
+          valueBlock.className = 'quote-labour-stepper-value-block';
+          valueBlock.appendChild(valueSpan);
+          valueBlock.appendChild(unitSpan);
+          stepperWrap.appendChild(valueBlock);
+          stepperWrap.appendChild(plusBtn);
           if (hoursInput) {
             qtyCell.innerHTML = '';
             qtyCell.appendChild(stepperWrap);
@@ -2017,7 +2034,8 @@ function syncMobileQuoteLineSummaries() {
           }
           updateStepperValue = () => {
             const h = parseFloat(hoursInput?.value) || 0;
-            valueSpan.textContent = formatLabourHoursDisplay(h);
+            valueSpan.textContent = formatQuoteQtyDisplay(h);
+            unitSpan.textContent = h === 1 ? ' hr' : ' hrs';
           };
           applyStep = (delta) => {
             const current = parseFloat(hoursInput?.value) || 0;
@@ -2027,7 +2045,11 @@ function syncMobileQuoteLineSummaries() {
             updateStepperValue();
             calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
           };
-        } else if (isMetresRow) {
+        } else {
+          stepperWrap.appendChild(valueSpan);
+          stepperWrap.appendChild(plusBtn);
+        }
+        if (isMetresRow) {
           qtyCell.querySelector('.quote-qty-metres-input')?.remove();
           qtyCell.innerHTML = '';
           qtyCell.appendChild(stepperWrap);
@@ -2067,10 +2089,51 @@ function syncMobileQuoteLineSummaries() {
         minusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(-step); });
         plusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(step); });
       }
+      if (isLabourRow && stepperWrap && !stepperWrap.querySelector('.quote-labour-stepper-value-block')) {
+        const valueSpan = stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
+        const unitSpan = stepperWrap.querySelector('.quote-labour-stepper-unit') || (() => {
+          const u = document.createElement('span');
+          u.className = 'quote-labour-stepper-unit';
+          u.setAttribute('aria-hidden', 'true');
+          return u;
+        })();
+        const plusBtn = stepperWrap.querySelector('.quote-mobile-qty-stepper-btn--plus');
+        if (valueSpan && plusBtn) {
+          const valueBlock = document.createElement('span');
+          valueBlock.className = 'quote-labour-stepper-value-block';
+          valueBlock.appendChild(valueSpan);
+          valueBlock.appendChild(unitSpan);
+          stepperWrap.insertBefore(valueBlock, plusBtn);
+        }
+      }
+      if (isLabourRow) {
+        let hoursInput = row.querySelector('.quote-labour-hours-input');
+        if (!hoursInput) {
+          hoursInput = document.createElement('input');
+          hoursInput.type = 'number';
+          hoursInput.className = 'quote-labour-hours-input';
+          hoursInput.min = '0';
+          hoursInput.step = '0.25';
+          const fallbackHours = quoteLineEditorState.rowType === 'labour' && quoteLineEditorState.rowUid === row.dataset.quoteRowUid
+            ? quoteLineEditorState.draftQty
+            : qtyMeta.value;
+          hoursInput.value = formatQuoteQtyDisplay(Number.isFinite(fallbackHours) ? fallbackHours : 0);
+          hoursInput.setAttribute('aria-label', 'Labour hours');
+          hoursInput.addEventListener('input', () => updateLabourRowTotal(row));
+          hoursInput.addEventListener('change', () => updateLabourRowTotal(row));
+        }
+        if (hoursInput) {
+          if (!qtyCell.contains(hoursInput)) qtyCell.appendChild(hoursInput);
+          hoursInput.classList.add('quote-labour-hours-input--hidden-mobile');
+        }
+      }
       const valueSpan = stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
       if (valueSpan) {
-        if (isLabourRow) valueSpan.textContent = formatLabourHoursDisplay(qtyMeta.value);
-        else if (isMetresRow) {
+        if (isLabourRow) {
+          valueSpan.textContent = formatQuoteQtyDisplay(qtyMeta.value);
+          const unitSpan = stepperWrap.querySelector('.quote-labour-stepper-unit');
+          if (unitSpan) unitSpan.textContent = qtyMeta.value === 1 ? ' hr' : ' hrs';
+        } else if (isMetresRow) {
           const m = qtyMeta.value;
           const s = Number(m) === m && m % 1 !== 0 ? m.toFixed(1) : String(m);
           valueSpan.textContent = s + ' m';
@@ -2079,29 +2142,27 @@ function syncMobileQuoteLineSummaries() {
     }
 
     if (row.dataset.labourRow === 'true' && isMobile) {
-      let warnIcon = qtyCell.querySelector('.quote-labour-zero-warning-icon');
-      const stepperWrap = qtyCell.querySelector('.quote-mobile-qty-stepper');
-      const valueSpan = stepperWrap && stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
+      const productCell = row.cells[0];
+      const labourLabel = productCell && productCell.querySelector('.quote-labour-label');
+      let warnIcon = row.querySelector('.quote-labour-zero-warning-icon');
       if (totalLabourHours <= 0) {
         if (!warnIcon) {
           warnIcon = document.createElement('span');
           warnIcon.className = 'quote-labour-zero-warning-icon';
           warnIcon.setAttribute('aria-hidden', 'true');
           warnIcon.textContent = '\u26A0\uFE0F';
-          if (stepperWrap && valueSpan) {
-            stepperWrap.insertBefore(warnIcon, valueSpan.nextSibling);
-          } else {
-            qtyCell.appendChild(warnIcon);
-          }
-        } else if (stepperWrap && valueSpan && warnIcon.parentNode !== stepperWrap) {
-          stepperWrap.insertBefore(warnIcon, valueSpan.nextSibling);
+        }
+        if (productCell && labourLabel && warnIcon.parentNode !== productCell) {
+          productCell.insertBefore(warnIcon, labourLabel);
+        } else if (productCell && !labourLabel && warnIcon.parentNode !== productCell) {
+          productCell.insertBefore(warnIcon, productCell.firstChild);
         }
         warnIcon.hidden = false;
       } else if (warnIcon) {
         warnIcon.hidden = true;
       }
     } else {
-      const warnIcon = qtyCell.querySelector('.quote-labour-zero-warning-icon');
+      const warnIcon = row.querySelector('.quote-labour-zero-warning-icon');
       if (warnIcon) warnIcon.hidden = true;
     }
 
@@ -2965,6 +3026,8 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null) {
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
   const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
+
+  closeQuickQuoterModal({ restoreFocus: false });
 
   if (tableBody) tableBody.innerHTML = '';
   if (materialsTotalDisplay) materialsTotalDisplay.textContent = '0.00';
@@ -6319,8 +6382,10 @@ function updatePlaceholderVisibility() {
   }
   const quickQuoterEntry = document.getElementById('quickQuoterEntry');
   if (quickQuoterEntry) {
-    if (state.blueprintImage) quickQuoterEntry.setAttribute('hidden', '');
-    else quickQuoterEntry.removeAttribute('hidden');
+    if (state.blueprintImage) {
+      quickQuoterEntry.setAttribute('hidden', '');
+      closeQuickQuoterModal({ restoreFocus: false });
+    } else quickQuoterEntry.removeAttribute('hidden');
   }
 }
 
@@ -15722,8 +15787,9 @@ function openAccessibleModal(id, options = {}) {
     ? options.triggerEl
     : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
-  const existingIndex = modalA11yState.stack.findIndex((entry) => entry.id === id);
-  if (existingIndex !== -1) modalA11yState.stack.splice(existingIndex, 1);
+  for (let i = modalA11yState.stack.length - 1; i >= 0; i -= 1) {
+    if (modalA11yState.stack[i].id === id) modalA11yState.stack.splice(i, 1);
+  }
   modalA11yState.stack.push({ id, trigger: triggerEl });
 
   cfg.element.removeAttribute('hidden');
@@ -15745,8 +15811,12 @@ function closeAccessibleModal(id, options = {}) {
   const cfg = modalA11yState.registry.get(id);
   if (!cfg || !(cfg.element instanceof HTMLElement)) return false;
 
-  const stackIndex = modalA11yState.stack.findIndex((entry) => entry.id === id);
-  const entry = stackIndex === -1 ? null : modalA11yState.stack.splice(stackIndex, 1)[0];
+  let entry = null;
+  for (let i = modalA11yState.stack.length - 1; i >= 0; i -= 1) {
+    if (modalA11yState.stack[i].id !== id) continue;
+    const removed = modalA11yState.stack.splice(i, 1)[0];
+    if (!entry) entry = removed;
+  }
   cfg.element.setAttribute('hidden', '');
   if (typeof cfg.onClose === 'function') cfg.onClose(options);
 
@@ -16652,6 +16722,9 @@ if (typeof window !== 'undefined') {
       supported: mobileOrientationPolicyState.supported,
     };
   };
+  window.__quoteAppSyncMobileQuoteLineSummaries = function () {
+    syncMobileQuoteLineSummaries();
+  };
   window.__quoteAppGetMobileGestureDiagnostics = function () {
     const activePointerCount = Object.keys(state.activePointers || {}).length;
     return {
@@ -16712,6 +16785,23 @@ if (typeof window !== 'undefined') {
     if (!Number.isFinite(ndx) || !Number.isFinite(ndy)) return false;
     el.x += ndx;
     el.y += ndy;
+    if (typeof setSelection === 'function') setSelection([id]);
+    if (typeof draw === 'function') draw();
+    return true;
+  };
+  // E2E helper: deterministic resize for flaky pointer drag environments.
+  window.__quoteAppSetElementSize = function (id, width, height) {
+    const el = state.elements.find((e) => e.id === id);
+    if (!el || el.locked) return false;
+    const nextW = Number(width);
+    const nextH = Number(height);
+    if (!Number.isFinite(nextW) || !Number.isFinite(nextH) || nextW <= 0 || nextH <= 0) return false;
+    const cx = el.x + (el.width / 2);
+    const cy = el.y + (el.height / 2);
+    el.width = Math.max(MIN_RESIZE_DIM, nextW);
+    el.height = Math.max(MIN_RESIZE_DIM, nextH);
+    el.x = cx - (el.width / 2);
+    el.y = cy - (el.height / 2);
     if (typeof setSelection === 'function') setSelection([id]);
     if (typeof draw === 'function') draw();
     return true;

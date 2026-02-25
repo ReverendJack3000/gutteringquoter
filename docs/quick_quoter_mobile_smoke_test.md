@@ -1,4 +1,4 @@
-# Quick Quoter – Mobile UI smoke test (Done → quote modal)
+# Quick Quoter – Mobile + Desktop smoke test (Done → quote modal)
 
 **Purpose:** Quick check that the Quick Quoter Done flow opens the quote modal with merged elements, shows Metres? rows for `missing_measurements`, and applies quantity-scaling when the user enters metres.
 
@@ -6,10 +6,11 @@
 
 ---
 
-## 1. Setup (mobile viewport)
+## 1. Setup (viewport coverage)
 
 - Open **http://127.0.0.1:8000/?viewport=mobile** (or use DevTools device toolbar / real device).
 - Ensure you’re in **canvas view** (diagram area visible).
+- Open **http://127.0.0.1:8000/?viewport=desktop** for desktop parity checks.
 
 ---
 
@@ -38,7 +39,7 @@
 
 ## 4. Quick pass/fail
 
-- **Pass:** Done opens quote modal; resolved elements and missing_measurements rows appear; Metres? rows accept metres and recalc with **effective_metres = entered × resolver quantity**; no console errors; desktop unchanged (test without `?viewport=mobile` that QQ entry is not required and quote flow still works from Generate Quote).
+- **Pass:** On desktop and mobile, Quick Quoter entry is visible before blueprint upload and hidden after blueprint upload. Done opens quote modal; resolved elements and missing_measurements rows appear; Metres? rows accept metres and recalc with **effective_metres = entered × resolver quantity**; no console errors.
 - **Fail:** Catalog doesn’t load (check network/DB), Done doesn’t open quote or merge, no Metres? rows, or scaling is wrong (e.g. qty ignores resolver quantity).
 
 ---

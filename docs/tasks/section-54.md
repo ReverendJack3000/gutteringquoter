@@ -326,6 +326,12 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 - [x] **54.93.9.1** **Mobile quote: Product vs Qty column visual separation.** Under `body[data-viewport-mode="mobile"] #quoteModal`, refine the separation between the Product column (td:nth-child(1), 70%) and Qty column (td:nth-child(2), 30%)—e.g. add a subtle vertical divider, adjust padding/border, or column edge so the two columns read clearly without relying only on whitespace. Preserve 44px touch targets and existing stepper/remove/plus layout; desktop unchanged.
 
+**54.93.10 Mobile quote modal: right-hand padding and Qty column polish**
+*Plan: docs/plans/2026-02-25-mobile-quote-modal-padding-and-qty-column.md. Scope: mobile-only; quote modal content is inset from screen edges (safe-area aware); Qty column (header + section-header metres + material rows) has consistent padding and alignment; desktop unchanged; Railway-safe.*
+
+- [x] **54.93.10.1** **Mobile quote modal: horizontal padding and safe-area.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"] #quoteModal .quote-modal-content` (and fullscreen variant), add horizontal padding using `padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right))` so content is not hard against the screen or cut off; keep vertical padding as-is.
+- [x] **54.93.10.2** **Mobile quote: Qty column polish.** Under `body[data-viewport-mode="mobile"] #quoteModal`, for `.quote-parts-table th:nth-child(2)` and `.quote-parts-table td:nth-child(2)` (covers header “Qty”, section-header metre stepper rows, and all material/dependent rows with stepper): add padding-right (e.g. 12px) and optional padding-left for symmetry; optionally center-align (text-align: center) so “Qty” and steppers are consistent; preserve 44px touch targets and row heights.
+
 **54.94 Mobile navigation + popover smoothing (toolbar/header/panel coherence)**  
 *Scope: mobile-only interaction polish; desktop unchanged; Railway-safe.*
 

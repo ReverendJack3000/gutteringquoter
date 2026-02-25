@@ -70,6 +70,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    - Toggle **Technical drawing** on/off to switch blueprint style.
    - Open the right panel (chevron if collapsed); drag products onto the blueprint.
    - Select an element to move, resize (corners), or rotate (top handle).
+   - On desktop and mobile, Quick Quoter appears in canvas view before a blueprint is loaded; once a blueprint exists, the Quick Quoter entry is hidden.
    - On mobile, tap a measurable element to select it, then use the ruler button in the floating toolbar to open the length keypad popover.
    - On mobile, photo uploads use the full image directly (no crop modal/options); desktop upload flow still includes crop controls.
    - On mobile, the diagram canvas view requests `landscape` orientation when no modal is open.

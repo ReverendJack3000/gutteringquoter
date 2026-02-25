@@ -1785,7 +1785,7 @@ body.a11y-force-motion .toggle-icon::after {
 }
 
 .quick-quoter-entry {
-  display: none;
+  display: flex;
 }
 
 .canvas-placeholder .placeholder-card,
@@ -7616,7 +7616,8 @@ body[data-viewport-mode="mobile"] #quoteModal.quote-modal--mobile-fullscreen .qu
   max-height: 100dvh;
   border-radius: 0;
   box-shadow: none;
-  padding: 0;
+  padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+  padding-block: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -7881,6 +7882,14 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2)
   border-left: 1px solid #e5e7eb;
 }
 
+/* 54.93.10.2: Qty column polish – padding and alignment (header, section-header metres, material rows) */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table th:nth-child(2),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td:nth-child(2) {
+  padding-left: 12px;
+  padding-right: 12px;
+  text-align: center;
+}
+
 body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-hours-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-line-qty-input,
 body[data-viewport-mode="mobile"] #quoteModal .quote-empty-qty-input {
@@ -8029,22 +8038,42 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-btn {
   width: 100%;
 }
 
+/* Labour row: warning icon in front of "Labour" label when 0 hrs (mobile) */
 body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon {
   display: inline-block;
-  margin-left: 6px;
+  margin-right: 6px;
   font-size: 14px;
   vertical-align: middle;
   line-height: 1;
 }
-/* Inline inside labour stepper so row height doesn't expand */
-body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper .quote-labour-zero-warning-icon {
-  flex-shrink: 0;
-  align-self: center;
-  margin-left: 4px;
+/* Keep icon content-sized so "Labour" sits just after it (override first-cell span flex grow; match specificity of .quote-mobile-editable-line td:first-child > span) */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-row-labour.quote-mobile-editable-line td:first-child .quote-labour-zero-warning-icon {
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 1.25em;
+  min-width: 1em;
+  box-sizing: border-box;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon[hidden] {
   display: none;
+}
+
+/* Labour stepper: value and "hrs" stacked (number over hrs) so spacing matches other steppers */
+body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-stepper-value-block {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  gap: 0;
+  min-width: 2ch;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-row-labour .quote-labour-stepper-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  line-height: 1;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal #quoteLabourWarning {
