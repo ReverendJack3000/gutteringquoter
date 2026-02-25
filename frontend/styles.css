@@ -4800,6 +4800,7 @@ body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar {
   min-width: 48px;
   min-height: 48px;
   font-size: 18px;
+  background-color: #0ea5e9;
 }
 body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-crown {
   position: absolute;
@@ -4835,6 +4836,7 @@ body[data-viewport-mode="mobile"] .bonus-racer-avatar {
   color: #fff;
   border: none;
   flex-shrink: 0;
+  background-color: #0ea5e9;
 }
 body[data-viewport-mode="mobile"] .bonus-racer-avatar-wrap {
   display: inline-flex;

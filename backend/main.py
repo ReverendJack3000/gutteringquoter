@@ -459,12 +459,56 @@ def _leaderboard_initials_from_display_name(display_name: str) -> str:
     return (clean[:2].upper())[:2] if len(clean) >= 2 else (clean[:1].upper() + "?")[:2]
 
 
+def _leaderboard_initials_from_first_last(first_name: str, last_name: str) -> str:
+    """Two-character initials from ServiceM8 first_name and last_name."""
+    first = (first_name or "").strip()
+    last = (last_name or "").strip()
+    if first and last:
+        return (first[:1] + last[:1]).upper()
+    if first:
+        return (first[:2].upper())[:2] if len(first) >= 2 else (first[:1].upper() + "?")[:2]
+    if last:
+        return (last[:2].upper())[:2] if len(last) >= 2 else (last[:1].upper() + "?")[:2]
+    return "??"
+
+
+def _load_staff_display_by_email(supabase: Any) -> dict[str, tuple[str, str]]:
+    """
+    Load public.servicem8_staff (email, first_name, last_name) for active staff.
+    Returns dict keyed by LOWER(trimmed email) -> (first_name, last_name) for use in leaderboard display.
+    On error or empty, returns {} so callers can fall back to auth display names.
+    """
+    out: dict[str, tuple[str, str]] = {}
+    try:
+        resp = (
+            supabase.table("servicem8_staff")
+            .select("email, first_name, last_name, active")
+            .execute()
+        )
+        for row in (resp.data or []):
+            if row is None:
+                continue
+            if row.get("active") is False:
+                continue
+            email = (row.get("email") or "").strip()
+            if not email:
+                continue
+            first = (row.get("first_name") or "").strip()
+            last = (row.get("last_name") or "").strip()
+            out[email.lower()] = (first, last)
+    except Exception as e:
+        logger.debug("servicem8_staff lookup for leaderboard names failed: %s", e)
+    return out
+
+
 def _resolve_technician_display_names(
     supabase: Any,
     technician_ids: list[str],
 ) -> dict[str, dict[str, str]]:
     """
     Resolve display_name and avatar_initials for technician IDs (59.16.3).
+    Prefer first_name and last_name from public.servicem8_staff (matched by email) when
+    available; otherwise use auth user_metadata.full_name or email. All users are on ServiceM8.
     Returns dict technician_id -> { "display_name", "avatar_initials" }.
     On auth unavailability or error, returns placeholders so dashboard never fails.
     """
@@ -475,6 +519,7 @@ def _resolve_technician_display_names(
     try:
         _require_service_role_for_admin_permissions()
         auth_users = _list_auth_users_via_admin_api(supabase)
+        staff_by_email = _load_staff_display_by_email(supabase)
         id_set = set(ids)
         for user in auth_users or []:
             uid = str(_extract_auth_user_field(user, "id") or "").strip()
@@ -485,10 +530,20 @@ def _resolve_technician_display_names(
             full_name = str(full_name).strip() if full_name else ""
             email = _extract_auth_user_field(user, "email")
             email = str(email).strip() if email else ""
-            display_name = full_name or email or "Tech"
+            staff = staff_by_email.get(email.lower()) if email else None
+            if staff:
+                first_name, last_name = staff
+                display_name = (f"{first_name} {last_name}".strip()) or full_name or email or "Tech"
+                avatar_initials = _leaderboard_initials_from_first_last(first_name, last_name)
+                # If staff has no last_name, prefer auth full_name for initials (e.g. "Jack Buchanan" -> JB)
+                if (not (last_name or "").strip()) and full_name and len(full_name.split()) >= 2:
+                    avatar_initials = _leaderboard_initials_from_display_name(full_name)
+            else:
+                display_name = full_name or email or "Tech"
+                avatar_initials = _leaderboard_initials_from_display_name(display_name)
             result[uid] = {
                 "display_name": display_name,
-                "avatar_initials": _leaderboard_initials_from_display_name(display_name),
+                "avatar_initials": avatar_initials,
             }
     except HTTPException:
         pass

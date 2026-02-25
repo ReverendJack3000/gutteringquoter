@@ -14054,10 +14054,20 @@ function announceBonusRace(message) {
   announcer.textContent = String(message || '');
 }
 
-/** First name or "First L." from display name for Race cards (mobile). */
+/** First name or "First L." from display name for Race cards (mobile). Never show raw email. */
 function bonusRaceFirstName(displayName) {
   const s = String(displayName || '').trim();
   if (!s) return '—';
+  if (s.includes('@')) {
+    const local = s.split('@')[0].trim();
+    if (!local) return '—';
+    const segments = local.split(/[._-]+/).filter(Boolean);
+    if (segments.length === 0) return '—';
+    const first = segments[0];
+    const title = first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+    if (segments.length === 1) return title;
+    return title + ' ' + (segments[1].charAt(0).toUpperCase()) + '.';
+  }
   const parts = s.split(/\s+/);
   if (parts.length === 1) return parts[0];
   return parts[0] + ' ' + (parts[1] ? parts[1].charAt(0) + '.' : '');
