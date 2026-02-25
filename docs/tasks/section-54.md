@@ -446,6 +446,25 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 - [ ] **54.107.1** **Team pool button: correct label and formatting on all mobile views.** Change `#mobileBonusDashboardBtn` visible label from "GP Race" to "team pool" and fix formatting so the button works on all mobile viewports and the SVG fits properly. Scope: HTML copy (title, aria-label, `.mobile-bonus-btn-label`); mobile-only CSS under `body[data-viewport-mode="mobile"]` for icon+label layout (SVG flex-shrink, min-width for label, 44px touch target); optionally align `#bonusRaceBoardMobile` aria-label to "Team pool scoreboard". Update E2E error messages from "Mobile GP Race" to "Mobile team pool" where they refer to this button. Desktop unchanged (button remains hidden on desktop); Railway-safe.
 
+**54.108 New canvas button and Save? popup (mobile + desktop)**
+
+*Add a "New" canvas button; when clicked/tapped and canvas has content, show a "Save?" popup with two buttons: Delete draft (discard and clear) and Save draft (save then clear). Works on mobile and desktop; Railway-safe. Plan: docs/plans/2026-02-25-new-canvas-button-save-popup.md.*
+
+- [x] **54.108.1** **Clear-canvas function and optional autosave clear on Delete draft.** In app.js add `clearCanvasToEmpty()` that resets state (elements, groups, blueprint, selection, mode, projectName, nextSequenceId), clears undo/redo, closes element toolbar/badge popover if needed, then updates breadcrumb, placeholder, measurement deck, draw, undo/redo buttons. When clearing after "Delete draft", call `clearAutosaveLocalState({ clearPromptStamp: true })` so restore prompt does not fire for discarded content.
+- [x] **54.108.2** **Save? popup via showAppConfirm; Save draft opens save modal; Delete draft clears.** Use showAppConfirm with title "Save?", message e.g. "Save current draft before starting a new canvas?", confirmText "Save draft", cancelText "Delete draft". On confirm (true): set `pendingNewCanvasAfterSave = true`, open save diagram modal (same as Save button, with auth check). On cancel (false): call `clearCanvasToEmpty()` and optional autosave clear. Style Delete draft as destructive if desired.
+- [x] **54.108.3** **Save flow: on success clear canvas when pending new; on cancel reset flag.** In saveDiagramConfirmBtn success path, if `pendingNewCanvasAfterSave` then call `clearCanvasToEmpty()` and set flag false. In save modal cancel and backdrop close, set `pendingNewCanvasAfterSave = false`. When opening save modal from "Save draft" without auth, set flag false.
+- [x] **54.108.4** **New button in toolbar (HTML + CSS + handler).** Add `#newCanvasBtn` in global toolbar (e.g. .toolbar-right), icon + aria-label "New canvas", 44px touch target on mobile. Click: if canvas has content show Save? popup and handle as above; else call `clearCanvasToEmpty()`. Do not hide New on mobile (unlike Export/clock/Accessibility in 54.82.3).
+- [x] **54.108.5** **Verification.** Manual and/or E2E: New with empty canvas → cleared; New with content → Save? appears; Delete draft → cleared; Save draft → save modal → save success → cleared; save cancel → canvas unchanged. Desktop and mobile; Railway deploy unchanged.
+
+**54.109 Mobile upload UX: hide Quick Quoter after blueprint + full-image upload on mobile (mobile-only behavior, desktop unchanged, Railway-safe)**
+
+*Scope: frontend upload and placeholder/entry visibility only. No backend API/schema/config changes.*
+
+- [x] **54.109.1** **Mobile upload routes directly to full-image processing (no crop modal).** In `frontend/app.js`, add mobile-gated upload routing (`layoutState.viewportMode === 'mobile'`) so image uploads call `processFileAsBlueprint(file)` directly instead of opening `showCropModal(file)`.
+- [x] **54.109.2** **Apply mobile crop bypass across image intake paths.** Apply the same mobile routing to image file picker, PDF-converted uploads, blueprint drag/drop, and clipboard paste flows; keep existing validation and PDF conversion behavior.
+- [x] **54.109.3** **Desktop crop flow remains unchanged.** Preserve existing desktop crop modal behavior (`#cropModal`, `#cropUseFull`, `#cropApply`) and non-mobile upload UX.
+- [ ] **54.109.4** **Verification + manual QA + Railway safety sign-off.** E2E: desktop upload asserts crop modal appears, mobile upload asserts crop modal does not appear, mobile Quick Quoter entry visible pre-upload and hidden post-upload. Manual mobile QA (iOS Safari + Android Chrome) pending; confirm Railway deploy safety (frontend/docs-only diff, no env/build/config changes).
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

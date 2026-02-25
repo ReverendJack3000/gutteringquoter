@@ -255,6 +255,9 @@ const autosaveState = {
   userKey: null,
 };
 
+/** 54.108: When true, next successful save will clear canvas to empty (Save draft then New). Reset on save cancel/backdrop. */
+let pendingNewCanvasAfterSave = false;
+
 const quickQuoterState = {
   isOpen: false,
   profileValue: '',
@@ -853,6 +856,10 @@ let blueprintUndoHistory = []; // Separate stack for blueprint moves/resize/rota
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
 const ACCEPTED_PDF_TYPE = 'application/pdf';
 const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MOBILE_UPLOAD_MAX_LONG_SIDE_PX = 4096;
+const MOBILE_UPLOAD_SCALE_STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.33, 0.25, 0.2];
+const MOBILE_UPLOAD_QUALITY_STEPS = [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42, 0.34];
 
 /** PDF.js version – import and worker URLs must match (Phase 3, Task 30.5). */
 const PDFJS_VERSION = '4.0.379';
@@ -883,6 +890,68 @@ async function convertPdfFirstPageToPng(file) {
       1
     );
   });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not load image for upload optimization.'));
+    };
+    img.src = url;
+  });
+}
+
+function canvasToJpegBlob(canvas, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
+  });
+}
+
+/**
+ * Mobile-only upload guard: keep full image (no crop UI) while shrinking oversized photos under backend/frontend 20MB limit.
+ * Preserves full frame; only scale/encoding change.
+ */
+async function optimizeLargeImageForUpload(file) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  if (file.size <= MAX_FILE_SIZE_BYTES) return file;
+
+  const img = await loadImageFromFile(file);
+  const srcW = img.naturalWidth || img.width;
+  const srcH = img.naturalHeight || img.height;
+  if (!srcW || !srcH) return file;
+
+  const srcLong = Math.max(srcW, srcH);
+  const longSideClamp = srcLong > MOBILE_UPLOAD_MAX_LONG_SIDE_PX
+    ? MOBILE_UPLOAD_MAX_LONG_SIDE_PX / srcLong
+    : 1;
+  const baseName = (file.name || 'upload').replace(/\.[^.]+$/, '') || 'upload';
+
+  for (const scaleStep of MOBILE_UPLOAD_SCALE_STEPS) {
+    const scale = Math.max(0.05, longSideClamp * scaleStep);
+    const targetW = Math.max(1, Math.round(srcW * scale));
+    const targetH = Math.max(1, Math.round(srcH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    for (const quality of MOBILE_UPLOAD_QUALITY_STEPS) {
+      const blob = await canvasToJpegBlob(canvas, quality);
+      if (!blob) continue;
+      if (blob.size <= MAX_FILE_SIZE_BYTES) {
+        return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+      }
+    }
+  }
+  return file;
 }
 
 // Crop modal state (image coords in source pixels)
@@ -6243,10 +6312,16 @@ function initQuickQuoter() {
 
 function updatePlaceholderVisibility() {
   const placeholder = document.getElementById('canvasPlaceholder');
-  if (!placeholder) return;
   const hasContent = !!(state.blueprintImage || state.elements.length);
-  if (hasContent) placeholder.classList.add('hidden');
-  else placeholder.classList.remove('hidden');
+  if (placeholder) {
+    if (hasContent) placeholder.classList.add('hidden');
+    else placeholder.classList.remove('hidden');
+  }
+  const quickQuoterEntry = document.getElementById('quickQuoterEntry');
+  if (quickQuoterEntry) {
+    if (state.blueprintImage) quickQuoterEntry.setAttribute('hidden', '');
+    else quickQuoterEntry.removeAttribute('hidden');
+  }
 }
 
 const TOOLTIP_OFFSET = 16;
@@ -7032,6 +7107,39 @@ async function restoreFromPreLoadSnapshot(snapshot) {
   updatePlaceholderVisibility();
   renderMeasurementDeck();
   draw();
+}
+
+/**
+ * Clear canvas to empty state (54.108.1). Resets elements, blueprint, selection, undo/redo, project name.
+ * Optional: pass { clearAutosave: true } when clearing after "Delete draft" so restore prompt does not fire.
+ */
+function clearCanvasToEmpty(options = {}) {
+  state.mode = null;
+  state.resizeHandle = null;
+  state.snapshotAtActionStart = null;
+  state.elements = [];
+  state.groups = [];
+  state.blueprintImage = null;
+  state.blueprintTransform = null;
+  state.blueprintImageSourceUrl = null;
+  state.selectedBlueprint = false;
+  setSelection([]);
+  state.projectName = '';
+  state.nextSequenceId = 1;
+  undoHistory.length = 0;
+  redoHistory.length = 0;
+  if (state.badgeLengthEditElementId) {
+    closeBadgeLengthPopover({ commit: false });
+  }
+  state.badgeLengthEditElementId = null;
+  if (options.clearAutosave) {
+    clearAutosaveLocalState({ clearPromptStamp: true });
+  }
+  updateToolbarBreadcrumbs('');
+  updatePlaceholderVisibility();
+  renderMeasurementDeck();
+  draw();
+  if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
 function rotatedRectBbox(x, y, w, h, rotationDeg) {
@@ -9227,7 +9335,7 @@ async function processFileAsBlueprint(file) {
     showMessage('Please choose an image file (JPEG, PNG, GIF, or WebP).');
     return;
   }
-  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
     showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
     return;
   }
@@ -9281,6 +9389,33 @@ async function processFileAsBlueprint(file) {
   }
 }
 
+function isMobileViewportNow() {
+  return layoutState.viewportMode === 'mobile';
+}
+
+async function handleBlueprintSourceFile(file) {
+  if (!file) return;
+  if (isMobileViewportNow()) {
+    let sourceFile = file;
+    if (sourceFile.size > MAX_FILE_SIZE_BYTES) {
+      showMessage('Optimizing image for upload…', 'info');
+      try {
+        sourceFile = await optimizeLargeImageForUpload(sourceFile);
+      } catch (err) {
+        showMessage('Could not optimize this image. Please choose a smaller file.');
+        return;
+      }
+      if (sourceFile.size > MAX_FILE_SIZE_BYTES) {
+        showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+        return;
+      }
+    }
+    await processFileAsBlueprint(sourceFile);
+    return;
+  }
+  showCropModal(file);
+}
+
 function initUpload() {
   const fileInput = document.getElementById('fileInput');
   const uploadZone = document.getElementById('uploadZone');
@@ -9318,7 +9453,7 @@ function initUpload() {
       showMessage('Please choose an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
       return;
     }
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE_BYTES && !isMobileViewportNow()) {
       showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
       return;
     }
@@ -9329,7 +9464,7 @@ function initUpload() {
         const pngFile = await convertPdfFirstPageToPng(file);
         clearMessage();
         if (typeof setLoadingState === 'function') setLoadingState(false);
-        showCropModal(pngFile);
+        await handleBlueprintSourceFile(pngFile);
       } catch (err) {
         const msg = err?.message || String(err);
         const userMsg = /password|encrypted|require.*pass/i.test(msg)
@@ -9341,7 +9476,7 @@ function initUpload() {
         if (typeof setLoadingState === 'function') setLoadingState(false);
       }
     } else {
-      showCropModal(file);
+      await handleBlueprintSourceFile(file);
     }
   });
 
@@ -9369,7 +9504,7 @@ function initUpload() {
       showMessage('Drop an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
       return;
     }
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE_BYTES && !isMobileViewportNow()) {
       showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
       return;
     }
@@ -9380,7 +9515,7 @@ function initUpload() {
         const pngFile = await convertPdfFirstPageToPng(file);
         clearMessage();
         if (typeof setLoadingState === 'function') setLoadingState(false);
-        showCropModal(pngFile);
+        await handleBlueprintSourceFile(pngFile);
       } catch (err) {
         const msg = err?.message || String(err);
         const userMsg = /password|encrypted|require.*pass/i.test(msg)
@@ -9392,12 +9527,12 @@ function initUpload() {
         if (typeof setLoadingState === 'function') setLoadingState(false);
       }
     } else {
-      showCropModal(file);
+      await handleBlueprintSourceFile(file);
     }
   });
 
   // Clipboard paste: Cmd+V/Ctrl+V for desktop screenshots (Phase 1, Task 30.3)
-  document.addEventListener('paste', (e) => {
+  document.addEventListener('paste', async (e) => {
     if (!e.clipboardData?.items) return;
     for (const item of e.clipboardData.items) {
       if (item.type.startsWith('image/')) {
@@ -9405,10 +9540,10 @@ function initUpload() {
         if (file) {
           e.preventDefault();
           clearMessage();
-          if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          if (file.size > MAX_FILE_SIZE_BYTES && !isMobileViewportNow()) {
             showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
           } else {
-            showCropModal(file);
+            await handleBlueprintSourceFile(file);
           }
           break;
         }
@@ -11882,13 +12017,63 @@ function initDiagrams() {
       updateToolbarBreadcrumbs(name);
       showMessage('Diagram saved.', 'success');
       refreshDiagramsList();
+      if (pendingNewCanvasAfterSave) {
+        clearCanvasToEmpty();
+        pendingNewCanvasAfterSave = false;
+      }
     } catch (err) {
       if (saveDiagramError) { saveDiagramError.hidden = false; saveDiagramError.textContent = err.message || 'Save failed'; }
     }
     saveDiagramConfirmBtn.disabled = false;
   });
 
-  saveDiagramCancelBtn?.addEventListener('click', () => { closeAccessibleModal('saveDiagramModal'); });
+  saveDiagramCancelBtn?.addEventListener('click', () => {
+    pendingNewCanvasAfterSave = false;
+    closeAccessibleModal('saveDiagramModal');
+  });
+
+  const saveDiagramModalBackdrop = document.getElementById('saveDiagramModalBackdrop');
+  if (saveDiagramModalBackdrop) {
+    saveDiagramModalBackdrop.addEventListener('click', () => { pendingNewCanvasAfterSave = false; });
+  }
+
+  const newCanvasBtn = document.getElementById('newCanvasBtn');
+  if (newCanvasBtn) {
+    newCanvasBtn.addEventListener('click', () => {
+      const hasContent = !!(state.blueprintImage || state.elements.length);
+      if (!hasContent) {
+        clearCanvasToEmpty();
+        return;
+      }
+      showAppConfirm('Save current draft before starting a new canvas?', {
+        title: 'Save?',
+        confirmText: 'Save draft',
+        cancelText: 'Delete draft',
+        triggerEl: newCanvasBtn,
+      }).then((confirmed) => {
+        if (confirmed) {
+          pendingNewCanvasAfterSave = true;
+          if (!authState.token) {
+            showMessage('Sign in to save diagrams.', 'error');
+            switchView('view-login');
+            pendingNewCanvasAfterSave = false;
+            return;
+          }
+          if (!state.blueprintImage && state.elements.length === 0) {
+            pendingNewCanvasAfterSave = false;
+            return;
+          }
+          const base = (state.projectName || projectNameInput?.value || '').trim();
+          saveDiagramName.value = base || 'Project';
+          if (saveDiagramError) { saveDiagramError.hidden = true; saveDiagramError.textContent = ''; }
+          collapseDiagramToolbarIfExpanded();
+          openAccessibleModal('saveDiagramModal', { triggerEl: newCanvasBtn, initialFocusEl: saveDiagramName });
+        } else {
+          clearCanvasToEmpty({ clearAutosave: true });
+        }
+      });
+    });
+  }
 
   diagramsDropdownBtn.addEventListener('click', (e) => {
     e.stopPropagation();

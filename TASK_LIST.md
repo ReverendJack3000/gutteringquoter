@@ -84,6 +84,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4, **54.107.1** | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend; **54.107.1 Team pool button label and formatting (all mobile views, SVG fit).** |
+| 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.103.1–54.103.4 | (Mobile-only) Selection handles: corners-only (hide side pills), with hit-test parity, E2E/debug parity, and desktop guard. |
 | 54 | 54.104.1–54.104.6 | (Mobile-only) Two-finger selected-element transform smoothing: RAF-coalesced updates, angle continuity, no-jump transition, diagnostics hook, regression + manual QA, Railway-safe. |

@@ -16,6 +16,7 @@
 - [x] **62.6** **"Other" navigation rule:** Selecting `Other` closes Quick Quoter, clears local Quick Quoter state, and opens the main quote modal immediately via existing Generate Quote flow.
 - [x] **62.7** **Regression guardrail + future integration notes:** Verify no changes to existing quote calculation/grouping/conditional logic; document future backend integration points (DB/API/files) without wiring live data in this phase.
 - [x] **62.8** **Row label prefixes (Profile/Size):** In the Quick Quoter modal, prefix repair row labels from the current dropdowns: Storm Cloud → "SC:", Classic → "CL:" for profile-based (gutter) rows; 65mm → "65:", 80mm → "80:" for size-based rows, using each type’s `requires_profile` / `requires_size_mm` (frontend: `requiresProfile` / `requiresSizeMm`). Use `quickQuoterState.profileValue` and `quickQuoterState.sizeMmValue` when building the display label. No prefix for "Other" or when dropdown not set. Key touchpoints: `app.js` `createQuickQuoterRow` (label at 6029), `renderQuickQuoterRows` (5881); update labels when Profile/Size selectors change (call `renderQuickQuoterRows` from change handlers). Mobile-only; desktop unchanged; Railway-safe.
+- [x] **62.9** **Mobile Quick Quoter visibility follows blueprint presence.** In `frontend/app.js` `updatePlaceholderVisibility()`, hide `#quickQuoterEntry` when a blueprint exists (`state.blueprintImage`) and show it when no blueprint exists. Applies to uploaded and loaded blueprints, with desktop behavior unchanged and Railway-safe frontend-only scope.
 
 ---
 

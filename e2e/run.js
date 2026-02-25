@@ -287,10 +287,9 @@ async function run() {
     await delay(1500);
     const cropModal = await page.$('#cropModal');
     const modalVisible = cropModal && !(await page.evaluate((el) => el.hasAttribute('hidden'), cropModal));
-    if (modalVisible) {
-      await clickSelectorViaDomIfPresent(page, '#cropUseFull');
-      await delay(2000);
-    }
+    if (!modalVisible) throw new Error('Desktop upload fixture: crop modal should open before blueprint processing');
+    await clickSelectorViaDomIfPresent(page, '#cropUseFull');
+    await delay(2000);
     const placeholder = await page.$('#canvasPlaceholder');
     const placeholderHidden = placeholder && (await page.evaluate((el) => el.hasAttribute('hidden') || !el.offsetParent, placeholder));
     if (!placeholderHidden) {
@@ -1661,6 +1660,18 @@ async function run() {
       }
       console.log('  ✓ Mobile team pool scaffold exists and permission gate remains enforced');
 
+      const mobileQuickQuoterVisibleBeforeUpload = await mobilePage.evaluate(() => {
+        const entry = document.getElementById('quickQuoterEntry');
+        if (!entry) return false;
+        if (entry.hasAttribute('hidden')) return false;
+        const style = window.getComputedStyle(entry);
+        return style.display !== 'none' && entry.offsetParent !== null;
+      });
+      if (!mobileQuickQuoterVisibleBeforeUpload) {
+        throw new Error('Mobile viewport regression: Quick Quoter entry should be visible before blueprint upload');
+      }
+      console.log('  ✓ Mobile Quick Quoter entry is visible before blueprint upload');
+
       // Section 57: mobile fit inset + pan lock behavior
       const mobileFileInput = await mobilePage.$('#fileInput');
       if (!mobileFileInput) throw new Error('Mobile viewport regression: #fileInput missing for blueprint fit checks');
@@ -1672,15 +1683,27 @@ async function run() {
       await delay(1500);
       const mobileCropModal = await mobilePage.$('#cropModal');
       const mobileCropVisible = mobileCropModal && !(await mobilePage.evaluate((el) => el.hasAttribute('hidden'), mobileCropModal));
-      if (mobileCropVisible) {
-        await clickSelectorViaDomIfPresent(mobilePage, '#cropUseFull');
-        await delay(1800);
-      }
+      if (mobileCropVisible) throw new Error('Mobile viewport regression: crop modal should not open on mobile upload');
+      await mobilePage.waitForFunction(() => {
+        const el = document.getElementById('canvasPlaceholder');
+        return !!el && (el.hasAttribute('hidden') || !el.offsetParent);
+      }, { timeout: 10000 });
       const mobilePlaceholderHidden = await mobilePage.evaluate(() => {
         const el = document.getElementById('canvasPlaceholder');
         return !!el && (el.hasAttribute('hidden') || !el.offsetParent);
       });
       if (!mobilePlaceholderHidden) throw new Error('Mobile viewport regression: blueprint upload did not hide placeholder');
+      const mobileQuickQuoterHiddenAfterUpload = await mobilePage.evaluate(() => {
+        const entry = document.getElementById('quickQuoterEntry');
+        if (!entry) return false;
+        if (entry.hasAttribute('hidden')) return true;
+        const style = window.getComputedStyle(entry);
+        return style.display === 'none' || entry.offsetParent === null;
+      });
+      if (!mobileQuickQuoterHiddenAfterUpload) {
+        throw new Error('Mobile viewport regression: Quick Quoter entry should be hidden after blueprint upload');
+      }
+      console.log('  ✓ Mobile upload bypasses crop modal and hides Quick Quoter entry');
 
       const fitRect = await mobilePage.evaluate(() => {
         if (typeof window.__quoteAppGetBlueprintScreenRect !== 'function') return null;

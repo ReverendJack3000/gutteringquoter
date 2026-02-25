@@ -242,6 +242,15 @@ body[data-viewport-mode="mobile"] .product-thumb {
 }
 
 .toolbar-drag-handle,
+/* New canvas button: left of collapse button, in line, same row (54.108); borderless */
+#globalToolbar > #newCanvasBtn.toolbar-new-canvas-btn {
+  flex-shrink: 0;
+  border: none;
+}
+#globalToolbar > #newCanvasBtn.toolbar-new-canvas-btn:hover {
+  border-color: transparent;
+}
+
 .toolbar-collapse-btn {
   flex-shrink: 0;
   display: inline-flex;
@@ -2037,7 +2046,8 @@ body[data-viewport-mode="mobile"] .toolbar-breadcrumbs {
 body[data-viewport-mode="mobile"] .toolbar-left {
   order: -1;
 }
-body[data-viewport-mode="mobile"] .toolbar-collapse-btn {
+body[data-viewport-mode="mobile"] .toolbar-collapse-btn,
+body[data-viewport-mode="mobile"] #globalToolbar > #newCanvasBtn.toolbar-new-canvas-btn {
   order: 0;
 }
 body[data-viewport-mode="mobile"] .toolbar-center {
