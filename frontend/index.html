@@ -111,6 +111,17 @@
               </svg>
               <span>User Permissions</span>
             </div>
+            <div class="profile-menu-item" id="menuItemMaterialRules" role="menuitem" hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="4" y1="6" x2="20" y2="6"></line>
+                <circle cx="9" cy="6" r="2"></circle>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <circle cx="15" cy="12" r="2"></circle>
+                <line x1="4" y1="18" x2="20" y2="18"></line>
+                <circle cx="7" cy="18" r="2"></circle>
+              </svg>
+              <span>Material Rules</span>
+            </div>
             <div class="profile-menu-item" id="menuItemBonusAdmin" role="menuitem" hidden>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
@@ -642,6 +653,145 @@
             </table>
             <div id="userPermissionsEmpty" class="permissions-empty" hidden>No users found.</div>
           </div>
+        </main>
+      </div>
+    </div>
+
+    <div id="view-material-rules" class="app-view hidden" role="region" aria-label="Material rules management">
+      <div class="material-rules-view-container">
+        <header class="material-rules-header">
+          <div class="material-rules-header-left">
+            <button type="button" id="btnMaterialRulesBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="material-rules-header-title">Material Rules</div>
+          <div class="material-rules-header-right">
+            <button type="button" id="btnMaterialRulesReload" class="btn-text-icon" aria-label="Reload material rules">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.65-3.36L23 10"/><path d="M20.5 15a9 9 0 0 1-14.65 3.36L1 14"/></svg>
+              Reload
+            </button>
+          </div>
+        </header>
+        <main class="material-rules-main">
+          <div id="materialRulesStatus" class="permissions-status" role="status" aria-live="polite" hidden></div>
+
+          <section class="material-rules-section" aria-labelledby="materialRulesQuickQuoterHeading">
+            <div class="material-rules-section-header">
+              <h2 id="materialRulesQuickQuoterHeading" class="material-rules-section-title">Quick Quoter Rules</h2>
+              <button type="button" id="btnMaterialRulesSaveQuickQuoter" class="btn">Save Quick Quoter Rules</button>
+            </div>
+            <p class="material-rules-section-copy">Edit repair types and templates. Save applies changes live.</p>
+
+            <div class="material-rules-subsection">
+              <div class="material-rules-subsection-head">
+                <h3>Repair Types</h3>
+                <button type="button" id="btnMaterialRulesAddRepairType" class="btn">Add Repair Type</button>
+              </div>
+              <div class="material-rules-table-wrap">
+                <table class="material-rules-table" aria-label="Quick Quoter repair types table">
+                  <thead>
+                    <tr>
+                      <th scope="col">ID</th>
+                      <th scope="col">Label</th>
+                      <th scope="col">Sort</th>
+                      <th scope="col">Needs Profile</th>
+                      <th scope="col">Needs Size</th>
+                      <th scope="col">Active</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="materialRulesRepairTypesBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="material-rules-subsection">
+              <div class="material-rules-subsection-head">
+                <h3>Part Templates</h3>
+                <button type="button" id="btnMaterialRulesAddTemplate" class="btn">Add Template</button>
+              </div>
+              <div class="material-rules-table-wrap">
+                <table class="material-rules-table" aria-label="Quick Quoter templates table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Repair Type ID</th>
+                      <th scope="col">Product ID</th>
+                      <th scope="col">Qty/Unit</th>
+                      <th scope="col">Profile</th>
+                      <th scope="col">Size</th>
+                      <th scope="col">Length Mode</th>
+                      <th scope="col">Fixed mm</th>
+                      <th scope="col">Active</th>
+                      <th scope="col">Sort</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="materialRulesTemplatesBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="material-rules-section" aria-labelledby="materialRulesMeasuredHeading">
+            <div class="material-rules-section-header">
+              <h2 id="materialRulesMeasuredHeading" class="material-rules-section-title">Measured-Length Rules</h2>
+              <button type="button" id="btnMaterialRulesSaveMeasured" class="btn">Save Measured Rules</button>
+            </div>
+            <p class="material-rules-section-copy">Controls accessory inference used by quote calculation.</p>
+
+            <div class="material-rules-form-grid">
+              <label>Bracket spacing (mm)
+                <input type="number" id="materialRulesBracketSpacingMm" min="1" step="1" inputmode="numeric" />
+              </label>
+              <label>Clip spacing (mm)
+                <input type="number" id="materialRulesClipSpacingMm" min="1" step="1" inputmode="numeric" />
+              </label>
+              <label>Screws / bracket
+                <input type="number" id="materialRulesScrewsPerBracket" min="0" step="1" inputmode="numeric" />
+              </label>
+              <label>Screws / dropper
+                <input type="number" id="materialRulesScrewsPerDropper" min="0" step="1" inputmode="numeric" />
+              </label>
+              <label>Screws / saddle clip
+                <input type="number" id="materialRulesScrewsPerSaddleClip" min="0" step="1" inputmode="numeric" />
+              </label>
+              <label>Screws / adjustable clip
+                <input type="number" id="materialRulesScrewsPerAdjustableClip" min="0" step="1" inputmode="numeric" />
+              </label>
+              <label>Screw product ID
+                <input type="text" id="materialRulesScrewProductId" />
+              </label>
+              <label>Bracket product (SC)
+                <input type="text" id="materialRulesBracketProductIdSc" />
+              </label>
+              <label>Bracket product (CL)
+                <input type="text" id="materialRulesBracketProductIdCl" />
+              </label>
+              <label>Saddle clip product (65)
+                <input type="text" id="materialRulesSaddleClipProductId65" />
+              </label>
+              <label>Saddle clip product (80)
+                <input type="text" id="materialRulesSaddleClipProductId80" />
+              </label>
+              <label>Adjustable clip product (65)
+                <input type="text" id="materialRulesAdjustableClipProductId65" />
+              </label>
+              <label>Adjustable clip product (80)
+                <input type="text" id="materialRulesAdjustableClipProductId80" />
+              </label>
+              <label>Clip selection mode
+                <select id="materialRulesClipSelectionMode" aria-label="Clip selection mode">
+                  <option value="auto_by_acl_presence">Auto by ACL presence</option>
+                  <option value="force_saddle">Force saddle clips</option>
+                  <option value="force_adjustable">Force adjustable clips</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <datalist id="materialRulesRepairTypeIdOptions"></datalist>
+          <datalist id="materialRulesProductIdOptions"></datalist>
         </main>
       </div>
     </div>

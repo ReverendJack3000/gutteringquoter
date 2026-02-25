@@ -101,7 +101,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.15 | Quick Quoter desktop parity follow-up verification: manual QA/sign-off pending; backend Quick Quoter tests pass; full `npm run test:e2e` currently blocked by existing desktop rotate step failure ("Rotate: handle found ... but rotation did not change"). |
-| 63 | 63.9 | Follow-up (baseline lock): mixed-length gutter accessory inference should use aggregated measured length consistently across packed pieces (current first-piece `length_mm` baseline preserved). |
+| 63 | 63.9, 63.16 | Follow-ups: (63.9) mixed-length gutter accessory inference should use aggregated measured length consistently across packed pieces (current first-piece `length_mm` baseline preserved); (63.16) Material Rules desktop feature manual QA + Railway production safety sign-off pending after Supabase migration `docs/material_rules_migration.sql`. |
 ---
 
 ## Locked decisions

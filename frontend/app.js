@@ -332,6 +332,17 @@ const bonusAdminState = {
   jobs: [],
 };
 
+const materialRulesState = {
+  initialized: false,
+  loading: false,
+  savingQuickQuoter: false,
+  savingMeasured: false,
+  repairTypes: [],
+  templates: [],
+  measuredRules: null,
+  productIds: [],
+};
+
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
 let preLoadSnapshot = null;
 
@@ -1730,7 +1741,7 @@ function getQuoteLineProductName(row) {
   if (!productCell) return 'Item';
   const clone = productCell.cloneNode(true);
   clone.querySelectorAll(
-    '.quote-mobile-line-summary, .quote-labour-mobile-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-line-qty-summary, .quote-labour-dup-btn, .quote-row-remove-x'
+    '.quote-mobile-line-summary, .quote-labour-mobile-summary, .quote-labour-mobile-qty-summary, .quote-labour-mobile-rate-summary, .quote-mobile-line-qty-summary, .quote-labour-dup-btn, .quote-row-remove-x, .quote-product-auto-badge'
   ).forEach((el) => el.remove());
   const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
   if (text) return text;
@@ -1971,6 +1982,31 @@ function syncMobileQuoteLineSummaries() {
       productCell.appendChild(lineSummary);
     }
     lineSummary.textContent = `${qtyLabel} x ${unitLabel}${row.dataset.labourRow === 'true' ? '/hr' : ''} · Tap to edit`;
+
+    // 54.93.11: AUTO label for inferred/conditional rows (mobile + desktop)
+    const isInferredRow = row.dataset.inferred === 'true' ||
+      productCell.querySelector('.quote-product-indent-level-1, .quote-product-indent-level-2');
+    let autoBadge = productCell.querySelector('.quote-product-auto-badge');
+    if (isInferredRow) {
+      if (!autoBadge) {
+        autoBadge = document.createElement('span');
+        autoBadge.className = 'quote-product-auto-badge';
+        autoBadge.setAttribute('aria-hidden', 'true');
+        autoBadge.textContent = 'AUTO';
+        const wrap = productCell.querySelector('.quote-mobile-product-cell-content');
+        const nameSpan = productCell.querySelector('.quote-product-indent-level-1, .quote-product-indent-level-2') ||
+          Array.from(productCell.children).find((el) => el.nodeType === 1 && el.tagName === 'SPAN' && !el.classList.contains('quote-row-remove-x') && !el.classList.contains('quote-row-add-plus') && !el.classList.contains('quote-mobile-line-summary'));
+        if (wrap) {
+          wrap.appendChild(autoBadge);
+        } else if (nameSpan) {
+          productCell.insertBefore(autoBadge, nameSpan.nextSibling);
+        } else {
+          productCell.insertBefore(autoBadge, lineSummary);
+        }
+      }
+    } else if (autoBadge) {
+      autoBadge.remove();
+    }
 
     // 54.93.3: on mobile, material rows (non-labour, non-metres) get qty stepper; only add qty summary for labour/metres so we don’t leave a stray summary in the cell
     const isLabourRow = row.dataset.labourRow === 'true';
@@ -10692,6 +10728,7 @@ function initAuth() {
   const profileDropdown = document.getElementById('profileDropdown');
   const menuItemProducts = document.getElementById('menuItemProducts');
   const menuItemUserPermissions = document.getElementById('menuItemUserPermissions');
+  const menuItemMaterialRules = document.getElementById('menuItemMaterialRules');
   const menuItemBonusAdmin = document.getElementById('menuItemBonusAdmin');
   const menuItemTechnicianBonus = document.getElementById('menuItemTechnicianBonus');
   const menuItemSignOut = document.getElementById('menuItemSignOut');
@@ -10809,6 +10846,21 @@ function initAuth() {
         return;
       }
       switchView('view-user-permissions', { triggerEl: userAvatar || menuItemUserPermissions });
+    });
+  }
+  if (menuItemMaterialRules) {
+    menuItemMaterialRules.addEventListener('click', (e) => {
+      if (profileDropdown) profileDropdown.hidden = true;
+      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      e.stopPropagation();
+      if (!canAccessDesktopAdminUi()) {
+        const msg = isDesktopViewport()
+          ? 'Only admin users can access Material Rules.'
+          : 'Material Rules is available on desktop only.';
+        showMessage(msg, 'error');
+        return;
+      }
+      switchView('view-material-rules', { triggerEl: userAvatar || menuItemMaterialRules });
     });
   }
   if (menuItemBonusAdmin) {
@@ -13489,6 +13541,12 @@ function updateUserPermissionsMenuVisibility() {
   menuItem.hidden = !canAccessDesktopAdminUi();
 }
 
+function updateMaterialRulesMenuVisibility() {
+  const menuItem = document.getElementById('menuItemMaterialRules');
+  if (!menuItem) return;
+  menuItem.hidden = !canAccessDesktopAdminUi();
+}
+
 function updateTechnicianBonusMenuVisibility() {
   const menuItem = document.getElementById('menuItemTechnicianBonus');
   if (!menuItem) return;
@@ -14206,6 +14264,7 @@ function openTechnicianBonusView(triggerEl) {
 
 function syncAdminDesktopAccess(options = {}) {
   updateUserPermissionsMenuVisibility();
+  updateMaterialRulesMenuVisibility();
   updateTechnicianBonusMenuVisibility();
   updateBonusAdminMenuVisibility();
   updateMobileBonusButtonVisibility();
@@ -14230,6 +14289,22 @@ function syncAdminDesktopAccess(options = {}) {
         const message = isDesktopViewport()
           ? 'Only admin users can access User Permissions.'
           : 'User Permissions is available on desktop only.';
+        showMessage(message, 'info');
+      }
+    }
+  }
+
+  if (getVisibleViewId() === 'view-material-rules' && !canAccessDesktopAdminUi()) {
+    if (!authState.token) {
+      closeAllModals({ restoreFocus: false });
+      switchView('view-login');
+      if (options.notify !== false) showMessage('Session expired. Please sign in again.', 'info');
+    } else {
+      switchView('view-canvas', { focus: options.focus !== false });
+      if (options.notify !== false) {
+        const message = isDesktopViewport()
+          ? 'Only admin users can access Material Rules.'
+          : 'Material Rules is available on desktop only.';
         showMessage(message, 'info');
       }
     }
@@ -14657,6 +14732,604 @@ function initUserPermissionsView() {
       inviteSubmitBtn.disabled = false;
     }
   });
+}
+
+function setMaterialRulesStatus(message, tone = 'info') {
+  const el = document.getElementById('materialRulesStatus');
+  if (!el) return;
+  const text = typeof message === 'string' ? message.trim() : '';
+  if (!text) {
+    el.hidden = true;
+    el.textContent = '';
+    el.classList.remove('permissions-status--error', 'permissions-status--success');
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.toggle('permissions-status--error', tone === 'error');
+  el.classList.toggle('permissions-status--success', tone === 'success');
+}
+
+function getMaterialRulesApiError(payload, fallback) {
+  const detail = payload?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail.trim();
+  const validationErrors = Array.isArray(detail?.validation_errors) ? detail.validation_errors : [];
+  if (validationErrors.length > 0) {
+    return validationErrors
+      .slice(0, 3)
+      .map((err) => String(err?.message || '').trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+  return fallback;
+}
+
+function updateMaterialRulesActionButtons() {
+  const reloadBtn = document.getElementById('btnMaterialRulesReload');
+  const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
+  const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
+  const addRepairTypeBtn = document.getElementById('btnMaterialRulesAddRepairType');
+  const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
+  const disableAll = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
+  if (reloadBtn) reloadBtn.disabled = disableAll;
+  if (saveQuickQuoterBtn) saveQuickQuoterBtn.disabled = disableAll;
+  if (saveMeasuredBtn) saveMeasuredBtn.disabled = disableAll;
+  if (addRepairTypeBtn) addRepairTypeBtn.disabled = disableAll;
+  if (addTemplateBtn) addTemplateBtn.disabled = disableAll;
+}
+
+function renderMaterialRulesRepairTypeOptions() {
+  const datalist = document.getElementById('materialRulesRepairTypeIdOptions');
+  if (!datalist) return;
+  const ids = Array.from(new Set((materialRulesState.repairTypes || []).map((row) => String(row?.id || '').trim()).filter(Boolean))).sort();
+  datalist.innerHTML = ids.map((id) => `<option value="${escapeHtml(id)}"></option>`).join('');
+}
+
+function renderMaterialRulesProductOptions() {
+  const datalist = document.getElementById('materialRulesProductIdOptions');
+  if (!datalist) return;
+  const ids = Array.from(new Set((materialRulesState.productIds || []).map((id) => String(id || '').trim()).filter(Boolean))).sort();
+  datalist.innerHTML = ids.map((id) => `<option value="${escapeHtml(id)}"></option>`).join('');
+}
+
+let materialRulesLocalTemplateCounter = 0;
+
+function appendMaterialRulesRepairTypeRow(row = {}) {
+  const tbody = document.getElementById('materialRulesRepairTypesBody');
+  if (!tbody) return;
+  const id = String(row?.id || '').trim();
+  const label = String(row?.label || '').trim();
+  const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : 0;
+  const requiresProfile = !!row?.requires_profile;
+  const requiresSize = !!row?.requires_size_mm;
+  const active = row?.active !== false;
+
+  const tr = document.createElement('tr');
+  tr.dataset.materialRulesRepairRow = 'true';
+  tr.innerHTML = `
+    <td><input type="text" class="material-rules-repair-id" value="${escapeHtml(id)}" aria-label="Repair type ID" /></td>
+    <td><input type="text" class="material-rules-repair-label" value="${escapeHtml(label)}" aria-label="Repair type label" /></td>
+    <td><input type="number" class="material-rules-repair-sort" value="${escapeHtml(String(sortOrder))}" step="1" aria-label="Repair type sort order" /></td>
+    <td><input type="checkbox" class="material-rules-repair-requires-profile" ${requiresProfile ? 'checked' : ''} aria-label="Requires profile" /></td>
+    <td><input type="checkbox" class="material-rules-repair-requires-size" ${requiresSize ? 'checked' : ''} aria-label="Requires size" /></td>
+    <td><input type="checkbox" class="material-rules-repair-active" ${active ? 'checked' : ''} aria-label="Active" /></td>
+    <td><button type="button" class="material-rules-row-remove-btn" aria-label="Remove repair type row">Remove</button></td>
+  `;
+  const removeBtn = tr.querySelector('.material-rules-row-remove-btn');
+  removeBtn?.addEventListener('click', () => {
+    tr.remove();
+  });
+  tbody.appendChild(tr);
+}
+
+function appendMaterialRulesTemplateRow(row = {}) {
+  const tbody = document.getElementById('materialRulesTemplatesBody');
+  if (!tbody) return;
+
+  const existingId = String(row?.id || '').trim();
+  const localId = existingId || `new-${++materialRulesLocalTemplateCounter}`;
+  const repairTypeId = String(row?.repair_type_id || '').trim();
+  const productId = String(row?.product_id || '').trim();
+  const qtyPerUnit = Number.isFinite(Number(row?.qty_per_unit)) ? Number(row.qty_per_unit) : 0;
+  const conditionProfile = String(row?.condition_profile || '').trim().toUpperCase();
+  const conditionSize = row?.condition_size_mm == null ? '' : String(row.condition_size_mm).trim();
+  const lengthMode = String(row?.length_mode || 'none').trim().toLowerCase();
+  const fixedLength = row?.fixed_length_mm == null ? '' : String(row.fixed_length_mm).trim();
+  const active = row?.active !== false;
+  const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : 0;
+
+  const tr = document.createElement('tr');
+  tr.dataset.materialRulesTemplateRow = 'true';
+  tr.dataset.templateId = localId;
+  tr.innerHTML = `
+    <td><input type="text" class="material-rules-template-repair-type-id" list="materialRulesRepairTypeIdOptions" value="${escapeHtml(repairTypeId)}" aria-label="Template repair type ID" /></td>
+    <td><input type="text" class="material-rules-template-product-id" list="materialRulesProductIdOptions" value="${escapeHtml(productId)}" aria-label="Template product ID" /></td>
+    <td><input type="number" class="material-rules-template-qty" min="0" step="0.001" value="${escapeHtml(String(qtyPerUnit))}" aria-label="Template quantity per unit" /></td>
+    <td>
+      <select class="material-rules-template-profile" aria-label="Template condition profile">
+        <option value="" ${conditionProfile ? '' : 'selected'}>Any</option>
+        <option value="SC" ${conditionProfile === 'SC' ? 'selected' : ''}>SC</option>
+        <option value="CL" ${conditionProfile === 'CL' ? 'selected' : ''}>CL</option>
+      </select>
+    </td>
+    <td>
+      <select class="material-rules-template-size" aria-label="Template condition size">
+        <option value="" ${conditionSize ? '' : 'selected'}>Any</option>
+        <option value="65" ${conditionSize === '65' ? 'selected' : ''}>65</option>
+        <option value="80" ${conditionSize === '80' ? 'selected' : ''}>80</option>
+      </select>
+    </td>
+    <td>
+      <select class="material-rules-template-length-mode" aria-label="Template length mode">
+        <option value="none" ${lengthMode === 'none' ? 'selected' : ''}>none</option>
+        <option value="missing_measurement" ${lengthMode === 'missing_measurement' ? 'selected' : ''}>missing_measurement</option>
+        <option value="fixed_mm" ${lengthMode === 'fixed_mm' ? 'selected' : ''}>fixed_mm</option>
+      </select>
+    </td>
+    <td><input type="number" class="material-rules-template-fixed-length" min="1" step="1" value="${escapeHtml(fixedLength)}" aria-label="Template fixed length mm" /></td>
+    <td><input type="checkbox" class="material-rules-template-active" ${active ? 'checked' : ''} aria-label="Template active" /></td>
+    <td><input type="number" class="material-rules-template-sort" step="1" value="${escapeHtml(String(sortOrder))}" aria-label="Template sort order" /></td>
+    <td>
+      <button type="button" class="material-rules-row-remove-btn" aria-label="Remove template row">Remove</button>
+      <div class="material-rules-row-id">${escapeHtml(existingId || 'new')}</div>
+    </td>
+  `;
+
+  const lengthModeSelect = tr.querySelector('.material-rules-template-length-mode');
+  const fixedLengthInput = tr.querySelector('.material-rules-template-fixed-length');
+  const syncFixedLengthState = () => {
+    if (!lengthModeSelect || !fixedLengthInput) return;
+    const enabled = String(lengthModeSelect.value || 'none') === 'fixed_mm';
+    fixedLengthInput.disabled = !enabled;
+    if (!enabled) fixedLengthInput.value = '';
+  };
+  lengthModeSelect?.addEventListener('change', syncFixedLengthState);
+  syncFixedLengthState();
+
+  const removeBtn = tr.querySelector('.material-rules-row-remove-btn');
+  removeBtn?.addEventListener('click', () => {
+    tr.remove();
+  });
+
+  tbody.appendChild(tr);
+}
+
+function renderMaterialRulesQuickQuoterTables() {
+  const repairTypesBody = document.getElementById('materialRulesRepairTypesBody');
+  const templatesBody = document.getElementById('materialRulesTemplatesBody');
+  if (!repairTypesBody || !templatesBody) return;
+
+  repairTypesBody.innerHTML = '';
+  templatesBody.innerHTML = '';
+
+  const repairTypes = Array.isArray(materialRulesState.repairTypes) ? materialRulesState.repairTypes : [];
+  const templates = Array.isArray(materialRulesState.templates) ? materialRulesState.templates : [];
+
+  repairTypes.forEach((row) => appendMaterialRulesRepairTypeRow(row));
+  templates.forEach((row) => appendMaterialRulesTemplateRow(row));
+
+  renderMaterialRulesRepairTypeOptions();
+  renderMaterialRulesProductOptions();
+}
+
+function populateMaterialRulesMeasuredForm(rules) {
+  const safe = rules || {};
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value == null ? '' : String(value);
+  };
+
+  setValue('materialRulesBracketSpacingMm', safe.bracket_spacing_mm);
+  setValue('materialRulesClipSpacingMm', safe.clip_spacing_mm);
+  setValue('materialRulesScrewsPerBracket', safe.screws_per_bracket);
+  setValue('materialRulesScrewsPerDropper', safe.screws_per_dropper);
+  setValue('materialRulesScrewsPerSaddleClip', safe.screws_per_saddle_clip);
+  setValue('materialRulesScrewsPerAdjustableClip', safe.screws_per_adjustable_clip);
+  setValue('materialRulesScrewProductId', safe.screw_product_id);
+  setValue('materialRulesBracketProductIdSc', safe.bracket_product_id_sc);
+  setValue('materialRulesBracketProductIdCl', safe.bracket_product_id_cl);
+  setValue('materialRulesSaddleClipProductId65', safe.saddle_clip_product_id_65);
+  setValue('materialRulesSaddleClipProductId80', safe.saddle_clip_product_id_80);
+  setValue('materialRulesAdjustableClipProductId65', safe.adjustable_clip_product_id_65);
+  setValue('materialRulesAdjustableClipProductId80', safe.adjustable_clip_product_id_80);
+  setValue('materialRulesClipSelectionMode', safe.clip_selection_mode || 'auto_by_acl_presence');
+}
+
+function collectMaterialRulesRepairTypesPayload() {
+  const rows = Array.from(document.querySelectorAll('#materialRulesRepairTypesBody tr[data-material-rules-repair-row="true"]'));
+  const payload = [];
+  const errors = [];
+  const seenIds = new Set();
+
+  if (rows.length === 0) {
+    errors.push('Add at least one repair type row.');
+    return { payload, errors };
+  }
+
+  rows.forEach((row, index) => {
+    const id = String(row.querySelector('.material-rules-repair-id')?.value || '').trim();
+    const label = String(row.querySelector('.material-rules-repair-label')?.value || '').trim();
+    const sortOrderRaw = String(row.querySelector('.material-rules-repair-sort')?.value || '').trim();
+    const sortOrder = parseInt(sortOrderRaw, 10);
+    const requiresProfile = !!row.querySelector('.material-rules-repair-requires-profile')?.checked;
+    const requiresSize = !!row.querySelector('.material-rules-repair-requires-size')?.checked;
+    const active = !!row.querySelector('.material-rules-repair-active')?.checked;
+    const rowNumber = index + 1;
+
+    const duplicateId = !!id && seenIds.has(id);
+
+    if (!id) errors.push(`Repair type row ${rowNumber}: ID is required.`);
+    if (!label) errors.push(`Repair type row ${rowNumber}: Label is required.`);
+    if (!Number.isFinite(sortOrder)) errors.push(`Repair type row ${rowNumber}: Sort order must be an integer.`);
+    if (duplicateId) errors.push(`Repair type row ${rowNumber}: Duplicate ID '${id}'.`);
+    if (id) seenIds.add(id);
+
+    if (id && label && Number.isFinite(sortOrder) && !duplicateId) {
+      payload.push({
+        id,
+        label,
+        active,
+        sort_order: sortOrder,
+        requires_profile: requiresProfile,
+        requires_size_mm: requiresSize,
+      });
+    }
+  });
+
+  return { payload, errors };
+}
+
+function collectMaterialRulesTemplatesPayload() {
+  const rows = Array.from(document.querySelectorAll('#materialRulesTemplatesBody tr[data-material-rules-template-row="true"]'));
+  const payload = [];
+  const errors = [];
+  const seenIds = new Set();
+
+  rows.forEach((row, index) => {
+    const localId = String(row.dataset.templateId || '').trim();
+    const isPersistedId = !!localId && !localId.startsWith('new-');
+    const duplicateTemplateId = isPersistedId && seenIds.has(localId);
+    const repairTypeId = String(row.querySelector('.material-rules-template-repair-type-id')?.value || '').trim();
+    const productId = String(row.querySelector('.material-rules-template-product-id')?.value || '').trim();
+    const qtyRaw = String(row.querySelector('.material-rules-template-qty')?.value || '').trim();
+    const qtyPerUnit = parseFloat(qtyRaw);
+    const conditionProfileValue = String(row.querySelector('.material-rules-template-profile')?.value || '').trim().toUpperCase();
+    const conditionProfile = conditionProfileValue || null;
+    const conditionSizeRaw = String(row.querySelector('.material-rules-template-size')?.value || '').trim();
+    const conditionSize = conditionSizeRaw ? parseInt(conditionSizeRaw, 10) : null;
+    const lengthMode = String(row.querySelector('.material-rules-template-length-mode')?.value || 'none').trim().toLowerCase();
+    const fixedLengthRaw = String(row.querySelector('.material-rules-template-fixed-length')?.value || '').trim();
+    const fixedLength = fixedLengthRaw ? parseInt(fixedLengthRaw, 10) : null;
+    const active = !!row.querySelector('.material-rules-template-active')?.checked;
+    const sortOrderRaw = String(row.querySelector('.material-rules-template-sort')?.value || '').trim();
+    const sortOrder = parseInt(sortOrderRaw, 10);
+    const rowNumber = index + 1;
+
+    if (duplicateTemplateId) errors.push(`Template row ${rowNumber}: Duplicate template ID '${localId}'.`);
+    if (isPersistedId) seenIds.add(localId);
+
+    if (!repairTypeId) errors.push(`Template row ${rowNumber}: Repair type ID is required.`);
+    if (!productId) errors.push(`Template row ${rowNumber}: Product ID is required.`);
+    if (!Number.isFinite(qtyPerUnit) || qtyPerUnit < 0) errors.push(`Template row ${rowNumber}: Qty per unit must be a number >= 0.`);
+    if (conditionProfile && conditionProfile !== 'SC' && conditionProfile !== 'CL') errors.push(`Template row ${rowNumber}: Profile must be SC, CL, or empty.`);
+    if (conditionSize !== null && conditionSize !== 65 && conditionSize !== 80) errors.push(`Template row ${rowNumber}: Size must be 65, 80, or empty.`);
+    if (!['none', 'missing_measurement', 'fixed_mm'].includes(lengthMode)) errors.push(`Template row ${rowNumber}: Length mode is invalid.`);
+    if (!Number.isFinite(sortOrder)) errors.push(`Template row ${rowNumber}: Sort order must be an integer.`);
+    if (lengthMode === 'fixed_mm' && (!Number.isFinite(fixedLength) || fixedLength <= 0)) {
+      errors.push(`Template row ${rowNumber}: Fixed length must be a positive integer for fixed_mm mode.`);
+    }
+
+    if (
+      repairTypeId
+      && productId
+      && Number.isFinite(qtyPerUnit)
+      && qtyPerUnit >= 0
+      && (!conditionProfile || conditionProfile === 'SC' || conditionProfile === 'CL')
+      && (conditionSize === null || conditionSize === 65 || conditionSize === 80)
+      && ['none', 'missing_measurement', 'fixed_mm'].includes(lengthMode)
+      && Number.isFinite(sortOrder)
+      && (lengthMode !== 'fixed_mm' || (Number.isFinite(fixedLength) && fixedLength > 0))
+      && !duplicateTemplateId
+    ) {
+      const template = {
+        repair_type_id: repairTypeId,
+        product_id: productId,
+        qty_per_unit: qtyPerUnit,
+        condition_profile: conditionProfile,
+        condition_size_mm: conditionSize,
+        length_mode: lengthMode,
+        fixed_length_mm: lengthMode === 'fixed_mm' ? fixedLength : null,
+        active,
+        sort_order: sortOrder,
+      };
+      if (isPersistedId) template.id = localId;
+      payload.push(template);
+    }
+  });
+
+  return { payload, errors };
+}
+
+function collectMaterialRulesMeasuredPayload() {
+  const intValue = (id) => parseInt(String(document.getElementById(id)?.value || '').trim(), 10);
+  const textValue = (id) => String(document.getElementById(id)?.value || '').trim();
+
+  const payload = {
+    bracket_spacing_mm: intValue('materialRulesBracketSpacingMm'),
+    clip_spacing_mm: intValue('materialRulesClipSpacingMm'),
+    screws_per_bracket: intValue('materialRulesScrewsPerBracket'),
+    screws_per_dropper: intValue('materialRulesScrewsPerDropper'),
+    screws_per_saddle_clip: intValue('materialRulesScrewsPerSaddleClip'),
+    screws_per_adjustable_clip: intValue('materialRulesScrewsPerAdjustableClip'),
+    screw_product_id: textValue('materialRulesScrewProductId'),
+    bracket_product_id_sc: textValue('materialRulesBracketProductIdSc'),
+    bracket_product_id_cl: textValue('materialRulesBracketProductIdCl'),
+    saddle_clip_product_id_65: textValue('materialRulesSaddleClipProductId65'),
+    saddle_clip_product_id_80: textValue('materialRulesSaddleClipProductId80'),
+    adjustable_clip_product_id_65: textValue('materialRulesAdjustableClipProductId65'),
+    adjustable_clip_product_id_80: textValue('materialRulesAdjustableClipProductId80'),
+    clip_selection_mode: String(document.getElementById('materialRulesClipSelectionMode')?.value || '').trim(),
+  };
+
+  const errors = [];
+
+  if (!Number.isFinite(payload.bracket_spacing_mm) || payload.bracket_spacing_mm <= 0) errors.push('Bracket spacing must be an integer > 0.');
+  if (!Number.isFinite(payload.clip_spacing_mm) || payload.clip_spacing_mm <= 0) errors.push('Clip spacing must be an integer > 0.');
+  if (!Number.isFinite(payload.screws_per_bracket) || payload.screws_per_bracket < 0) errors.push('Screws per bracket must be an integer >= 0.');
+  if (!Number.isFinite(payload.screws_per_dropper) || payload.screws_per_dropper < 0) errors.push('Screws per dropper must be an integer >= 0.');
+  if (!Number.isFinite(payload.screws_per_saddle_clip) || payload.screws_per_saddle_clip < 0) errors.push('Screws per saddle clip must be an integer >= 0.');
+  if (!Number.isFinite(payload.screws_per_adjustable_clip) || payload.screws_per_adjustable_clip < 0) errors.push('Screws per adjustable clip must be an integer >= 0.');
+
+  [
+    ['screw_product_id', 'Screw product ID'],
+    ['bracket_product_id_sc', 'Bracket product (SC)'],
+    ['bracket_product_id_cl', 'Bracket product (CL)'],
+    ['saddle_clip_product_id_65', 'Saddle clip product (65)'],
+    ['saddle_clip_product_id_80', 'Saddle clip product (80)'],
+    ['adjustable_clip_product_id_65', 'Adjustable clip product (65)'],
+    ['adjustable_clip_product_id_80', 'Adjustable clip product (80)'],
+  ].forEach(([field, label]) => {
+    if (!payload[field]) errors.push(`${label} is required.`);
+  });
+
+  if (!['auto_by_acl_presence', 'force_saddle', 'force_adjustable'].includes(payload.clip_selection_mode)) {
+    errors.push('Clip selection mode is invalid.');
+  }
+
+  return { payload, errors };
+}
+
+async function fetchMaterialRules(options = {}) {
+  if (!canAccessDesktopAdminUi()) {
+    setMaterialRulesStatus(
+      isDesktopViewport()
+        ? 'Only admin users can load material rules.'
+        : 'Material Rules is available on desktop only.',
+      'error'
+    );
+    return;
+  }
+  if (!options.force && getVisibleViewId() !== 'view-material-rules') return;
+
+  materialRulesState.loading = true;
+  updateMaterialRulesActionButtons();
+  setMaterialRulesStatus('Loading material rules…');
+
+  const productsPromise = fetch('/api/products', { cache: 'no-store' })
+    .then((resp) => resp.json().catch(() => ({})))
+    .then((payload) => (Array.isArray(payload?.products) ? payload.products : []))
+    .catch(() => []);
+
+  try {
+    const [quickQuoterResp, measuredResp, products] = await Promise.all([
+      fetch('/api/admin/material-rules/quick-quoter', { headers: { ...getAuthHeaders() } }),
+      fetch('/api/admin/material-rules/measured', { headers: { ...getAuthHeaders() } }),
+      productsPromise,
+    ]);
+
+    if (handleAuthFailure(quickQuoterResp) || handleAuthFailure(measuredResp)) return;
+
+    const [quickQuoterPayload, measuredPayload] = await Promise.all([
+      quickQuoterResp.json().catch(() => ({})),
+      measuredResp.json().catch(() => ({})),
+    ]);
+
+    if (!quickQuoterResp.ok) {
+      throw new Error(getMaterialRulesApiError(quickQuoterPayload, 'Failed to load quick quoter rules.'));
+    }
+    if (!measuredResp.ok) {
+      throw new Error(getMaterialRulesApiError(measuredPayload, 'Failed to load measured rules.'));
+    }
+
+    materialRulesState.repairTypes = Array.isArray(quickQuoterPayload?.repair_types) ? quickQuoterPayload.repair_types : [];
+    materialRulesState.templates = Array.isArray(quickQuoterPayload?.templates) ? quickQuoterPayload.templates : [];
+    materialRulesState.measuredRules = measuredPayload?.rules || null;
+
+    const productIdsFromApi = (Array.isArray(products) ? products : [])
+      .map((p) => String(p?.id || '').trim())
+      .filter(Boolean);
+    const productIdsFromTemplates = materialRulesState.templates
+      .map((row) => String(row?.product_id || '').trim())
+      .filter(Boolean);
+    const measured = materialRulesState.measuredRules || {};
+    const productIdsFromMeasured = [
+      measured.screw_product_id,
+      measured.bracket_product_id_sc,
+      measured.bracket_product_id_cl,
+      measured.saddle_clip_product_id_65,
+      measured.saddle_clip_product_id_80,
+      measured.adjustable_clip_product_id_65,
+      measured.adjustable_clip_product_id_80,
+    ].map((id) => String(id || '').trim()).filter(Boolean);
+    materialRulesState.productIds = Array.from(new Set([
+      ...productIdsFromApi,
+      ...productIdsFromTemplates,
+      ...productIdsFromMeasured,
+    ]));
+
+    renderMaterialRulesQuickQuoterTables();
+    populateMaterialRulesMeasuredForm(materialRulesState.measuredRules || {});
+    setMaterialRulesStatus(options.showSuccess ? 'Material rules loaded.' : '');
+  } catch (err) {
+    setMaterialRulesStatus(err?.message || 'Failed to load material rules.', 'error');
+  } finally {
+    materialRulesState.loading = false;
+    updateMaterialRulesActionButtons();
+  }
+}
+
+async function saveMaterialRulesQuickQuoter() {
+  if (!canAccessDesktopAdminUi()) {
+    setMaterialRulesStatus('Only admin users can save material rules.', 'error');
+    return;
+  }
+
+  const repairTypeResult = collectMaterialRulesRepairTypesPayload();
+  if (repairTypeResult.errors.length > 0) {
+    setMaterialRulesStatus(repairTypeResult.errors[0], 'error');
+    return;
+  }
+  const templateResult = collectMaterialRulesTemplatesPayload();
+  if (templateResult.errors.length > 0) {
+    setMaterialRulesStatus(templateResult.errors[0], 'error');
+    return;
+  }
+
+  materialRulesState.savingQuickQuoter = true;
+  updateMaterialRulesActionButtons();
+  setMaterialRulesStatus('Saving quick quoter rules…');
+
+  try {
+    const repairTypesResp = await fetch('/api/admin/material-rules/quick-quoter/repair-types', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ repair_types: repairTypeResult.payload }),
+    });
+    if (handleAuthFailure(repairTypesResp)) return;
+    const repairTypesPayload = await repairTypesResp.json().catch(() => ({}));
+    if (!repairTypesResp.ok) {
+      throw new Error(getMaterialRulesApiError(repairTypesPayload, 'Failed to save repair types.'));
+    }
+
+    const templatesResp = await fetch('/api/admin/material-rules/quick-quoter/templates', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ templates: templateResult.payload }),
+    });
+    if (handleAuthFailure(templatesResp)) return;
+    const templatesPayload = await templatesResp.json().catch(() => ({}));
+    if (!templatesResp.ok) {
+      throw new Error(getMaterialRulesApiError(templatesPayload, 'Failed to save templates.'));
+    }
+
+    materialRulesState.repairTypes = Array.isArray(repairTypesPayload?.repair_types) ? repairTypesPayload.repair_types : [];
+    materialRulesState.templates = Array.isArray(templatesPayload?.templates) ? templatesPayload.templates : [];
+    renderMaterialRulesQuickQuoterTables();
+    setMaterialRulesStatus('Quick Quoter rules saved.', 'success');
+    showMessage('Quick Quoter rules saved.', 'success');
+    void fetchQuickQuoterCatalog();
+  } catch (err) {
+    setMaterialRulesStatus(err?.message || 'Failed to save quick quoter rules.', 'error');
+  } finally {
+    materialRulesState.savingQuickQuoter = false;
+    updateMaterialRulesActionButtons();
+  }
+}
+
+async function saveMaterialRulesMeasured() {
+  if (!canAccessDesktopAdminUi()) {
+    setMaterialRulesStatus('Only admin users can save material rules.', 'error');
+    return;
+  }
+
+  const measuredResult = collectMaterialRulesMeasuredPayload();
+  if (measuredResult.errors.length > 0) {
+    setMaterialRulesStatus(measuredResult.errors[0], 'error');
+    return;
+  }
+
+  materialRulesState.savingMeasured = true;
+  updateMaterialRulesActionButtons();
+  setMaterialRulesStatus('Saving measured rules…');
+
+  try {
+    const resp = await fetch('/api/admin/material-rules/measured', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ rules: measuredResult.payload }),
+    });
+    if (handleAuthFailure(resp)) return;
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(getMaterialRulesApiError(payload, 'Failed to save measured rules.'));
+    }
+    materialRulesState.measuredRules = payload?.rules || measuredResult.payload;
+    populateMaterialRulesMeasuredForm(materialRulesState.measuredRules || {});
+    setMaterialRulesStatus('Measured rules saved.', 'success');
+    showMessage('Measured rules saved.', 'success');
+  } catch (err) {
+    setMaterialRulesStatus(err?.message || 'Failed to save measured rules.', 'error');
+  } finally {
+    materialRulesState.savingMeasured = false;
+    updateMaterialRulesActionButtons();
+  }
+}
+
+function initMaterialRulesView() {
+  if (materialRulesState.initialized) return;
+  materialRulesState.initialized = true;
+
+  const backBtn = document.getElementById('btnMaterialRulesBackToCanvas');
+  const reloadBtn = document.getElementById('btnMaterialRulesReload');
+  const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
+  const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
+  const addRepairTypeBtn = document.getElementById('btnMaterialRulesAddRepairType');
+  const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
+
+  backBtn?.addEventListener('click', () => {
+    switchView('view-canvas', { triggerEl: backBtn });
+  });
+
+  reloadBtn?.addEventListener('click', () => {
+    void fetchMaterialRules({ force: true, showSuccess: true });
+  });
+
+  saveQuickQuoterBtn?.addEventListener('click', () => {
+    void saveMaterialRulesQuickQuoter();
+  });
+
+  saveMeasuredBtn?.addEventListener('click', () => {
+    void saveMaterialRulesMeasured();
+  });
+
+  addRepairTypeBtn?.addEventListener('click', () => {
+    appendMaterialRulesRepairTypeRow({
+      id: '',
+      label: '',
+      active: true,
+      sort_order: 0,
+      requires_profile: false,
+      requires_size_mm: false,
+    });
+  });
+
+  addTemplateBtn?.addEventListener('click', () => {
+    appendMaterialRulesTemplateRow({
+      id: '',
+      repair_type_id: '',
+      product_id: '',
+      qty_per_unit: 0,
+      condition_profile: null,
+      condition_size_mm: null,
+      length_mode: 'none',
+      fixed_length_mm: null,
+      active: true,
+      sort_order: 0,
+    });
+  });
+
+  updateMaterialRulesActionButtons();
 }
 
 function setBonusDashboardStatus(message, tone = 'info') {
@@ -16432,6 +17105,10 @@ function getPrimaryViewFocusTarget(viewId) {
       || document.getElementById('btnRefreshUserPermissions')
       || document.getElementById('btnPermissionsBackToCanvas');
   }
+  if (viewId === 'view-material-rules') {
+    return document.getElementById('btnMaterialRulesReload')
+      || document.getElementById('btnMaterialRulesBackToCanvas');
+  }
   if (viewId === 'view-bonus-admin') {
     return document.getElementById('btnBonusAdminBackToCanvas');
   }
@@ -16470,6 +17147,13 @@ function switchView(viewId, options = {}) {
     showMessage(message, 'error');
     return;
   }
+  if (viewId === 'view-material-rules' && !canAccessDesktopAdminUi()) {
+    const message = isDesktopViewport()
+      ? 'Only admin users can access Material Rules.'
+      : 'Material Rules is available on desktop only.';
+    showMessage(message, 'error');
+    return;
+  }
   if (viewId === 'view-bonus-admin' && !canAccessDesktopAdminUi()) {
     const message = isDesktopViewport()
       ? 'Only admin users can access Bonus Admin.'
@@ -16505,6 +17189,9 @@ function switchView(viewId, options = {}) {
     } else if (viewId === 'view-user-permissions') {
       initUserPermissionsView();
       void fetchUserPermissions();
+    } else if (viewId === 'view-material-rules') {
+      initMaterialRulesView();
+      void fetchMaterialRules();
     } else if (viewId === 'view-bonus-admin') {
       initBonusAdminView();
       void fetchBonusAdminPeriods();
@@ -16712,6 +17399,54 @@ if (typeof window !== 'undefined') {
   };
   window.__quoteAppGetViewportMode = function () {
     return layoutState.viewportMode;
+  };
+  window.__quoteAppGetAdminUiState = function () {
+    const materialRulesMenu = document.getElementById('menuItemMaterialRules');
+    return {
+      viewportMode: layoutState.viewportMode,
+      isDesktopViewport: isDesktopViewport(),
+      hasToken: !!authState.token,
+      role: normalizeAppRole(authState.role),
+      isSuperAdmin: !!authState.isSuperAdmin,
+      canAccessDesktopAdminUi: canAccessDesktopAdminUi(),
+      visibleViewId: getVisibleViewId(),
+      materialRulesMenuHidden: materialRulesMenu ? !!materialRulesMenu.hidden : null,
+    };
+  };
+  window.__quoteAppSetAuthForTests = function (options = {}) {
+    const tokenProvided = Object.prototype.hasOwnProperty.call(options, 'token');
+    const tokenValue = tokenProvided ? options.token : (authState.token || 'e2e-test-token');
+    const token = tokenValue ? String(tokenValue) : null;
+    const roleValue = normalizeAppRole(options.role || authState.role || 'viewer');
+    const emailValue = typeof options.email === 'string' && options.email.trim()
+      ? options.email.trim()
+      : (authState.email || 'qa-e2e@example.com');
+    const userIdValue = typeof options.userId === 'string' && options.userId.trim()
+      ? options.userId.trim()
+      : (authState.user?.id || '00000000-0000-0000-0000-000000000001');
+
+    authState.token = token;
+    authState.email = token ? emailValue : null;
+    authState.role = token ? roleValue : 'viewer';
+    authState.isSuperAdmin = token ? !!options.isSuperAdmin : false;
+    if (token) {
+      const currentMeta = authState.user?.user_metadata;
+      authState.user = {
+        id: userIdValue,
+        email: emailValue,
+        user_metadata: currentMeta && typeof currentMeta === 'object' ? { ...currentMeta } : {},
+        app_metadata: { role: authState.role },
+      };
+    } else {
+      authState.user = null;
+    }
+
+    if (typeof setAuthUIRef === 'function') {
+      setAuthUIRef();
+    } else {
+      syncAdminDesktopAccess({ notify: false, focus: false });
+    }
+    return window.__quoteAppGetAdminUiState();
   };
   window.__quoteAppGetOrientationPolicyState = function () {
     return {

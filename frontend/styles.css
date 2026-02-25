@@ -3868,6 +3868,208 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   text-align: center;
 }
 
+/* Material Rules view (desktop admin only) */
+.material-rules-view-container {
+  padding: 24px 40px;
+  background: #f9fafb;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.material-rules-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.material-rules-header-left {
+  justify-self: start;
+}
+
+.material-rules-header-title {
+  font-size: clamp(1.125rem, 0.8vw + 0.95rem, 1.5rem);
+  font-weight: 600;
+  color: #111;
+  justify-self: center;
+}
+
+.material-rules-header-right {
+  justify-self: end;
+}
+
+.material-rules-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.material-rules-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.material-rules-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.material-rules-section-title {
+  margin: 0;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.material-rules-section-copy {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.material-rules-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-rules-subsection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.material-rules-subsection-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #111827;
+}
+
+.material-rules-table-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  overflow: auto;
+}
+
+.material-rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1040px;
+}
+
+.material-rules-table th,
+.material-rules-table td {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+  font-size: 13px;
+  color: #111827;
+}
+
+.material-rules-table th {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.material-rules-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.material-rules-table input[type="text"],
+.material-rules-table input[type="number"],
+.material-rules-table select {
+  width: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+}
+
+.material-rules-table input:focus,
+.material-rules-table select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.material-rules-row-remove-btn {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.material-rules-row-remove-btn:hover {
+  background: #fee2e2;
+}
+
+.material-rules-row-id {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.material-rules-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px 12px;
+}
+
+.material-rules-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.material-rules-form-grid input,
+.material-rules-form-grid select {
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+}
+
+.material-rules-form-grid input:focus,
+.material-rules-form-grid select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 /* Bonus Admin view (desktop admin only, 59.17) */
 #view-bonus-admin .bonus-admin-view-container {
   padding: 24px 40px;
@@ -7756,8 +7958,8 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
   align-items: center;
   column-gap: 8px;
 }
-/* Only the product name span (exclude remove button) so the circle stays fixed size */
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child .quote-mobile-product-cell-content > span:not(.quote-row-remove-x) {
+/* Only the product name span (exclude remove button and AUTO badge) so the circle stays fixed size */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child .quote-mobile-product-cell-content > span:not(.quote-row-remove-x):not(.quote-product-auto-badge) {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -7765,8 +7967,21 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
   white-space: nowrap;
   display: block;
 }
+/* 54.93.11: AUTO label pill for inferred/conditional rows (desktop + mobile) */
+#quoteModal .quote-parts-table .quote-product-auto-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #e8f4fc;
+  color: #0a7ea4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 /* Product name in first cell: single-line truncate with ellipsis on mobile to keep row height fixed */
-body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus) {
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus):not(.quote-product-auto-badge) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

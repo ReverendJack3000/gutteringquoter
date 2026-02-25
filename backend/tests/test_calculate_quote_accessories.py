@@ -36,6 +36,14 @@ class TestCalculateQuoteAccessoryInferenceBaseline(unittest.TestCase):
             backend_main,
             "get_product_pricing",
             return_value=self._pricing_for(product_ids),
+        ), patch.object(
+            backend_main,
+            "get_supabase",
+            return_value=object(),
+        ), patch.object(
+            backend_main,
+            "get_measured_material_rules_for_quote",
+            return_value=None,
         ):
             resp = self.client.post(
                 "/api/calculate-quote",

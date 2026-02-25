@@ -51,6 +51,68 @@ Marley product catalog shown in the right panel. Replaces the hardcoded list in 
 
 **Seed data:** Six MVP products (gutter, downpipe, bracket, stopend, outlet, dropper) with `/assets/marley/{id}.svg` paths.
 
+### 1.1 `public.quick_quoter_repair_types` + `public.quick_quoter_part_templates`
+
+Quick Quoter catalog and conditional part templates (Section 63). Admin Material Rules UI edits these tables directly.
+
+**`public.quick_quoter_repair_types` (catalog)**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | text (PK) | Repair type key (e.g. `joiner_replacement`) |
+| `label` | text | User-facing label |
+| `active` | boolean | Enable/disable repair type |
+| `sort_order` | integer | UI order |
+| `requires_profile` | boolean | Requires SC/CL selection |
+| `requires_size_mm` | boolean | Requires 65/80 selection |
+| `created_at` | timestamptz | Row created timestamp |
+| `updated_at` | timestamptz | Last updated timestamp |
+| `updated_by` | uuid nullable | `auth.users.id` of admin/super-admin editor |
+
+**`public.quick_quoter_part_templates` (conditional parts)**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid (PK) | Template row id |
+| `repair_type_id` | text FK | → `quick_quoter_repair_types.id` |
+| `product_id` | text FK | → `products.id` |
+| `qty_per_unit` | numeric | Quantity multiplier |
+| `condition_profile` | text nullable | `SC` / `CL` / null |
+| `condition_size_mm` | integer nullable | `65` / `80` / null |
+| `length_mode` | text | `none` / `missing_measurement` / `fixed_mm` |
+| `fixed_length_mm` | integer nullable | Required when `length_mode=fixed_mm` |
+| `active` | boolean | Enable/disable template |
+| `sort_order` | integer | Per-repair ordering |
+| `created_at` | timestamptz | Row created timestamp |
+| `updated_at` | timestamptz | Last updated timestamp |
+| `updated_by` | uuid nullable | `auth.users.id` of admin/super-admin editor |
+
+### 1.2 `public.measured_material_rules`
+
+Single-row global config (`id = 1`) for measured-length accessory inference used by `POST /api/calculate-quote`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | integer (PK, check `id=1`) | Singleton row |
+| `bracket_spacing_mm` | integer | Bracket spacing rule |
+| `clip_spacing_mm` | integer | Downpipe clip spacing rule |
+| `screws_per_bracket` | integer | Screws per inferred bracket |
+| `screws_per_dropper` | integer | Screws per dropper |
+| `screws_per_saddle_clip` | integer | Screws per saddle clip |
+| `screws_per_adjustable_clip` | integer | Screws per adjustable clip |
+| `screw_product_id` | text FK | Screw product id |
+| `bracket_product_id_sc` | text FK | Storm Cloud bracket product id |
+| `bracket_product_id_cl` | text FK | Classic bracket product id |
+| `saddle_clip_product_id_65` | text FK | 65mm saddle clip product id |
+| `saddle_clip_product_id_80` | text FK | 80mm saddle clip product id |
+| `adjustable_clip_product_id_65` | text FK | 65mm adjustable clip product id |
+| `adjustable_clip_product_id_80` | text FK | 80mm adjustable clip product id |
+| `clip_selection_mode` | text | `auto_by_acl_presence` / `force_saddle` / `force_adjustable` |
+| `updated_at` | timestamptz | Last updated timestamp |
+| `updated_by` | uuid nullable | `auth.users.id` of admin/super-admin editor |
+
+`/api/calculate-quote` reads this row; if it is missing/unavailable, backend falls back to built-in defaults to avoid quote outage.
+
 ---
 
 ### 2. `public.saved_diagrams`
@@ -360,6 +422,11 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 | `GET /api/diagrams/{id}` | `public.saved_diagrams` (owner only) |
 | `PATCH /api/diagrams/{id}` | Update + optional Storage upload |
 | `DELETE /api/diagrams/{id}` | Delete row + Storage objects |
+| `GET /api/admin/material-rules/quick-quoter` | `public.quick_quoter_repair_types` + `public.quick_quoter_part_templates` |
+| `PUT /api/admin/material-rules/quick-quoter/repair-types` | Upsert/delete `public.quick_quoter_repair_types` (+ `updated_at`, `updated_by`) |
+| `PUT /api/admin/material-rules/quick-quoter/templates` | Upsert/delete `public.quick_quoter_part_templates` (+ `updated_at`, `updated_by`) |
+| `GET /api/admin/material-rules/measured` | `public.measured_material_rules` (row `id=1`, defaults-safe) |
+| `PUT /api/admin/material-rules/measured` | Upsert `public.measured_material_rules` (+ `updated_at`, `updated_by`) |
 
 ---
 
@@ -375,6 +442,7 @@ Current migrations in **Jacks Quote App** (see Supabase dashboard or `list_migra
 4. **add_quotes_is_final_quote** (Section 59.4) – Adds `is_final_quote` boolean (default false) to `public.quotes` for active-quote rule.
 5. **add_quotes_servicem8_job_uuid** (Section 59.19) – Adds nullable `servicem8_job_uuid` (uuid) to `public.quotes` for API lookups and quote–job link.
 6. **add_job_personnel_unique_job_performance_technician** (Section 59.8.4) – Adds UNIQUE(job_performance_id, technician_id) on `public.job_personnel` to prevent duplicates and support insert-only baseline from sync.
+7. **material_rules_migration** (Section 63.11+) – Creates `public.measured_material_rules` singleton table, seeds defaults matching existing accessory logic, and adds `updated_by` to `quick_quoter_repair_types` + `quick_quoter_part_templates`.
 
 (Other migrations omitted for brevity; see Supabase dashboard or `list_migrations` MCP for full list.)
 

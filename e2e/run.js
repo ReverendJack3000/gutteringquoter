@@ -179,6 +179,104 @@ async function run() {
     }
     console.log('  ✓ Orientation policy (desktop): target none');
 
+    // Material Rules guard regression: desktop admin can access the Material Rules view.
+    const desktopMaterialRulesGate = await page.evaluate(() => {
+      if (typeof window.__quoteAppSetAuthForTests !== 'function') return { hookReady: false };
+      const adminState = window.__quoteAppSetAuthForTests({
+        token: 'e2e-desktop-admin-token',
+        role: 'admin',
+        email: 'qa-desktop-admin@example.com',
+        userId: '00000000-0000-0000-0000-00000000d001',
+      });
+      if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      const profileWrap = document.getElementById('userProfileWrap');
+      const profileDropdown = document.getElementById('profileDropdown');
+      if (profileWrap) profileWrap.hidden = false;
+      if (profileDropdown) profileDropdown.hidden = false;
+      const menuItem = document.getElementById('menuItemMaterialRules');
+      return {
+        hookReady: true,
+        canAccessDesktopAdminUi: !!adminState?.canAccessDesktopAdminUi,
+        menuExists: !!menuItem,
+        menuHidden: menuItem ? !!menuItem.hidden : null,
+      };
+    });
+    if (!desktopMaterialRulesGate.hookReady) {
+      throw new Error('Desktop Material Rules regression: missing __quoteAppSetAuthForTests hook');
+    }
+    if (!desktopMaterialRulesGate.canAccessDesktopAdminUi) {
+      throw new Error('Desktop Material Rules regression: admin auth should pass desktop admin gate');
+    }
+    if (!desktopMaterialRulesGate.menuExists || desktopMaterialRulesGate.menuHidden) {
+      throw new Error('Desktop Material Rules regression: admin desktop menu item should be visible');
+    }
+    await page.evaluate(() => {
+      if (window.__quoteAppE2eMaterialRulesFetchPatch) return;
+      const originalFetch = window.fetch.bind(window);
+      window.__quoteAppE2eMaterialRulesFetchPatch = { originalFetch };
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        const href = String(url || '');
+        if (href.includes('/api/admin/material-rules/quick-quoter')) {
+          return new Response(JSON.stringify({ repair_types: [], templates: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (href.includes('/api/admin/material-rules/measured')) {
+          return new Response(JSON.stringify({
+            rules: {
+              id: 1,
+              bracket_spacing_mm: 800,
+              clip_spacing_mm: 1000,
+              screws_per_bracket: 2,
+              screws_per_dropper: 2,
+              screws_per_saddle_clip: 1,
+              screws_per_adjustable_clip: 1,
+              screw_product_id: 'SCR-SS',
+              bracket_product_id_sc: 'BRK-SC',
+              bracket_product_id_cl: 'BRK-CL',
+              saddle_clip_product_id_65: 'SCL-65',
+              saddle_clip_product_id_80: 'SCL-80',
+              adjustable_clip_product_id_65: 'ACL-65',
+              adjustable_clip_product_id_80: 'ACL-80',
+              clip_selection_mode: 'auto_by_acl_presence',
+            },
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return originalFetch(input, init);
+      };
+    });
+    await clickSelectorViaDom(page, '#menuItemMaterialRules');
+    await delay(320);
+    const desktopMaterialRulesViewState = await page.evaluate(() => {
+      const visible = document.querySelector('.app-view:not(.hidden)');
+      return {
+        visibleViewId: visible ? visible.id : null,
+        hasQuickSection: !!document.getElementById('materialRulesQuickQuoterHeading'),
+        hasMeasuredSection: !!document.getElementById('materialRulesMeasuredHeading'),
+      };
+    });
+    if (desktopMaterialRulesViewState.visibleViewId !== 'view-material-rules') {
+      throw new Error(`Desktop Material Rules regression: expected view-material-rules, got ${desktopMaterialRulesViewState.visibleViewId}`);
+    }
+    if (!desktopMaterialRulesViewState.hasQuickSection || !desktopMaterialRulesViewState.hasMeasuredSection) {
+      throw new Error('Desktop Material Rules regression: expected both Quick Quoter and Measured sections');
+    }
+    await page.evaluate(() => {
+      if (window.__quoteAppE2eMaterialRulesFetchPatch?.originalFetch) {
+        window.fetch = window.__quoteAppE2eMaterialRulesFetchPatch.originalFetch;
+        delete window.__quoteAppE2eMaterialRulesFetchPatch;
+      }
+      if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      if (typeof window.__quoteAppSetAuthForTests === 'function') window.__quoteAppSetAuthForTests({ token: null });
+    });
+    await delay(240);
+    console.log('  ✓ Desktop Material Rules admin access and view routing');
+
     // Toolbar
     const uploadZone = await page.$('#uploadZone') || await page.$('#cameraUploadBtn');
     const exportBtn = await page.$('#exportBtn');
@@ -1846,6 +1944,48 @@ async function run() {
         throw new Error(`Mobile orientation policy on canvas should target landscape, got ${mobileCanvasOrientation.target}`);
       }
       console.log('  ✓ Mobile orientation policy: canvas targets landscape');
+
+      // Material Rules guard regression: mobile must block Material Rules even with admin auth.
+      const mobileMaterialRulesGate = await mobilePage.evaluate(() => {
+        if (typeof window.__quoteAppSetAuthForTests !== 'function') return { hookReady: false };
+        const adminState = window.__quoteAppSetAuthForTests({
+          token: 'e2e-mobile-admin-token',
+          role: 'admin',
+          email: 'qa-mobile-admin@example.com',
+          userId: '00000000-0000-0000-0000-00000000m001',
+        });
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+        const beforeViewId = (document.querySelector('.app-view:not(.hidden)') || {}).id || null;
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-material-rules');
+        const afterViewId = (document.querySelector('.app-view:not(.hidden)') || {}).id || null;
+        const menuItem = document.getElementById('menuItemMaterialRules');
+        return {
+          hookReady: true,
+          canAccessDesktopAdminUi: !!adminState?.canAccessDesktopAdminUi,
+          beforeViewId,
+          afterViewId,
+          menuExists: !!menuItem,
+          menuHidden: menuItem ? !!menuItem.hidden : null,
+        };
+      });
+      if (!mobileMaterialRulesGate.hookReady) {
+        throw new Error('Mobile Material Rules regression: missing __quoteAppSetAuthForTests hook');
+      }
+      if (mobileMaterialRulesGate.canAccessDesktopAdminUi) {
+        throw new Error('Mobile Material Rules regression: mobile admin should not pass desktop admin gate');
+      }
+      if (!mobileMaterialRulesGate.menuExists || !mobileMaterialRulesGate.menuHidden) {
+        throw new Error('Mobile Material Rules regression: menu item must remain hidden on mobile');
+      }
+      if (mobileMaterialRulesGate.afterViewId === 'view-material-rules') {
+        throw new Error('Mobile Material Rules regression: switchView should not allow mobile access to material rules');
+      }
+      await mobilePage.evaluate(() => {
+        if (typeof window.__quoteAppSetAuthForTests === 'function') window.__quoteAppSetAuthForTests({ token: null });
+        if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      });
+      await delay(180);
+      console.log('  ✓ Mobile Material Rules guard blocks admin access outside desktop viewport');
 
       const mobileBonusScaffoldCheck = await mobilePage.evaluate(() => {
         const bonusBtn = document.getElementById('mobileBonusDashboardBtn');

@@ -38,6 +38,15 @@ from app.diagrams import (
     update_diagram,
 )
 from app.gutter_accessories import expand_elements_with_gutter_accessories
+from app.material_rules import (
+    MaterialRulesValidationError,
+    get_measured_material_rules_for_quote,
+    get_measured_material_rules_or_defaults,
+    get_quick_quoter_material_rules,
+    save_measured_material_rules,
+    save_quick_quoter_repair_types,
+    save_quick_quoter_templates,
+)
 from app.pricing import get_product_pricing
 from app.products import get_products
 from app.bonus_periods import create_period, list_periods, update_period
@@ -817,6 +826,18 @@ class QuickQuoterResolveRequest(BaseModel):
     profile: Optional[str] = Field(None, description="storm_cloud | classic")
     size_mm: Optional[int] = Field(None, description="Downpipe size in mm (65 | 80)")
     selections: list[QuickQuoterSelection] = Field(default_factory=list, description="Quick Quoter selections")
+
+
+class AdminQuickQuoterRepairTypesRequest(BaseModel):
+    repair_types: list[dict[str, Any]] = Field(default_factory=list, description="Full replacement list for quick_quoter_repair_types")
+
+
+class AdminQuickQuoterTemplatesRequest(BaseModel):
+    templates: list[dict[str, Any]] = Field(default_factory=list, description="Full replacement list for quick_quoter_part_templates")
+
+
+class AdminMeasuredRulesRequest(BaseModel):
+    rules: dict[str, Any] = Field(default_factory=dict, description="Measured-length accessory inference rule config")
 
 
 class UpdatePricingItem(BaseModel):
@@ -1869,6 +1890,103 @@ def api_quick_quoter_resolve(body: QuickQuoterResolveRequest):
         raise HTTPException(500, "Failed to resolve quick quoter selections")
 
 
+@app.get("/api/admin/material-rules/quick-quoter")
+def api_admin_material_rules_quick_quoter(
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    _ = user_id
+    try:
+        supabase = get_supabase()
+        payload = get_quick_quoter_material_rules(supabase)
+        return payload
+    except Exception as e:
+        logger.exception("Failed to load admin material rules (quick quoter): %s", e)
+        raise HTTPException(500, "Failed to load quick quoter material rules")
+
+
+@app.put("/api/admin/material-rules/quick-quoter/repair-types")
+def api_admin_material_rules_quick_quoter_repair_types(
+    body: AdminQuickQuoterRepairTypesRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    actor_user_id = str(user_id)
+    try:
+        supabase = get_supabase()
+        rows = save_quick_quoter_repair_types(
+            supabase,
+            body.repair_types,
+            actor_user_id=actor_user_id,
+        )
+        return {"repair_types": rows}
+    except MaterialRulesValidationError as e:
+        raise HTTPException(400, {"validation_errors": e.errors})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save admin quick quoter repair types: %s", e)
+        raise HTTPException(500, "Failed to save quick quoter repair types")
+
+
+@app.put("/api/admin/material-rules/quick-quoter/templates")
+def api_admin_material_rules_quick_quoter_templates(
+    body: AdminQuickQuoterTemplatesRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    actor_user_id = str(user_id)
+    try:
+        supabase = get_supabase()
+        rows = save_quick_quoter_templates(
+            supabase,
+            body.templates,
+            actor_user_id=actor_user_id,
+        )
+        return {"templates": rows}
+    except MaterialRulesValidationError as e:
+        raise HTTPException(400, {"validation_errors": e.errors})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save admin quick quoter templates: %s", e)
+        raise HTTPException(500, "Failed to save quick quoter templates")
+
+
+@app.get("/api/admin/material-rules/measured")
+def api_admin_material_rules_measured(
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    _ = user_id
+    try:
+        supabase = get_supabase()
+        rules = get_measured_material_rules_or_defaults(supabase)
+        return {"rules": rules}
+    except Exception as e:
+        logger.exception("Failed to load measured material rules: %s", e)
+        raise HTTPException(500, "Failed to load measured material rules")
+
+
+@app.put("/api/admin/material-rules/measured")
+def api_admin_material_rules_measured_save(
+    body: AdminMeasuredRulesRequest,
+    user_id: Any = Depends(require_role(["admin"])),
+):
+    actor_user_id = str(user_id)
+    try:
+        supabase = get_supabase()
+        rules = save_measured_material_rules(
+            supabase,
+            body.rules,
+            actor_user_id=actor_user_id,
+        )
+        return {"rules": rules}
+    except MaterialRulesValidationError as e:
+        raise HTTPException(400, {"validation_errors": e.errors})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save measured material rules: %s", e)
+        raise HTTPException(500, "Failed to save measured material rules")
+
+
 @app.post("/api/calculate-quote")
 def api_calculate_quote(body: CalculateQuoteRequest):
     """
@@ -1882,7 +2000,15 @@ def api_calculate_quote(body: CalculateQuoteRequest):
         {"assetId": e.assetId, "quantity": e.quantity, "length_mm": getattr(e, "length_mm", None)}
         for e in body.elements
     ]
-    elements_for_quote = expand_elements_with_gutter_accessories(raw_elements)
+    measured_rules = None
+    try:
+        supabase = get_supabase()
+        measured_rules = get_measured_material_rules_for_quote(supabase)
+    except Exception as e:
+        logger.warning("Measured material rules unavailable; using defaults for quote inference: %s", e)
+        measured_rules = None
+
+    elements_for_quote = expand_elements_with_gutter_accessories(raw_elements, rules_config=measured_rules)
 
     all_product_ids = list({e["assetId"] for e in elements_for_quote} | {e.assetId for e in body.labour_elements})
     try:
