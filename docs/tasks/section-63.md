@@ -25,6 +25,7 @@
 - [x] **63.15** **Frontend editor wiring + guards + accessibility:** Wire fetch/save flows in `frontend/app.js` (Quick Quoter save order: repair types first, templates second), add client validation + status feedback, and integrate focus/route/menu visibility behavior with existing desktop admin patterns.
 - [x] **63.16.0** **Apply Material Rules migration in production:** Run `docs/material_rules_migration.sql` in Supabase SQL Editor (production project `rlptjmkejfykisaefkeh`). Then re-test `GET /api/admin/material-rules/quick-quoter` and `GET /api/admin/material-rules/measured`; reload the Material Rules page in production. Root cause of current 500s: production DB missing `measured_material_rules` table and `updated_by` on quick_quoter_repair_types / quick_quoter_part_templates.
 - [ ] **63.16** **Tests, QA, and Railway deployment safety sign-off:** Add backend tests (`backend/tests/test_material_rules_api.py`, `backend/tests/test_gutter_accessories_configurable.py`) and keep existing suites green. Pending: manual desktop/mobile QA and Railway production smoke/sign-off after applying `docs/material_rules_migration.sql` in Supabase (see 63.16.0).
+- [x] **63.17** **Material Rules section order:** Reorder sections in Material Rules view so Measured-Length Rules is first, Quick Quoter Rules second. HTML-only change in `frontend/index.html` (swap the two `<section class="material-rules-section">` blocks inside `main.material-rules-main`). No JS/CSS/API changes; no desktop vs mobile scoping (same DOM for both). Railway-safe.
 
 ---
 

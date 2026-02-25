@@ -101,7 +101,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.15, 62.16 | (62.15) Quick Quoter desktop parity follow-up verification; manual QA/sign-off pending. (62.16) Mobile Quick Quoter entry: blue button (#007aff), white SVG/text, same vertical padding as camera section (1.5rem); mobile-only CSS. |
-| 63 | 63.9, 63.16 | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). |
+| 63 | 63.9, 63.16, **63.17** | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). **(63.17) Material Rules section order: Measured-Length first, Quick Quoter second (HTML reorder only).** |
 ---
 
 ## Locked decisions

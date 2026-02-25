@@ -677,61 +677,6 @@
         <main class="material-rules-main">
           <div id="materialRulesStatus" class="permissions-status" role="status" aria-live="polite" hidden></div>
 
-          <section class="material-rules-section" aria-labelledby="materialRulesQuickQuoterHeading">
-            <div class="material-rules-section-header">
-              <h2 id="materialRulesQuickQuoterHeading" class="material-rules-section-title">Quick Quoter Rules</h2>
-              <button type="button" id="btnMaterialRulesSaveQuickQuoter" class="btn">Save Quick Quoter Rules</button>
-            </div>
-            <p class="material-rules-section-copy">Edit repair types and templates. Save applies changes live.</p>
-
-            <div class="material-rules-subsection">
-              <div class="material-rules-subsection-head">
-                <h3>Repair Types</h3>
-              </div>
-              <p class="material-rules-subsection-copy">Repair Type IDs are locked system keys and cannot be added, removed, or renamed here.</p>
-              <div class="material-rules-table-wrap">
-                <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Label</th>
-                      <th scope="col">Sort</th>
-                      <th scope="col">Needs Profile</th>
-                      <th scope="col">Needs Size</th>
-                      <th scope="col">Active</th>
-                    </tr>
-                  </thead>
-                  <tbody id="materialRulesRepairTypesBody"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="material-rules-subsection">
-              <div class="material-rules-subsection-head">
-                <h3>Part Templates</h3>
-                <button type="button" id="btnMaterialRulesAddTemplate" class="btn">Add Template</button>
-              </div>
-              <div class="material-rules-table-wrap">
-                <table class="material-rules-table material-rules-table--templates" aria-label="Quick Quoter templates table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Repair Type ID</th>
-                      <th scope="col">Product ID</th>
-                      <th scope="col">Qty/Unit</th>
-                      <th scope="col">Profile</th>
-                      <th scope="col">Size</th>
-                      <th scope="col">Length Mode</th>
-                      <th scope="col">Fixed mm</th>
-                      <th scope="col">Active</th>
-                      <th scope="col">Sort</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="materialRulesTemplatesBody"></tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
           <section class="material-rules-section" aria-labelledby="materialRulesMeasuredHeading">
             <div class="material-rules-section-header">
               <h2 id="materialRulesMeasuredHeading" class="material-rules-section-title">Measured-Length Rules</h2>
@@ -786,6 +731,61 @@
                   <option value="force_adjustable">Force adjustable clips</option>
                 </select>
               </label>
+            </div>
+          </section>
+
+          <section class="material-rules-section" aria-labelledby="materialRulesQuickQuoterHeading">
+            <div class="material-rules-section-header">
+              <h2 id="materialRulesQuickQuoterHeading" class="material-rules-section-title">Quick Quoter Rules</h2>
+              <button type="button" id="btnMaterialRulesSaveQuickQuoter" class="btn">Save Quick Quoter Rules</button>
+            </div>
+            <p class="material-rules-section-copy">Edit repair types and templates. Save applies changes live.</p>
+
+            <div class="material-rules-subsection">
+              <div class="material-rules-subsection-head">
+                <h3>Repair Types</h3>
+              </div>
+              <p class="material-rules-subsection-copy">Repair Type IDs are locked system keys and cannot be added, removed, or renamed here.</p>
+              <div class="material-rules-table-wrap">
+                <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Label</th>
+                      <th scope="col">Sort</th>
+                      <th scope="col">Needs Profile</th>
+                      <th scope="col">Needs Size</th>
+                      <th scope="col">Active</th>
+                    </tr>
+                  </thead>
+                  <tbody id="materialRulesRepairTypesBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="material-rules-subsection">
+              <div class="material-rules-subsection-head">
+                <h3>Part Templates</h3>
+                <button type="button" id="btnMaterialRulesAddTemplate" class="btn">Add Template</button>
+              </div>
+              <div class="material-rules-table-wrap">
+                <table class="material-rules-table material-rules-table--templates" aria-label="Quick Quoter templates table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Repair Type ID</th>
+                      <th scope="col">Product ID</th>
+                      <th scope="col">Qty/Unit</th>
+                      <th scope="col">Profile</th>
+                      <th scope="col">Size</th>
+                      <th scope="col">Length Mode</th>
+                      <th scope="col">Fixed mm</th>
+                      <th scope="col">Active</th>
+                      <th scope="col">Sort</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="materialRulesTemplatesBody"></tbody>
+                </table>
+              </div>
             </div>
           </section>
         </main>
