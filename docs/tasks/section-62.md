@@ -1,0 +1,32 @@
+## 62. Quick Quoter (mobile-first UI shell, local validation, future backend mapping)
+
+*Context: Add a new Quick Quoter flow in canvas view so users can rapidly select common repair types without drawing a diagram first. This section tracks the UI-first implementation only: entry point, modal shell, iOS-style selectable rows, row steppers, local validation, and navigation behavior for "Other". Existing quote calculation and conditional rendering logic must remain unchanged in this phase.*
+
+**Scope:** Mobile UI and accessibility first, with strict desktop non-regression and Railway-safe deployment. Frontend-only for this phase (no backend/API/schema changes implemented yet).
+
+---
+
+### Task 62 checklist
+
+- [x] **62.1** **Canvas entry point:** Add an always-on Quick Quoter card/button in canvas view (mobile-first), visually matching `.placeholder-card`, and keep desktop unaffected.
+- [x] **62.2** **Quick Quoter modal shell:** Add modal with header selectors (`Profile`, `Size mm`), repair list body, and inline validation region; register with modal accessibility framework.
+- [x] **62.3** **Repair rows + stepper swap:** Render repair type rows in iOS-style inset grouped blocks; unselected rows show right-side empty circle; selected rows show right-side stepper (default qty 1) with fixed row height and text ellipsis.
+- [x] **62.4** **Local state + behavior:** Add isolated Quick Quoter local state (`isOpen`, selector values, selected repair/qty map), multi-select accumulation, and deselect behavior.
+- [x] **62.5** **Validation rules (local):** Enforce type-specific profile/mm requirements with inline errors; clear errors as selectors become valid.
+- [x] **62.6** **"Other" navigation rule:** Selecting `Other` closes Quick Quoter, clears local Quick Quoter state, and opens the main quote modal immediately via existing Generate Quote flow.
+- [x] **62.7** **Regression guardrail + future integration notes:** Verify no changes to existing quote calculation/grouping/conditional logic; document future backend integration points (DB/API/files) without wiring live data in this phase.
+- [x] **62.8** **Row label prefixes (Profile/Size):** In the Quick Quoter modal, prefix repair row labels from the current dropdowns: Storm Cloud → "SC:", Classic → "CL:" for profile-based (gutter) rows; 65mm → "65:", 80mm → "80:" for size-based rows, using each type’s `requires_profile` / `requires_size_mm` (frontend: `requiresProfile` / `requiresSizeMm`). Use `quickQuoterState.profileValue` and `quickQuoterState.sizeMmValue` when building the display label. No prefix for "Other" or when dropdown not set. Key touchpoints: `app.js` `createQuickQuoterRow` (label at 6029), `renderQuickQuoterRows` (5881); update labels when Profile/Size selectors change (call `renderQuickQuoterRows` from change handlers). Mobile-only; desktop unchanged; Railway-safe.
+
+---
+
+### Future backend mapping reference (document-only for 62)
+
+- Planned table: `public.quick_quoter_repair_types` (`id`, `label`, `active`, `sort_order`, `requires_profile`, `requires_size_mm`).
+- Planned table: `public.quick_quoter_part_templates` (`repair_type_id`, `product_id`, `qty_per_unit`, `condition_profile`, `condition_size_mm`, `length_mode`).
+- Planned API: `GET /api/quick-quoter/catalog`, `POST /api/quick-quoter/resolve`.
+- Existing integration anchors:
+  - `backend/main.py` `QuoteElement` / `CalculateQuoteRequest`
+  - `backend/main.py` `POST /api/calculate-quote`
+  - `backend/app/gutter_accessories.py` `expand_elements_with_gutter_accessories`
+  - `backend/main.py` ServiceM8 profile label logic in add/create job endpoints
+  - `backend/app/quotes.py` material line persistence shape

@@ -442,6 +442,10 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.106.2** **Mobile: collapse icon when toolbar expanded.** Add a collapse icon SVG (e.g. minus or arrows in) in the same container and show it when `#globalToolbar:not(.toolbar--collapsed)`; hide expand icon when expanded. All CSS under mobile scope; 44×44 touch target preserved.
 - [x] **54.106.3** **Verify desktop + Railway.** Confirm desktop collapse/expand unchanged; run `npm test`; no new build step or backend; document in plan handoff.
 
+**54.107 Mobile toolbar: Team pool button – label and formatting (mobile-only)**
+
+- [ ] **54.107.1** **Team pool button: correct label and formatting on all mobile views.** Change `#mobileBonusDashboardBtn` visible label from "GP Race" to "team pool" and fix formatting so the button works on all mobile viewports and the SVG fits properly. Scope: HTML copy (title, aria-label, `.mobile-bonus-btn-label`); mobile-only CSS under `body[data-viewport-mode="mobile"]` for icon+label layout (SVG flex-shrink, min-width for label, 44px touch target); optionally align `#bonusRaceBoardMobile` aria-label to "Team pool scoreboard". Update E2E error messages from "Mobile GP Race" to "Mobile team pool" where they refer to this button. Desktop unchanged (button remains hidden on desktop); Railway-safe.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

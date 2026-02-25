@@ -88,7 +88,8 @@ body.a11y-high-contrast .btn.btn-cta {
 body.a11y-high-contrast :focus-visible {
   outline-color: #000;
 }
-body.a11y-high-contrast .canvas-placeholder .placeholder-card {
+body.a11y-high-contrast .canvas-placeholder .placeholder-card,
+body.a11y-high-contrast .quick-quoter-entry .placeholder-card {
   background: rgba(0, 0, 0, 0.04);
   border-color: #111;
   box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.32);
@@ -1753,16 +1754,33 @@ body.a11y-force-motion .toggle-icon::after {
   transition: cursor 0.1s ease;
 }
 
-.canvas-placeholder {
+.canvas-entry-stack {
   position: absolute;
   inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.canvas-placeholder,
+.quick-quoter-entry {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
 }
 
-.canvas-placeholder .placeholder-card {
+.quick-quoter-entry {
+  display: none;
+}
+
+.canvas-placeholder .placeholder-card,
+.quick-quoter-entry .placeholder-card {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
@@ -1784,7 +1802,16 @@ body.a11y-force-motion .toggle-icon::after {
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.canvas-placeholder .placeholder-icon {
+.quick-quoter-entry .placeholder-card {
+  appearance: none;
+  font: inherit;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 75px;
+  padding: 14px 52px;
+}
+
+.canvas-placeholder .placeholder-icon,
+.quick-quoter-entry .placeholder-icon {
   display: block;
   margin-bottom: 4px;
   width: 44px;
@@ -1798,18 +1825,25 @@ body.a11y-force-motion .toggle-icon::after {
   font: inherit;
 }
 
-.canvas-placeholder .placeholder-icon svg {
+.quick-quoter-entry .quick-quoter-entry-icon {
+  color: #007aff;
+}
+
+.canvas-placeholder .placeholder-icon svg,
+.quick-quoter-entry .placeholder-icon svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.canvas-placeholder .placeholder-title {
+.canvas-placeholder .placeholder-title,
+.quick-quoter-entry .placeholder-title {
   font-weight: 600;
   color: #1C1C1E;
 }
 
-.canvas-placeholder .placeholder-steps {
+.canvas-placeholder .placeholder-steps,
+.quick-quoter-entry .placeholder-steps {
   font-size: 0.8125rem;
   font-weight: 400;
   color: #8E8E93;
@@ -1942,6 +1976,13 @@ body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn {
   gap: 6px;
   padding: 0 10px;
   border-radius: 999px;
+  /* 54.107.1: enough width for "team pool" on narrow viewports; icon+label don't clip */
+  min-width: max(44px, 100px);
+}
+body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .toolbar-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn[hidden] {
   display: none !important;
@@ -1950,6 +1991,7 @@ body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .mobile-bonus-btn-lab
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-title {
   padding: 0 var(--mobile-space-lg) var(--mobile-space-md);
@@ -2681,7 +2723,16 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
   min-height: 7.5rem;
   padding: 1.5rem 1.25rem;
 }
-body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon {
+body[data-viewport-mode="mobile"] .quick-quoter-entry {
+  display: flex;
+}
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card {
+  max-width: 92%;
+  min-height: 3.75rem;
+  padding: 0.75rem 1.25rem;
+}
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon,
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-icon {
   min-width: 44px;
   min-height: 44px;
   width: 44px;
@@ -2691,16 +2742,19 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon {
   justify-content: center;
   margin-bottom: 4px;
 }
-body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon svg {
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon svg,
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-icon svg {
   width: 44px;
   height: 44px;
 }
 
-body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-title {
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-title,
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-title {
   font-size: clamp(0.875rem, 0.2vw + 0.82rem, 1rem);
 }
 
-body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps {
+body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-steps,
+body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-steps {
   font-size: var(--font-size-small);
 }
 
@@ -4725,7 +4779,7 @@ body[data-viewport-mode="mobile"] .bonus-effects-card {
   box-shadow: 0 5px 14px rgba(13, 23, 39, 0.05);
 }
 
-/* 59.18.2.1: Apple HIG 44px min touch targets for mobile GP Race */
+/* 59.18.2.1: Apple HIG 44px min touch targets for mobile team pool */
 body[data-viewport-mode="mobile"] .bonus-race-board-mobile .bonus-tally-btn {
   min-height: 44px;
   min-width: 44px;
@@ -5441,6 +5495,218 @@ body[data-viewport-mode="mobile"] .bonus-pot-gauge .bonus-pot-value {
   background: #912018;
 }
 
+.quick-quoter-modal {
+  z-index: 1100;
+}
+.quick-quoter-modal-content {
+  max-width: min(560px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.quick-quoter-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.quick-quoter-modal-title {
+  margin: 0;
+}
+.quick-quoter-modal-desc {
+  margin: 0;
+}
+.quick-quoter-close {
+  border: none;
+  background: none;
+  color: #666;
+  font-size: 24px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.quick-quoter-close:hover {
+  color: #1a1a1a;
+}
+.quick-quoter-selectors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.quick-quoter-selector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-label);
+}
+.quick-quoter-selector-field select {
+  min-height: 40px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: var(--font-size-body);
+  background: #fff;
+}
+.quick-quoter-selector-field select:focus {
+  outline: none;
+  border-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.18);
+}
+.quick-quoter-validation {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff4f4;
+  border: 1px solid #ffd0d0;
+  color: #b42318;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.quick-quoter-validation p {
+  margin: 0;
+}
+.quick-quoter-validation p + p {
+  margin-top: 4px;
+}
+.quick-quoter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  max-height: min(55vh, 460px);
+  overflow-y: auto;
+  padding: 0 1px;
+}
+.quick-quoter-loading-message {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed #d7dde6;
+  background: #f8fafc;
+  color: #596273;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+.quick-quoter-row {
+  width: 100%;
+  min-height: 52px;
+  height: 52px;
+  border: 1px solid #d7dde6;
+  border-radius: 14px;
+  background: #fff;
+  color: #1c1c1e;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  text-align: left;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.quick-quoter-row.is-selected {
+  background: #e9f2ff;
+  border-color: #b7d1fb;
+}
+.quick-quoter-row:focus-visible {
+  outline: 2px solid #007aff;
+  outline-offset: 1px;
+}
+.quick-quoter-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem;
+  line-height: 1.25;
+}
+.quick-quoter-row-label-prefix {
+  font-weight: bold;
+}
+.quick-quoter-row-control {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.quick-quoter-row-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid #b9bcc4;
+  background: #fff;
+}
+.quick-quoter-row-circle[hidden] {
+  display: none !important;
+}
+.quick-quoter-stepper {
+  width: 112px;
+  height: 30px;
+  border: 1px solid #b7d1fb;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 3px;
+  background: #f9fbff;
+  box-sizing: border-box;
+}
+.quick-quoter-stepper[hidden] {
+  display: none !important;
+}
+.quick-quoter-stepper-btn {
+  width: 30px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: #d9e8ff;
+  color: #245ea8;
+  font-size: 17px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.quick-quoter-stepper-btn:hover {
+  background: #c6dcff;
+}
+.quick-quoter-stepper-btn:focus-visible {
+  outline: 2px solid #1f6fd0;
+  outline-offset: 1px;
+}
+.quick-quoter-stepper-value {
+  min-width: 28px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+.quick-quoter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+body[data-viewport-mode="mobile"] .quick-quoter-modal {
+  align-items: flex-end;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+}
+body[data-viewport-mode="mobile"] .quick-quoter-modal-content {
+  width: 100%;
+  max-width: none;
+  max-height: min(88vh, calc(100vh - env(safe-area-inset-top) - 16px));
+  border-radius: 16px;
+}
+body[data-viewport-mode="mobile"] .quick-quoter-list {
+  max-height: min(52vh, 480px);
+}
+
 /* ----- Diagrams dropdown (clock icon) ----- */
 .toolbar-diagrams-wrap {
   position: relative;
@@ -5851,6 +6117,12 @@ body[data-viewport-mode="mobile"] .bonus-pot-gauge .bonus-pot-value {
   border: 1px solid #ddd;
   border-radius: 4px;
   box-sizing: border-box;
+}
+/* Section 61.4: technician cannot edit labour cost */
+.quote-row-labour .quote-labour-unit-price-input.quote-labour-unit-price-input--readonly {
+  background: #f5f5f5;
+  color: #555;
+  cursor: default;
 }
 
 .quote-mobile-line-summary,
@@ -6777,6 +7049,59 @@ body[data-viewport-mode="mobile"] .bonus-pot-gauge .bonus-pot-value {
 .job-confirm-create-new .job-confirm-done {
   transform: scale(0);
 }
+/* Section 61.2: "Doing it now?" modal – secondary button style for "No, office to schedule" */
+.job-confirm-add-btn--secondary {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+.job-confirm-add-btn--secondary:hover {
+  background: #e8e8ed;
+}
+.doing-it-now-message {
+  margin: 0 0 1rem;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #3a3a3c;
+}
+.doing-it-now-actions {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.doing-it-now-coseller-wrap {
+  margin-bottom: 1rem;
+}
+.doing-it-now-coseller-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a3a3c;
+  margin-bottom: 0.35rem;
+}
+.doing-it-now-coseller-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #d1d1d6;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d1d1f;
+}
+
+/* QA audit: Apple HIG 44pt touch targets + consistent button height when label wraps (mobile only) */
+body[data-viewport-mode="mobile"] .job-confirm-add-btn,
+body[data-viewport-mode="mobile"] .job-confirm-create-new {
+  min-height: 44px;
+}
+body[data-viewport-mode="mobile"] .doing-it-now-coseller-select {
+  min-height: 44px;
+}
+body[data-viewport-mode="mobile"] .doing-it-now-actions .job-confirm-add-btn,
+body[data-viewport-mode="mobile"] .doing-it-now-actions .job-confirm-create-new {
+  min-height: 44px;
+  align-self: stretch;
+}
+
 .job-confirm-spinner {
   width: 18px;
   height: 18px;
@@ -7360,6 +7685,15 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td {
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-section-header td {
   border-bottom: none;
 }
+/* Section header first cell: single-line truncate with ellipsis on mobile to keep row height fixed */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-header td:first-child .quote-section-header-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table thead th {
   background: #f8f8f8;
@@ -7389,7 +7723,8 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 2px;
   flex-wrap: wrap;
 }
 /* 54.93.2: product cell content can shrink so control (minus/plus) stays left */
@@ -7398,13 +7733,38 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-
   min-width: 0;
 }
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus),
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > .quote-mobile-product-cell-content,
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-row-empty td:first-child > .quote-product-combobox {
   flex: 1 1 auto;
   min-width: 0;
 }
+/* Wrapper so remove icon + product name stay on one row (standard and indented rows), tightening height */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > .quote-mobile-product-cell-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  column-gap: 8px;
+}
+/* Only the product name span (exclude remove button) so the circle stays fixed size */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child .quote-mobile-product-cell-content > span:not(.quote-row-remove-x) {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+/* Product name in first cell: single-line truncate with ellipsis on mobile to keep row height fixed */
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
 /* 54.93.2: show remove in first cell (override hide inside .quote-mobile-editable-line); style as red circle; 54.93.5: 33% size */
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody td:first-child .quote-row-remove-x {
   display: inline-flex !important;
+  flex: 0 0 auto;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -7558,7 +7918,7 @@ body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quo
 
 body[data-viewport-mode="mobile"] #quoteModal tr.quote-mobile-editable-line .quote-mobile-line-summary {
   display: block;
-  margin-top: 4px;
+  margin-top: 0;
   font-size: 12px;
   color: #6b7280;
   font-weight: 500;
@@ -7664,6 +8024,13 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon {
   margin-left: 6px;
   font-size: 14px;
   vertical-align: middle;
+  line-height: 1;
+}
+/* Inline inside labour stepper so row height doesn't expand */
+body[data-viewport-mode="mobile"] #quoteModal .quote-mobile-qty-stepper .quote-labour-zero-warning-icon {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 4px;
 }
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-labour-zero-warning-icon[hidden] {

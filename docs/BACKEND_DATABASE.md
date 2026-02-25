@@ -101,6 +101,7 @@ Quote estimates; persisted when Add to Job or Create New Job succeeds (Section 5
 ### 3. Future (optional)
 
 - **`public.profiles`** – If using Supabase Auth: extend with app-specific profile fields; link to `auth.users` via `id`. App role column `role`: one of `viewer`, `editor`, `technician`, `admin`.
+- **Quick Quoter backend wiring (Section 62)** – Planned schema + API + integration contract are documented in `docs/QUICK_QUOTER_BACKEND_DATABASE_INTEGRATION.md` (documentation-only; not wired yet).
 
 ---
 

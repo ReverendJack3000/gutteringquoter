@@ -1647,19 +1647,19 @@ async function run() {
           raceBoardVisible,
         };
       });
-      if (!mobileBonusScaffoldCheck.hasBonusBtn) throw new Error('Mobile GP Race: mobile bonus entry button missing');
-      if (!mobileBonusScaffoldCheck.hasRaceBoard) throw new Error('Mobile GP Race: race board container missing');
-      if (!mobileBonusScaffoldCheck.hasRaceTooltip) throw new Error('Mobile GP Race: badge tooltip container missing');
+      if (!mobileBonusScaffoldCheck.hasBonusBtn) throw new Error('Mobile team pool: mobile bonus entry button missing');
+      if (!mobileBonusScaffoldCheck.hasRaceBoard) throw new Error('Mobile team pool: race board container missing');
+      if (!mobileBonusScaffoldCheck.hasRaceTooltip) throw new Error('Mobile team pool: badge tooltip container missing');
       if (mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.raceBoardVisible) {
-        throw new Error('Mobile GP Race: race board should be visible when bonus view is active on mobile');
+        throw new Error('Mobile team pool: race board should be visible when bonus view is active on mobile');
       }
       if (!mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.bonusBtnHidden) {
-        throw new Error('Mobile GP Race permissions: unauthorized mobile users should not see the GP Race entry button');
+        throw new Error('Mobile team pool permissions: unauthorized mobile users should not see the team pool entry button');
       }
       if (!mobileBonusScaffoldCheck.bonusVisible && !mobileBonusScaffoldCheck.canvasVisible) {
-        throw new Error('Mobile GP Race permissions: unauthorized switch attempt should keep canvas view visible');
+        throw new Error('Mobile team pool permissions: unauthorized switch attempt should keep canvas view visible');
       }
-      console.log('  ✓ Mobile GP Race scaffold exists and permission gate remains enforced');
+      console.log('  ✓ Mobile team pool scaffold exists and permission gate remains enforced');
 
       // Section 57: mobile fit inset + pan lock behavior
       const mobileFileInput = await mobilePage.$('#fileInput');

@@ -186,6 +186,22 @@ function clearAuthState() {
   authState.isSuperAdmin = false;
 }
 
+/** Current user id for co-seller exclusion etc. Uses authState.user.id; fallback to JWT payload sub when user object not set (QA audit 5.3). */
+function getCurrentUserId() {
+  if (authState.user?.id) return authState.user.id;
+  const token = authState.token;
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(atob(payload));
+    return decoded.sub ?? decoded.user_id ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /**
  * Fetch /api/me and set authState.isSuperAdmin, then refresh auth UI (menu visibility for bonus/admin).
  * Call after setAuthFromSession when token is present so super admin can access Bonus Admin and My Bonus.
@@ -237,6 +253,19 @@ const autosaveState = {
   timerId: null,
   promptInFlight: false,
   userKey: null,
+};
+
+const quickQuoterState = {
+  isOpen: false,
+  profileValue: '',
+  sizeMmValue: '',
+  selectedItems: new Map(),
+  repairTypes: [],
+  repairTypeById: new Map(),
+  catalogLoading: false,
+  catalogLoadError: '',
+  serverValidationMessages: [],
+  resolveInFlight: false,
 };
 
 /** View transition history for restoring focus when returning between app views (55.2). */
@@ -1120,6 +1149,10 @@ function initCropModal() {
 }
 
 function hideQuoteModal() {
+  if (typeof doingItNowModalAbort === 'function') {
+    doingItNowModalAbort();
+    closeAccessibleModal('doingItNowModal');
+  }
   closeAccessibleModal('labourEditorModal');
   closeAccessibleModal('quoteModal');
   setQuoteModalScrollLock(false);
@@ -1537,14 +1570,24 @@ function canAccessTechnicianBonusView() {
   return !!authState.token && (role === 'admin' || role === 'editor' || role === 'technician' || !!authState.isSuperAdmin);
 }
 
+/** Section 61.1: true when current user role is technician (Create New Job only; no Add to Job). */
+function isTechnicianRole() {
+  return normalizeAppRole(authState.role) === 'technician';
+}
+
 function canUsePricingAdminControls() {
   return canAccessDesktopAdminUi();
 }
 
+/** Section 61.6: show minutes when total labour < 1 hr; otherwise hours (e.g. "15 min", "1 hr"). */
 function formatLabourHoursDisplay(hours) {
   if (!Number.isFinite(hours) || hours <= 0) return '0 hrs';
   const rounded = Math.round(hours * 100) / 100;
-  return `${rounded} hrs`;
+  if (rounded < 1) {
+    const minutes = Math.round(rounded * 60);
+    return `${minutes} min`;
+  }
+  return rounded === 1 ? '1 hr' : `${rounded} hrs`;
 }
 
 function formatQuoteQtyDisplay(value) {
@@ -1630,7 +1673,7 @@ function getQuoteLineQuantityMeta(row) {
   }
   if (row.dataset.labourRow === 'true') {
     const hoursInput = row.querySelector('.quote-labour-hours-input');
-    return { value: parseFloat(hoursInput?.value) || 0, step: 0.5 };
+    return { value: parseFloat(hoursInput?.value) || 0, step: 0.25 };
   }
   const qtyInput = row.querySelector('.quote-line-qty-input');
   if (qtyInput) {
@@ -1819,7 +1862,19 @@ function syncMobileQuoteLineSummaries() {
         removeInCell0.setAttribute('tabindex', '0');
         removeInCell0.setAttribute('aria-label', 'Remove line');
         removeInCell0.textContent = '−';
-        productCell.insertBefore(removeInCell0, productCell.firstChild);
+        const first = productCell.firstChild;
+        const isProductNameSpan = first && first.nodeType === 1 && first.tagName === 'SPAN' &&
+          !first.classList.contains('quote-mobile-line-summary') &&
+          !first.classList.contains('quote-row-add-plus');
+        if (isProductNameSpan) {
+          const wrap = document.createElement('div');
+          wrap.className = 'quote-mobile-product-cell-content';
+          wrap.appendChild(removeInCell0);
+          wrap.appendChild(first);
+          productCell.insertBefore(wrap, productCell.firstChild);
+        } else {
+          productCell.insertBefore(removeInCell0, productCell.firstChild);
+        }
       }
     }
     const title = getQuoteLineProductName(row);
@@ -1956,13 +2011,21 @@ function syncMobileQuoteLineSummaries() {
 
     if (row.dataset.labourRow === 'true' && isMobile) {
       let warnIcon = qtyCell.querySelector('.quote-labour-zero-warning-icon');
+      const stepperWrap = qtyCell.querySelector('.quote-mobile-qty-stepper');
+      const valueSpan = stepperWrap && stepperWrap.querySelector('.quote-mobile-qty-stepper-value');
       if (totalLabourHours <= 0) {
         if (!warnIcon) {
           warnIcon = document.createElement('span');
           warnIcon.className = 'quote-labour-zero-warning-icon';
           warnIcon.setAttribute('aria-hidden', 'true');
           warnIcon.textContent = '\u26A0\uFE0F';
-          qtyCell.appendChild(warnIcon);
+          if (stepperWrap && valueSpan) {
+            stepperWrap.insertBefore(warnIcon, valueSpan.nextSibling);
+          } else {
+            qtyCell.appendChild(warnIcon);
+          }
+        } else if (stepperWrap && valueSpan && warnIcon.parentNode !== stepperWrap) {
+          stepperWrap.insertBefore(warnIcon, valueSpan.nextSibling);
         }
         warnIcon.hidden = false;
       } else if (warnIcon) {
@@ -2030,7 +2093,7 @@ function isQuoteLineEditorDirty() {
   if (rowType !== 'labour' && rowType !== 'material') return false;
   const qtyStep = Number.isFinite(quoteLineEditorState.qtyStep) && quoteLineEditorState.qtyStep > 0
     ? quoteLineEditorState.qtyStep
-    : (rowType === 'labour' ? 0.5 : 1);
+    : (rowType === 'labour' ? 0.25 : 1);
   const roundQty = (v) => (Number.isFinite(v) ? (qtyStep >= 1 ? Math.round(v) : Math.round(v * 1000) / 1000) : 0);
   const qtyDirty = roundQty(quoteLineEditorState.draftQty) !== roundQty(quoteLineEditorState.initialQty);
   if (rowType === 'material') return qtyDirty;
@@ -2089,7 +2152,7 @@ function renderLabourEditorRows() {
   const isLabour = row.dataset.labourRow === 'true';
   const qtyStep = Number.isFinite(quoteLineEditorState.qtyStep) && quoteLineEditorState.qtyStep > 0
     ? quoteLineEditorState.qtyStep
-    : (isLabour ? 0.5 : 1);
+    : (isLabour ? 0.25 : 1);
 
   if (addBtn) addBtn.hidden = false;
   if (actionsWrap) actionsWrap.hidden = false;
@@ -2163,22 +2226,30 @@ function renderLabourEditorRows() {
   markupLabel.textContent = 'Markup';
   let markupEditor = null;
   if (isLabour) {
-    markupEditor = document.createElement('input');
-    markupEditor.type = 'number';
-    markupEditor.min = '0';
-    markupEditor.max = '1000';
-    markupEditor.step = '0.01';
-    markupEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftMarkup);
-    markupEditor.className = 'labour-editor-field-input';
-    markupEditor.dataset.field = 'markup';
-    markupEditor.setAttribute('aria-label', 'Markup percentage');
-    markupRow.appendChild(markupLabel);
-    markupRow.appendChild(markupEditor);
-    const markupPctSuffix = document.createElement('span');
-    markupPctSuffix.className = 'labour-editor-unit-price-suffix';
-    markupPctSuffix.textContent = ' %';
-    markupPctSuffix.setAttribute('aria-hidden', 'true');
-    markupRow.appendChild(markupPctSuffix);
+    if (isTechnicianRole()) {
+      const markupValue = document.createElement('span');
+      markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
+      markupValue.textContent = Number.isFinite(quoteLineEditorState.draftMarkup) ? `${formatQuoteQtyDisplay(quoteLineEditorState.draftMarkup)}%` : '—';
+      markupRow.appendChild(markupLabel);
+      markupRow.appendChild(markupValue);
+    } else {
+      markupEditor = document.createElement('input');
+      markupEditor.type = 'number';
+      markupEditor.min = '0';
+      markupEditor.max = '1000';
+      markupEditor.step = '0.01';
+      markupEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftMarkup);
+      markupEditor.className = 'labour-editor-field-input';
+      markupEditor.dataset.field = 'markup';
+      markupEditor.setAttribute('aria-label', 'Markup percentage');
+      markupRow.appendChild(markupLabel);
+      markupRow.appendChild(markupEditor);
+      const markupPctSuffix = document.createElement('span');
+      markupPctSuffix.className = 'labour-editor-unit-price-suffix';
+      markupPctSuffix.textContent = ' %';
+      markupPctSuffix.setAttribute('aria-hidden', 'true');
+      markupRow.appendChild(markupPctSuffix);
+    }
   } else {
     const markupValue = document.createElement('span');
     markupValue.className = 'labour-editor-field-value labour-editor-field-value--muted';
@@ -2198,18 +2269,25 @@ function renderLabourEditorRows() {
   let unitPriceSuffix = null;
   let unitValue = null;
   if (isLabour) {
-    rateEditor = document.createElement('input');
-    rateEditor.type = 'number';
-    rateEditor.min = '0';
-    rateEditor.step = '0.01';
-    rateEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftUnitPrice);
-    rateEditor.className = 'labour-editor-field-input';
-    rateEditor.dataset.field = 'rate';
-    rateEditor.setAttribute('aria-label', 'Unit price');
-    unitPriceRow.appendChild(rateEditor);
-    unitPriceSuffix = document.createElement('span');
-    unitPriceSuffix.className = 'labour-editor-unit-price-suffix';
-    unitPriceRow.appendChild(unitPriceSuffix);
+    if (isTechnicianRole()) {
+      unitValue = document.createElement('span');
+      unitValue.className = 'labour-editor-field-value';
+      unitValue.textContent = formatCurrency(quoteLineEditorState.draftUnitPrice);
+      unitPriceRow.appendChild(unitValue);
+    } else {
+      rateEditor = document.createElement('input');
+      rateEditor.type = 'number';
+      rateEditor.min = '0';
+      rateEditor.step = '0.01';
+      rateEditor.value = formatQuoteQtyDisplay(quoteLineEditorState.draftUnitPrice);
+      rateEditor.className = 'labour-editor-field-input';
+      rateEditor.dataset.field = 'rate';
+      rateEditor.setAttribute('aria-label', 'Unit price');
+      unitPriceRow.appendChild(rateEditor);
+      unitPriceSuffix = document.createElement('span');
+      unitPriceSuffix.className = 'labour-editor-unit-price-suffix';
+      unitPriceRow.appendChild(unitPriceSuffix);
+    }
   } else {
     unitValue = document.createElement('span');
     unitValue.className = 'labour-editor-field-value';
@@ -2291,6 +2369,11 @@ function renderLabourEditorRows() {
         unitPriceSuffix.textContent = quoteLineEditorState.isTaxApplicable
           ? ` (${formatCurrency(incUnitPrice)} inc GST)`
           : ' (exc GST)';
+      }
+      if (unitValue) {
+        unitValue.textContent = quoteLineEditorState.isTaxApplicable
+          ? `${formatCurrency(incUnitPrice)} inc GST`
+          : `${formatCurrency(unitPrice)} exc GST`;
       }
       note.textContent = quoteLineEditorState.isTaxApplicable
         ? 'Unit price and total include 15% GST.'
@@ -2490,9 +2573,10 @@ function syncMobileLabourRowSummary() {
   syncMobileQuoteLineSummaries();
 }
 
+/** Section 61.4: default labour unit price $33 when REP-LAB / labour rates not available. */
 function getDefaultLabourUnitPrice() {
   const rate = cachedLabourRates.find((r) => r.id === 'REP-LAB') || cachedLabourRates[0];
-  return rate ? Number(rate.hourlyRate) : 100;
+  return rate ? Number(rate.hourlyRate) : 33;
 }
 
 /** Labour cost price from REP-LAB product for markup calculation in labour editor (54.99). Fallback 35 if product not loaded. */
@@ -2549,7 +2633,7 @@ function createLabourRow(insertBefore, options = {}) {
   hoursInput.type = 'number';
   hoursInput.className = 'quote-labour-hours-input';
   hoursInput.min = '0';
-  hoursInput.step = '0.5';
+  hoursInput.step = '0.25';
   hoursInput.value = String(defaultHours);
   hoursInput.setAttribute('aria-label', 'Labour hours');
   qtyCell.appendChild(hoursInput);
@@ -2570,6 +2654,11 @@ function createLabourRow(insertBefore, options = {}) {
   unitPriceInput.step = '0.01';
   unitPriceInput.value = String(defaultUnitPrice);
   unitPriceInput.setAttribute('aria-label', 'Unit price per hour');
+  if (isTechnicianRole()) {
+    unitPriceInput.readOnly = true;
+    unitPriceInput.tabIndex = -1;
+    unitPriceInput.classList.add('quote-labour-unit-price-input--readonly');
+  }
   unitPriceWrap.appendChild(unitPricePrefix);
   unitPriceWrap.appendChild(unitPriceInput);
   unitPriceCell.appendChild(unitPriceWrap);
@@ -2622,6 +2711,20 @@ function ensureLabourRowsExist() {
   if (getLabourRowsOrdered().length === 0) {
     createLabourRow(emptyRow, { defaultHours: 0, defaultUnitPrice: getDefaultLabourUnitPrice() });
   }
+}
+
+/** Section 61.4: apply technician read-only to labour unit price inputs on existing rows (e.g. when quote modal opens). */
+function syncLabourRowTechnicianReadOnly() {
+  if (!isTechnicianRole()) return;
+  const rows = getLabourRowsOrdered();
+  rows.forEach((tr) => {
+    const unitPriceInput = tr.querySelector('.quote-labour-unit-price-input');
+    if (unitPriceInput) {
+      unitPriceInput.readOnly = true;
+      unitPriceInput.tabIndex = -1;
+      unitPriceInput.classList.add('quote-labour-unit-price-input--readonly');
+    }
+  });
 }
 
 function openQuoteProductList(combobox, filterTerm) {
@@ -2788,6 +2891,106 @@ function initEmptyQuoteRow(tr) {
 
 }
 
+async function openQuoteModalForElements(elementsForQuote, triggerEl = null) {
+  const tableBody = document.getElementById('quoteTableBody');
+  const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
+  const labourTotalDisplay = document.getElementById('labourTotalDisplay');
+  const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
+
+  if (tableBody) tableBody.innerHTML = '';
+  if (materialsTotalDisplay) materialsTotalDisplay.textContent = '0.00';
+  if (labourTotalDisplay) labourTotalDisplay.textContent = '0.00';
+  if (quoteTotalDisplay) quoteTotalDisplay.textContent = '0.00';
+
+  (Array.isArray(elementsForQuote) ? elementsForQuote : []).forEach((item) => {
+    const assetId = String(item?.assetId || '').trim();
+    if (!assetId) return;
+    const quantity = Number(item?.quantity);
+    const incomplete = !!item?.incomplete;
+    const lengthMm = Number(item?.length_mm);
+    const missingMeasurementMultiplier = Number(item?.missing_measurement_multiplier);
+    const product = state.products.find((p) => p.id === assetId);
+    const name = incomplete ? getQuoteProductDisplayName(assetId, product?.name) : (product?.name ?? assetId);
+
+    const tr = document.createElement('tr');
+    tr.dataset.assetId = assetId;
+    if (incomplete) {
+      tr.dataset.incompleteMeasurement = 'true';
+      tr.classList.add('quote-row-incomplete-measurement');
+    }
+    if (Number.isFinite(lengthMm) && lengthMm > 0) {
+      tr.dataset.lengthMm = String(lengthMm);
+      tr.dataset.manualLength = 'true';
+    }
+    if (incomplete && Number.isFinite(missingMeasurementMultiplier) && missingMeasurementMultiplier > 0) {
+      tr.dataset.missingMeasurementMultiplier = String(missingMeasurementMultiplier);
+    }
+
+    tr.innerHTML = `<td>${escapeHtml(name)}</td><td></td><td>—</td><td>—</td><td>—</td><td>—</td>`;
+    const qtyCell = tr.cells[1];
+    if (incomplete) {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = 0;
+      input.step = 0.001;
+      input.placeholder = 'Metres?';
+      input.className = 'quote-qty-metres-input';
+      input.setAttribute('aria-label', 'Enter length in metres');
+      qtyCell.appendChild(input);
+      input.addEventListener('change', () => commitMetresInput(tr, input));
+      input.addEventListener('blur', () => commitMetresInput(tr, input));
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(tr, input); input.blur(); } });
+    } else {
+      const safeQty = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+      setQuoteRowStoredQty(tr, safeQty);
+      qtyCell.textContent = String(safeQty);
+    }
+    if (tableBody) tableBody.appendChild(tr);
+  });
+
+  lastQuoteData = null;
+  setQuoteEditMode(false);
+  updateQuoteTotalWarning();
+  syncQuoteModalViewportState();
+
+  openAccessibleModal('quoteModal', { triggerEl });
+
+  const servicem8FeedbackEl = document.getElementById('servicem8Feedback');
+  if (servicem8FeedbackEl) {
+    servicem8FeedbackEl.classList.add('quote-servicem8-feedback--hidden');
+    servicem8FeedbackEl.classList.remove('quote-servicem8-feedback--visible');
+  }
+
+  if (authState.token) {
+    checkServiceM8Status();
+  }
+
+  try {
+    const res = await fetch('/api/labour-rates');
+    const data = await res.json();
+    const rates = data.labour_rates || [];
+    cachedLabourRates = rates || [];
+  } catch (err) {
+    console.error('Failed to load labour rates', err);
+    cachedLabourRates = [];
+  }
+
+  appendEmptyQuoteRow();
+  ensureLabourRowsExist();
+  syncLabourRowTechnicianReadOnly();
+
+  const elements = getElementsFromQuoteTable();
+  if (elements.length > 0) {
+    await calculateAndDisplayQuote();
+  } else {
+    syncMobileLabourRowSummary();
+  }
+
+  const firstLabourRow = getLabourRowsOrdered()[0];
+  const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
+  if (layoutState.viewportMode !== 'mobile' && firstHoursInput) firstHoursInput.focus();
+}
+
 function initQuoteModal() {
   const modal = document.getElementById('quoteModal');
   const btnBack = document.getElementById('quoteModalBackBtn');
@@ -2795,9 +2998,6 @@ function initQuoteModal() {
   const btnCloseFooter = document.getElementById('quoteCloseBtn');
   const btnGenerate = document.getElementById('generateQuoteBtn');
   const tableBody = document.getElementById('quoteTableBody');
-  const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
-  const labourTotalDisplay = document.getElementById('labourTotalDisplay');
-  const quoteTotalDisplay = document.getElementById('quoteTotalDisplay');
 
   if (!modal || !btnGenerate) return;
 
@@ -2854,91 +3054,7 @@ function initQuoteModal() {
 
   btnGenerate.addEventListener('click', async () => {
     const elementsForQuote = getElementsForQuote();
-
-    // Clear previous quote data
-    if (tableBody) tableBody.innerHTML = '';
-    if (materialsTotalDisplay) materialsTotalDisplay.textContent = '0.00';
-    if (labourTotalDisplay) labourTotalDisplay.textContent = '0.00';
-    if (quoteTotalDisplay) quoteTotalDisplay.textContent = '0.00';
-
-    // Build parts table: one row per length type (e.g. Gutter 3m, Gutter 1.5m). Incomplete = type-only name + "Metres?"; complete = product name + qty only.
-    elementsForQuote.forEach(({ assetId, quantity: qty, incomplete, length_mm }) => {
-      const product = state.products.find((p) => p.id === assetId);
-      const name = incomplete ? getQuoteProductDisplayName(assetId, product?.name) : (product?.name ?? assetId);
-      const tr = document.createElement('tr');
-      tr.dataset.assetId = assetId;
-      if (incomplete) {
-        tr.dataset.incompleteMeasurement = 'true';
-        tr.classList.add('quote-row-incomplete-measurement');
-      }
-      if (length_mm != null && length_mm > 0) {
-        tr.dataset.lengthMm = String(length_mm);
-        tr.dataset.manualLength = 'true';
-      }
-      tr.innerHTML = `<td>${escapeHtml(name)}</td><td></td><td>—</td><td>—</td><td>—</td><td>—</td>`;
-      const qtyCell = tr.cells[1];
-      if (incomplete) {
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.min = 0;
-        input.step = 0.001;
-        input.placeholder = 'Metres?';
-        input.className = 'quote-qty-metres-input';
-        input.setAttribute('aria-label', 'Enter length in metres');
-        qtyCell.appendChild(input);
-        input.addEventListener('change', () => commitMetresInput(tr, input));
-        input.addEventListener('blur', () => commitMetresInput(tr, input));
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(tr, input); input.blur(); } });
-      } else {
-        setQuoteRowStoredQty(tr, parseFloat(String(qty)) || 0);
-        qtyCell.textContent = String(qty);
-      }
-      if (tableBody) tableBody.appendChild(tr);
-    });
-    lastQuoteData = null;
-    setQuoteEditMode(false);
-    updateQuoteTotalWarning();
-    syncQuoteModalViewportState();
-
-    // Show modal
-    openAccessibleModal('quoteModal', { triggerEl: btnGenerate });
-
-    // Reset ServiceM8 feedback so it stays hidden until "Add to Job" sequence completes
-    const servicem8FeedbackEl = document.getElementById('servicem8Feedback');
-    if (servicem8FeedbackEl) {
-      servicem8FeedbackEl.classList.add('quote-servicem8-feedback--hidden');
-      servicem8FeedbackEl.classList.remove('quote-servicem8-feedback--visible');
-    }
-
-    // Ensure ServiceM8 status is checked when modal opens
-    if (authState.token) {
-      checkServiceM8Status();
-    }
-
-    // Fetch labour rates for labour row dropdowns (Section 50)
-    try {
-      const res = await fetch('/api/labour-rates');
-      const data = await res.json();
-      const rates = data.labour_rates || [];
-      cachedLabourRates = rates || [];
-    } catch (err) {
-      console.error('Failed to load labour rates', err);
-      cachedLabourRates = [];
-    }
-
-    appendEmptyQuoteRow();
-    ensureLabourRowsExist();
-
-    const elements = getElementsFromQuoteTable();
-    if (elements.length > 0) {
-      await calculateAndDisplayQuote();
-    } else {
-      syncMobileLabourRowSummary();
-    }
-
-    const firstLabourRow = getLabourRowsOrdered()[0];
-    const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
-    if (layoutState.viewportMode !== 'mobile' && firstHoursInput) firstHoursInput.focus();
+    await openQuoteModalForElements(elementsForQuote, btnGenerate);
   });
 
   const labourEditorBackdrop = document.getElementById('labourEditorBackdrop');
@@ -2970,7 +3086,7 @@ function initQuoteModal() {
     quoteLineEditorState.rowType = 'labour';
     quoteLineEditorState.draftQty = parseFloat(newRow.querySelector('.quote-labour-hours-input')?.value) || 0;
     quoteLineEditorState.draftUnitPrice = parseFloat(newRow.querySelector('.quote-labour-unit-price-input')?.value) || getDefaultLabourUnitPrice();
-    quoteLineEditorState.qtyStep = 0.5;
+    quoteLineEditorState.qtyStep = 0.25;
     quoteLineEditorState.title = getQuoteLineProductName(newRow);
     quoteLineEditorState.initialQty = quoteLineEditorState.draftQty;
     quoteLineEditorState.initialUnitPrice = quoteLineEditorState.draftUnitPrice;
@@ -3105,7 +3221,9 @@ function initQuoteModal() {
 function commitMetresInput(tr, input) {
   const val = parseFloat(input.value);
   if (!Number.isFinite(val) || val <= 0) return;
-  tr.dataset.lengthMm = String(mToMm(val));
+  const multiplier = parseFloat(tr.dataset.missingMeasurementMultiplier || '1');
+  const scaledMetres = Number.isFinite(multiplier) && multiplier > 0 ? (val * multiplier) : val;
+  tr.dataset.lengthMm = String(mToMm(scaledMetres));
   tr.dataset.manualLength = 'true';
   // Remove incomplete state and input so calculateAndDisplayQuote() can update qty cell with proper value
   tr.removeAttribute('data-incomplete-measurement');
@@ -3169,6 +3287,18 @@ function updateServiceM8SectionState(hasIncomplete) {
     input.disabled = false;
     btn.disabled = false;
     if (reasonEl) reasonEl.hidden = true;
+    // Section 61.1: technicians see "Create new job" only; editor/admin see "Add to existing job"
+    const titleEl = section.querySelector('.quote-servicem8-title');
+    const btnTextEl = btn.querySelector('.quote-servicem8-btn-text');
+    if (isTechnicianRole()) {
+      if (titleEl) titleEl.textContent = 'Create new job (ServiceM8)';
+      if (btnTextEl) btnTextEl.textContent = 'Create New Job';
+      btn.title = 'Enter job number to create a new job from this quote';
+    } else {
+      if (titleEl) titleEl.textContent = 'Add to existing job (ServiceM8)';
+      if (btnTextEl) btnTextEl.textContent = 'Add to Job';
+      btn.title = 'Enter job number and add materials to existing job';
+    }
     updateServicem8InputState();
   }
 }
@@ -3281,11 +3411,14 @@ async function runAddToJobLookupAndConfirm(btn, jobId) {
       const addBtnOverlay = document.getElementById('jobConfirmAddBtn');
       const createNewOverlay = document.getElementById('jobConfirmCreateNew');
       if (addBtnOverlay) {
-        addBtnOverlay.disabled = false;
+        const techOnly = isTechnicianRole();
+        addBtnOverlay.hidden = techOnly;
+        addBtnOverlay.disabled = techOnly; // Section 61.1: technicians cannot Add to Job
         addBtnOverlay.classList.remove('job-confirm-add-btn--loading', 'job-confirm-add-btn--done');
       }
       if (createNewOverlay) createNewOverlay.classList.remove('job-confirm-create-new--loading', 'job-confirm-create-new--done');
-      openAccessibleModal('jobConfirmOverlay', { triggerEl: btn, initialFocusEl: addBtnOverlay || createNewOverlay });
+      const focusEl = isTechnicianRole() ? createNewOverlay : (addBtnOverlay || createNewOverlay);
+      openAccessibleModal('jobConfirmOverlay', { triggerEl: btn, initialFocusEl: focusEl });
     }
   } catch (err) {
     console.error('Add to Job lookup failed', err);
@@ -3507,6 +3640,24 @@ function initJobConfirmationOverlay() {
     if (!payload) {
       showFeedback('No quote data to add.', true);
       return;
+    }
+    // Section 61.2/61.3: technicians must choose "doing it now" vs "office to schedule" and optionally a co-seller
+    let doingItNow = true;
+    let coSellerUserId = null;
+    if (isTechnicianRole()) {
+      try {
+        const result = await showDoingItNowModal(createNewBtn);
+        doingItNow = result.doingItNow;
+        coSellerUserId = result.coSellerUserId;
+      } catch (e) {
+        if (e === DOING_IT_NOW_ABORTED) return;
+        throw e;
+      }
+      // Stored for future job_personnel/API; create-new-job API unchanged for 61.3
+      if (overlay) {
+        overlay.dataset.doingItNow = String(doingItNow);
+        overlay.dataset.coSellerUserId = coSellerUserId || '';
+      }
     }
     let imageBase64 = null;
     let dataUrl = null;
@@ -3740,7 +3891,9 @@ function getElementsFromQuoteTable() {
         qty = 1;
         lengthMm = undefined; // No length yet - backend will use product standard length
       } else {
-        lengthMm = mToMm(metresVal);
+        const multiplier = parseFloat(row.dataset.missingMeasurementMultiplier || '1');
+        const scaledMetres = Number.isFinite(multiplier) && multiplier > 0 ? (metresVal * multiplier) : metresVal;
+        lengthMm = mToMm(scaledMetres);
         qty = 1;
       }
     } else {
@@ -4375,7 +4528,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = profile;
-      headerRow.innerHTML = `<td>Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td><span class="quote-section-header-label">Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -4433,7 +4586,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = sectionHeaderId;
-      headerRow.innerHTML = `<td>Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td><span class="quote-section-header-label">Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -5607,6 +5760,485 @@ function getSnapPopScale() {
   }
   const t = elapsed / SNAP_POP_DURATION_MS;
   return 1 + 0.05 * Math.sin(t * Math.PI);
+}
+
+function resetQuickQuoterState() {
+  quickQuoterState.isOpen = false;
+  quickQuoterState.profileValue = '';
+  quickQuoterState.sizeMmValue = '';
+  quickQuoterState.selectedItems.clear();
+  quickQuoterState.catalogLoadError = '';
+  quickQuoterState.serverValidationMessages = [];
+  quickQuoterState.resolveInFlight = false;
+}
+
+function setQuickQuoterCatalog(repairTypes) {
+  const mapped = (Array.isArray(repairTypes) ? repairTypes : [])
+    .map((type) => {
+      const id = String(type?.id || '').trim();
+      const label = String(type?.label || '').trim();
+      if (!id || !label) return null;
+      return {
+        id,
+        label,
+        requiresProfile: !!type?.requires_profile,
+        requiresSizeMm: !!type?.requires_size_mm,
+        sortOrder: Number(type?.sort_order) || 0,
+        active: !!type?.active,
+        isOther: id === 'other',
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id));
+  quickQuoterState.repairTypes = mapped;
+  quickQuoterState.repairTypeById = new Map(mapped.map((item) => [item.id, item]));
+}
+
+async function fetchQuickQuoterCatalog() {
+  quickQuoterState.catalogLoading = true;
+  quickQuoterState.catalogLoadError = '';
+  quickQuoterState.serverValidationMessages = [];
+  quickQuoterState.selectedItems.clear();
+  quickQuoterState.repairTypes = [];
+  quickQuoterState.repairTypeById = new Map();
+  renderQuickQuoterRows();
+
+  try {
+    const resp = await fetch('/api/quick-quoter/catalog', { cache: 'no-store' });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const message = typeof data?.detail === 'string'
+        ? data.detail
+        : 'Failed to load Quick Quoter repair types.';
+      throw new Error(message);
+    }
+    setQuickQuoterCatalog(data?.repair_types || []);
+    if (quickQuoterState.repairTypes.length === 0) {
+      quickQuoterState.catalogLoadError = 'No Quick Quoter repair types are available.';
+    }
+  } catch (err) {
+    quickQuoterState.catalogLoadError = err?.message || 'Failed to load Quick Quoter repair types.';
+    quickQuoterState.repairTypes = [];
+    quickQuoterState.repairTypeById = new Map();
+  } finally {
+    quickQuoterState.catalogLoading = false;
+    renderQuickQuoterRows();
+  }
+}
+
+function getQuickQuoterSelectedTypes() {
+  return Array.from(quickQuoterState.selectedItems.keys())
+    .map((id) => quickQuoterState.repairTypeById.get(id))
+    .filter(Boolean);
+}
+
+function getQuickQuoterValidationMessages(options = {}) {
+  const includeServer = options.includeServer !== false;
+  const selectedTypes = getQuickQuoterSelectedTypes();
+  const messages = [];
+
+  if (quickQuoterState.catalogLoadError) {
+    messages.push(quickQuoterState.catalogLoadError);
+  }
+  if (selectedTypes.length === 0) {
+    if (includeServer && quickQuoterState.serverValidationMessages.length > 0) {
+      messages.push(...quickQuoterState.serverValidationMessages);
+    }
+    return Array.from(new Set(messages));
+  }
+
+  const profileRequired = selectedTypes.some((type) => type.requiresProfile);
+  const sizeRequired = selectedTypes.some((type) => type.requiresSizeMm);
+
+  if (profileRequired && !quickQuoterState.profileValue) {
+    messages.push('Select a Profile to continue with selected gutter repair types.');
+  }
+  if (sizeRequired && !quickQuoterState.sizeMmValue) {
+    messages.push('Select a Size mm value for selected downpipe repair types.');
+  }
+  if (includeServer && quickQuoterState.serverValidationMessages.length > 0) {
+    messages.push(...quickQuoterState.serverValidationMessages);
+  }
+  return Array.from(new Set(messages));
+}
+
+function renderQuickQuoterValidation() {
+  const validationEl = document.getElementById('quickQuoterValidation');
+  if (!validationEl) return;
+  const messages = getQuickQuoterValidationMessages();
+  validationEl.innerHTML = '';
+  if (messages.length === 0) {
+    validationEl.setAttribute('hidden', '');
+    return;
+  }
+  messages.forEach((message) => {
+    const line = document.createElement('p');
+    line.textContent = message;
+    validationEl.appendChild(line);
+  });
+  validationEl.removeAttribute('hidden');
+}
+
+function syncQuickQuoterSelectors() {
+  const profileSelect = document.getElementById('quickQuoterProfileSelect');
+  const sizeSelect = document.getElementById('quickQuoterSizeSelect');
+  if (profileSelect) profileSelect.value = quickQuoterState.profileValue;
+  if (sizeSelect) sizeSelect.value = quickQuoterState.sizeMmValue;
+}
+
+function setQuickQuoterRowSelectedState(row, isSelected, quantity) {
+  if (!(row instanceof HTMLElement)) return;
+  row.classList.toggle('is-selected', isSelected);
+  row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  const circle = row.querySelector('.quick-quoter-row-circle');
+  const stepper = row.querySelector('.quick-quoter-stepper');
+  const qty = row.querySelector('.quick-quoter-stepper-value');
+  if (circle) circle.hidden = isSelected;
+  if (stepper) stepper.hidden = !isSelected;
+  if (qty) qty.textContent = String(quantity || 1);
+}
+
+function renderQuickQuoterRows() {
+  const list = document.getElementById('quickQuoterList');
+  if (!list) return;
+  const doneBtn = document.getElementById('quickQuoterDoneBtn');
+  const clearBtn = document.getElementById('quickQuoterClearBtn');
+  list.innerHTML = '';
+
+  if (quickQuoterState.catalogLoading) {
+    const line = document.createElement('p');
+    line.className = 'quick-quoter-loading-message';
+    line.textContent = 'Loading repair types…';
+    list.appendChild(line);
+  } else if (quickQuoterState.repairTypes.length === 0) {
+    const line = document.createElement('p');
+    line.className = 'quick-quoter-loading-message';
+    line.textContent = 'No repair types available.';
+    list.appendChild(line);
+  } else {
+    quickQuoterState.repairTypes.forEach((type) => {
+      const row = createQuickQuoterRow(type);
+      const isSelected = quickQuoterState.selectedItems.has(type.id);
+      const quantity = isSelected ? quickQuoterState.selectedItems.get(type.id) : 1;
+      setQuickQuoterRowSelectedState(row, isSelected, quantity);
+      list.appendChild(row);
+    });
+  }
+
+  if (doneBtn) {
+    doneBtn.disabled = quickQuoterState.catalogLoading || quickQuoterState.resolveInFlight || quickQuoterState.repairTypes.length === 0;
+  }
+  if (clearBtn) {
+    clearBtn.disabled = quickQuoterState.catalogLoading || quickQuoterState.resolveInFlight;
+  }
+  renderQuickQuoterValidation();
+}
+
+function closeQuickQuoterModal(options = {}) {
+  closeAccessibleModal('quickQuoterModal', options);
+}
+
+function openQuickQuoterModal(triggerEl) {
+  const profileSelect = document.getElementById('quickQuoterProfileSelect');
+  void fetchQuickQuoterCatalog();
+  openAccessibleModal('quickQuoterModal', { triggerEl, initialFocusEl: profileSelect });
+}
+
+function closeQuickQuoterAndOpenQuoteModal() {
+  const generateQuoteBtn = document.getElementById('generateQuoteBtn');
+  resetQuickQuoterState();
+  syncQuickQuoterSelectors();
+  renderQuickQuoterRows();
+  closeQuickQuoterModal({ restoreFocus: false });
+  if (generateQuoteBtn) generateQuoteBtn.click();
+}
+
+function handleQuickQuoterRowToggle(typeId) {
+  if (quickQuoterState.catalogLoading || quickQuoterState.resolveInFlight) return;
+  const type = quickQuoterState.repairTypeById.get(typeId);
+  if (!type) return;
+  if (type.isOther) {
+    closeQuickQuoterAndOpenQuoteModal();
+    return;
+  }
+  quickQuoterState.serverValidationMessages = [];
+  if (quickQuoterState.selectedItems.has(typeId)) quickQuoterState.selectedItems.delete(typeId);
+  else quickQuoterState.selectedItems.set(typeId, 1);
+  renderQuickQuoterRows();
+}
+
+function updateQuickQuoterSelectedQuantity(typeId, delta) {
+  if (quickQuoterState.catalogLoading || quickQuoterState.resolveInFlight) return;
+  if (!quickQuoterState.selectedItems.has(typeId)) return;
+  const current = parseInt(quickQuoterState.selectedItems.get(typeId), 10) || 1;
+  const next = Math.max(1, current + delta);
+  quickQuoterState.serverValidationMessages = [];
+  quickQuoterState.selectedItems.set(typeId, next);
+  renderQuickQuoterRows();
+}
+
+function getQuickQuoterResolvePayload() {
+  const selections = Array.from(quickQuoterState.selectedItems.entries())
+    .map(([repairTypeId, quantity]) => {
+      const type = quickQuoterState.repairTypeById.get(repairTypeId);
+      return {
+        repair_type_id: repairTypeId,
+        quantity: Number(quantity) || 1,
+        isOther: !!type?.isOther,
+      };
+    })
+    .filter((selection) => !!selection.repair_type_id);
+  return selections.filter((selection) => !selection.isOther).map(({ repair_type_id, quantity }) => ({
+    repair_type_id,
+    quantity,
+  }));
+}
+
+function getQuickQuoterOnlyOtherSelected() {
+  const selectedTypes = getQuickQuoterSelectedTypes();
+  if (selectedTypes.length === 0) return false;
+  return selectedTypes.every((type) => type.isOther);
+}
+
+function mergeQuickQuoterElementsForQuote(resolvePayload) {
+  const baseElements = getElementsForQuote();
+  const resolvedElements = Array.isArray(resolvePayload?.elements) ? resolvePayload.elements : [];
+  const missingMeasurements = Array.isArray(resolvePayload?.missing_measurements) ? resolvePayload.missing_measurements : [];
+
+  const normalizedResolved = resolvedElements
+    .map((item) => {
+      const assetId = String(item?.assetId || '').trim();
+      const quantity = Number(item?.quantity);
+      const lengthMm = Number(item?.length_mm);
+      if (!assetId || !Number.isFinite(quantity) || quantity <= 0) return null;
+      return {
+        assetId,
+        quantity,
+        ...(Number.isFinite(lengthMm) && lengthMm > 0 ? { length_mm: lengthMm } : {}),
+      };
+    })
+    .filter(Boolean);
+
+  const normalizedMissing = missingMeasurements
+    .map((item) => {
+      const assetId = String(item?.assetId || '').trim();
+      const multiplier = Number(item?.quantity);
+      if (!assetId || !Number.isFinite(multiplier) || multiplier <= 0) return null;
+      return {
+        assetId,
+        quantity: 1,
+        incomplete: true,
+        missing_measurement_multiplier: multiplier,
+      };
+    })
+    .filter(Boolean);
+
+  return [...baseElements, ...normalizedResolved, ...normalizedMissing];
+}
+
+function getQuickQuoterDisplayLabel(type) {
+  if (!type || typeof type.label !== 'string') return '';
+  if (type.isOther) return type.label;
+  const profile = quickQuoterState.profileValue;
+  const sizeMm = quickQuoterState.sizeMmValue;
+  if (type.requiresProfile && profile === 'storm_cloud') return `SC ${type.label}`;
+  if (type.requiresProfile && profile === 'classic') return `CL ${type.label}`;
+  if (type.requiresSizeMm && sizeMm === '65') return `RP65 ${type.label}`;
+  if (type.requiresSizeMm && sizeMm === '80') return `RP80 ${type.label}`;
+  return type.label;
+}
+
+function createQuickQuoterRow(type) {
+  const displayLabel = getQuickQuoterDisplayLabel(type);
+  const row = document.createElement('div');
+  row.className = 'quick-quoter-row';
+  row.dataset.repairTypeId = type.id;
+  row.setAttribute('role', 'option');
+  row.setAttribute('tabindex', '0');
+  row.setAttribute('aria-selected', 'false');
+  row.setAttribute('aria-label', displayLabel);
+
+  const label = document.createElement('span');
+  label.className = 'quick-quoter-row-label';
+  const boldPrefixes = [
+    { prefix: 'SC ', key: 'SC' },
+    { prefix: 'CL ', key: 'CL' },
+    { prefix: 'RP65 ', key: 'RP65' },
+    { prefix: 'RP80 ', key: 'RP80' },
+  ];
+  const match = boldPrefixes.find((p) => displayLabel.startsWith(p.prefix));
+  if (match) {
+    const prefixSpan = document.createElement('span');
+    prefixSpan.className = 'quick-quoter-row-label-prefix';
+    prefixSpan.textContent = match.key;
+    label.append(prefixSpan, document.createTextNode(' ' + type.label));
+  } else {
+    label.textContent = displayLabel;
+  }
+
+  const control = document.createElement('span');
+  control.className = 'quick-quoter-row-control';
+
+  const circle = document.createElement('span');
+  circle.className = 'quick-quoter-row-circle';
+  circle.setAttribute('aria-hidden', 'true');
+
+  const stepper = document.createElement('span');
+  stepper.className = 'quick-quoter-stepper';
+  stepper.hidden = true;
+
+  const minusBtn = document.createElement('button');
+  minusBtn.type = 'button';
+  minusBtn.className = 'quick-quoter-stepper-btn quick-quoter-stepper-btn--minus';
+  minusBtn.dataset.quickQuoterAction = 'decrement';
+  minusBtn.dataset.repairTypeId = type.id;
+  minusBtn.setAttribute('aria-label', `Decrease quantity for ${displayLabel}`);
+  minusBtn.textContent = '−';
+
+  const value = document.createElement('span');
+  value.className = 'quick-quoter-stepper-value';
+  value.setAttribute('aria-live', 'polite');
+  value.textContent = '1';
+
+  const plusBtn = document.createElement('button');
+  plusBtn.type = 'button';
+  plusBtn.className = 'quick-quoter-stepper-btn quick-quoter-stepper-btn--plus';
+  plusBtn.dataset.quickQuoterAction = 'increment';
+  plusBtn.dataset.repairTypeId = type.id;
+  plusBtn.setAttribute('aria-label', `Increase quantity for ${displayLabel}`);
+  plusBtn.textContent = '+';
+
+  stepper.append(minusBtn, value, plusBtn);
+  control.append(circle, stepper);
+  row.append(label, control);
+  return row;
+}
+
+function initQuickQuoter() {
+  const entryBtn = document.getElementById('quickQuoterEntryBtn');
+  const closeBtn = document.getElementById('quickQuoterModalClose');
+  const doneBtn = document.getElementById('quickQuoterDoneBtn');
+  const clearBtn = document.getElementById('quickQuoterClearBtn');
+  const profileSelect = document.getElementById('quickQuoterProfileSelect');
+  const sizeSelect = document.getElementById('quickQuoterSizeSelect');
+  const list = document.getElementById('quickQuoterList');
+  if (!entryBtn || !list) return;
+  if (entryBtn.getAttribute('data-quick-quoter-bound') === 'true') return;
+
+  entryBtn.setAttribute('data-quick-quoter-bound', 'true');
+  entryBtn.addEventListener('click', () => openQuickQuoterModal(entryBtn));
+  closeBtn?.addEventListener('click', () => closeQuickQuoterModal());
+  doneBtn?.addEventListener('click', async () => {
+    if (quickQuoterState.catalogLoading || quickQuoterState.resolveInFlight) return;
+    if (getQuickQuoterOnlyOtherSelected()) {
+      closeQuickQuoterAndOpenQuoteModal();
+      return;
+    }
+
+    const resolveSelections = getQuickQuoterResolvePayload();
+    if (resolveSelections.length === 0) {
+      closeQuickQuoterModal();
+      return;
+    }
+
+    const localValidationMessages = getQuickQuoterValidationMessages({ includeServer: false });
+    if (localValidationMessages.length > 0) {
+      renderQuickQuoterValidation();
+      return;
+    }
+
+    quickQuoterState.resolveInFlight = true;
+    quickQuoterState.serverValidationMessages = [];
+    renderQuickQuoterRows();
+
+    let resolveData = null;
+    try {
+      const resp = await fetch('/api/quick-quoter/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile: quickQuoterState.profileValue || null,
+          size_mm: quickQuoterState.sizeMmValue ? parseInt(quickQuoterState.sizeMmValue, 10) : null,
+          selections: resolveSelections,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        if (resp.status === 400) {
+          const validationErrors = Array.isArray(data?.validation_errors)
+            ? data.validation_errors
+            : (Array.isArray(data?.detail?.validation_errors) ? data.detail.validation_errors : []);
+          quickQuoterState.serverValidationMessages = validationErrors.length > 0
+            ? validationErrors.map((item) => String(item?.message || 'Quick Quoter selection is invalid.'))
+            : [typeof data?.detail === 'string' ? data.detail : 'Quick Quoter selection is invalid.'];
+        } else {
+          quickQuoterState.serverValidationMessages = [
+            typeof data?.detail === 'string' ? data.detail : 'Failed to resolve Quick Quoter selections.',
+          ];
+        }
+        renderQuickQuoterValidation();
+        return;
+      }
+      resolveData = data || {};
+    } catch (err) {
+      quickQuoterState.serverValidationMessages = [err?.message || 'Failed to resolve Quick Quoter selections.'];
+      renderQuickQuoterValidation();
+      return;
+    } finally {
+      quickQuoterState.resolveInFlight = false;
+      renderQuickQuoterRows();
+    }
+
+    const mergedElements = mergeQuickQuoterElementsForQuote(resolveData);
+    const quoteTrigger = doneBtn || entryBtn;
+    closeQuickQuoterModal({ restoreFocus: false });
+    await openQuoteModalForElements(mergedElements, quoteTrigger);
+  });
+  clearBtn?.addEventListener('click', () => {
+    resetQuickQuoterState();
+    quickQuoterState.isOpen = true;
+    quickQuoterState.catalogLoadError = '';
+    syncQuickQuoterSelectors();
+    renderQuickQuoterRows();
+  });
+
+  profileSelect?.addEventListener('change', () => {
+    quickQuoterState.profileValue = profileSelect.value;
+    quickQuoterState.serverValidationMessages = [];
+    renderQuickQuoterRows();
+  });
+  sizeSelect?.addEventListener('change', () => {
+    quickQuoterState.sizeMmValue = sizeSelect.value;
+    quickQuoterState.serverValidationMessages = [];
+    renderQuickQuoterRows();
+  });
+
+  list.addEventListener('click', (event) => {
+    const stepperButton = event.target.closest('.quick-quoter-stepper-btn');
+    if (stepperButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = stepperButton.dataset.quickQuoterAction;
+      const typeId = stepperButton.dataset.repairTypeId;
+      if (!typeId) return;
+      updateQuickQuoterSelectedQuantity(typeId, action === 'decrement' ? -1 : 1);
+      return;
+    }
+    const row = event.target.closest('.quick-quoter-row');
+    if (!row || !list.contains(row)) return;
+    handleQuickQuoterRowToggle(row.dataset.repairTypeId || '');
+  });
+  list.addEventListener('keydown', (event) => {
+    if (event.target.closest('.quick-quoter-stepper-btn')) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('.quick-quoter-row');
+    if (!row || !list.contains(row)) return;
+    event.preventDefault();
+    handleQuickQuoterRowToggle(row.dataset.repairTypeId || '');
+  });
+
+  syncQuickQuoterSelectors();
+  renderQuickQuoterRows();
 }
 
 function updatePlaceholderVisibility() {
@@ -14922,6 +15554,9 @@ function openAccessibleModal(id, options = {}) {
 }
 
 function closeAccessibleModal(id, options = {}) {
+  if (id === 'doingItNowModal' && typeof doingItNowModalAbort === 'function') {
+    doingItNowModalAbort();
+  }
   const cfg = modalA11yState.registry.get(id);
   if (!cfg || !(cfg.element instanceof HTMLElement)) return false;
 
@@ -15024,6 +15659,65 @@ function showAppConfirm(message, options = {}) {
     message,
     confirmText: options.confirmText || 'Confirm',
     cancelText: options.cancelText || 'Cancel',
+  });
+}
+
+/** Sentinel rejected when quote is closed while "Doing it now?" modal is open (QA audit 5.4/5.5). */
+const DOING_IT_NOW_ABORTED = Symbol('DOING_IT_NOW_ABORTED');
+
+/** Set when showDoingItNowModal is active; called from hideQuoteModal to settle Promise and remove listeners. */
+let doingItNowModalAbort = null;
+
+/**
+ * Section 61.2/61.3: Show mandatory "Are you doing it now?" modal for technicians.
+ * Returns Promise<{ doingItNow: boolean, coSellerUserId: string | null }>.
+ * doingItNow: true = "Yes, doing it now" (seller + executor), false = "No, office to schedule" (seller only).
+ * coSellerUserId: selected co-seller user_id or null (Section 61.3 optional dropdown).
+ * Modal cannot be dismissed without choosing (no Escape/backdrop close).
+ */
+async function showDoingItNowModal(triggerEl) {
+  const modal = document.getElementById('doingItNowModal');
+  const yesBtn = document.getElementById('doingItNowYesBtn');
+  const noBtn = document.getElementById('doingItNowNoBtn');
+  const coSellerSelect = document.getElementById('doingItNowCoSellerSelect');
+  if (!modal || !yesBtn || !noBtn) return { doingItNow: true, coSellerUserId: null };
+  const selfId = String(getCurrentUserId() || '').trim();
+  try {
+    const resp = await fetch('/api/technicians', { headers: { ...getAuthHeaders() } });
+    if (!handleAuthFailure(resp) && resp.ok && coSellerSelect) {
+      const data = await resp.json().catch(() => ({}));
+      const list = Array.isArray(data?.technicians) ? data.technicians : [];
+      const options = list
+        .filter((t) => t.user_id && t.user_id !== selfId)
+        .map((t) => ({ user_id: t.user_id, email: t.email || t.user_id }));
+      coSellerSelect.innerHTML = '<option value="">No one</option>' + options.map((o) =>
+        `<option value="${escapeHtml(o.user_id)}">${escapeHtml(o.email)}</option>`
+      ).join('');
+    }
+  } catch (err) {
+    console.error('Failed to load technicians for co-seller dropdown', err);
+    if (coSellerSelect) coSellerSelect.innerHTML = '<option value="">No one</option>';
+  }
+  return new Promise((resolve, reject) => {
+    const closeWith = (doingItNow, coSellerUserId) => {
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
+      doingItNowModalAbort = null;
+      closeAccessibleModal('doingItNowModal');
+      resolve({ doingItNow, coSellerUserId: coSellerUserId || null });
+    };
+    const getCoSellerValue = () => (coSellerSelect?.value || '').trim() || null;
+    const onYes = () => closeWith(true, getCoSellerValue());
+    const onNo = () => closeWith(false, getCoSellerValue());
+    doingItNowModalAbort = () => {
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
+      doingItNowModalAbort = null;
+      reject(DOING_IT_NOW_ABORTED);
+    };
+    yesBtn.addEventListener('click', onYes);
+    noBtn.addEventListener('click', onNo);
+    openAccessibleModal('doingItNowModal', { triggerEl: triggerEl || null, initialFocusEl: yesBtn });
   });
 }
 
@@ -15139,6 +15833,22 @@ function initModalAccessibilityFramework() {
     onClose: () => setQuoteModalScrollLock(false),
   });
   registerAccessibleModal({
+    id: 'quickQuoterModal',
+    element: document.getElementById('quickQuoterModal'),
+    backdrop: document.getElementById('quickQuoterModalBackdrop'),
+    initialFocus: () => document.getElementById('quickQuoterProfileSelect') || document.getElementById('quickQuoterModalClose'),
+    onOpen: () => {
+      quickQuoterState.isOpen = true;
+      syncQuickQuoterSelectors();
+      renderQuickQuoterRows();
+    },
+    onClose: () => {
+      resetQuickQuoterState();
+      syncQuickQuoterSelectors();
+      renderQuickQuoterRows();
+    },
+  });
+  registerAccessibleModal({
     id: 'labourEditorModal',
     element: document.getElementById('labourEditorModal'),
     backdrop: document.getElementById('labourEditorBackdrop'),
@@ -15181,7 +15891,17 @@ function initModalAccessibilityFramework() {
     id: 'jobConfirmOverlay',
     element: document.getElementById('jobConfirmOverlay'),
     backdrop: document.getElementById('jobConfirmBackdrop'),
-    initialFocus: () => document.getElementById('jobConfirmAddBtn') || document.getElementById('jobConfirmClose'),
+    // Section 61.1: technicians only see Create New; focus that button when Add is hidden
+    initialFocus: () => (isTechnicianRole() ? document.getElementById('jobConfirmCreateNew') : document.getElementById('jobConfirmAddBtn')) || document.getElementById('jobConfirmClose'),
+  });
+  // Section 61.2: mandatory "doing it now?" choice for technicians; no dismiss without choosing
+  registerAccessibleModal({
+    id: 'doingItNowModal',
+    element: document.getElementById('doingItNowModal'),
+    backdrop: document.getElementById('doingItNowBackdrop'),
+    closeOnEscape: false,
+    closeOnBackdrop: false,
+    initialFocus: () => document.getElementById('doingItNowYesBtn') || document.getElementById('doingItNowNoBtn'),
   });
   registerAccessibleModal({
     id: 'authModal',
@@ -15605,6 +16325,11 @@ function init() {
     console.warn('initQuoteModal failed', e);
   }
   try {
+    initQuickQuoter();
+  } catch (e) {
+    console.warn('initQuickQuoter failed', e);
+  }
+  try {
     initColorPalette();
   } catch (e) {
     console.warn('initColorPalette failed', e);
@@ -15705,6 +16430,13 @@ init();
 
 // E2E test hooks
 if (typeof window !== 'undefined') {
+  window.__quoteAppManualMetreTestFns = {
+    mToMm,
+    getOptimalGutterCombination,
+    getOptimalDownpipeCombination,
+    getElementsFromQuoteTable,
+    commitMetresInput,
+  };
   window.__quoteAppSwitchView = function (viewId) { switchView(viewId); };
   window.__quoteAppElementCount = function () { return state.elements.length; };
   window.__quoteAppGetSelection = function () { return state.selectedIds ? state.selectedIds.slice() : []; };

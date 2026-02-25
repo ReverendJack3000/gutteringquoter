@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node e2e/run.js",
     "test:e2e": "node e2e/run.js",
+    "test:manual-metre": "node e2e/manual-metre-audit.js",
     "test:e2e:headed": "HEADED=1 node e2e/run.js",
     "test:manual": "HEADED=1 node e2e/run.js"
   },

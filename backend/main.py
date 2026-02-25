@@ -42,12 +42,13 @@ from app.pricing import get_product_pricing
 from app.products import get_products
 from app.bonus_periods import create_period, list_periods, update_period
 from app.bonus_calc import compute_job_gp, compute_period_pot
+from app.quick_quoter import get_quick_quoter_catalog, resolve_quick_quoter_selection
 from app.quotes import QuoteMaterialLine, insert_quote_for_job
 from app.supabase_client import get_supabase
 from app import servicem8 as sm8
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
@@ -807,6 +808,17 @@ class CalculateQuoteRequest(BaseModel):
     labour_elements: list[QuoteElement] = Field(default_factory=list, description="Labour lines (assetId e.g. REP-LAB, quantity = hours)")
 
 
+class QuickQuoterSelection(BaseModel):
+    repair_type_id: str = Field(..., min_length=1, description="Quick Quoter repair type id")
+    quantity: float = Field(..., description="Quick Quoter row quantity")
+
+
+class QuickQuoterResolveRequest(BaseModel):
+    profile: Optional[str] = Field(None, description="storm_cloud | classic")
+    size_mm: Optional[int] = Field(None, description="Downpipe size in mm (65 | 80)")
+    selections: list[QuickQuoterSelection] = Field(default_factory=list, description="Quick Quoter selections")
+
+
 class UpdatePricingItem(BaseModel):
     id: str = Field(..., min_length=1, description="Product ID")
     cost_price: float = Field(..., ge=0, description="Cost price (>= 0)")
@@ -1064,6 +1076,40 @@ def api_admin_user_permissions(
     except Exception as e:
         logger.exception("Failed to list admin user permissions: %s", e)
         raise HTTPException(500, "Failed to list user permissions")
+
+
+@app.get("/api/technicians")
+def api_list_technicians(
+    user_id: Any = Depends(require_role(["technician", "editor", "admin"])),
+):
+    """
+    List users with role technician from public.profiles (Section 61.3 co-seller dropdown).
+    Callable by technician, editor, or admin. Returns user_id and email only.
+    """
+    _ = user_id
+    _require_service_role_for_admin_permissions()
+    try:
+        supabase = get_supabase()
+        auth_users = _list_auth_users_via_admin_api(supabase)
+        profile_roles = _load_profile_roles(supabase)
+        technicians = []
+        seen = set()
+        for auth_user in auth_users:
+            uid = str(_extract_auth_user_field(auth_user, "id") or "").strip()
+            if not uid or uid in seen:
+                continue
+            if _normalize_app_role(profile_roles.get(uid, "viewer")) != "technician":
+                continue
+            seen.add(uid)
+            email = _extract_auth_user_field(auth_user, "email") or ""
+            technicians.append({"user_id": uid, "email": str(email).strip()})
+        technicians.sort(key=lambda r: (r.get("email") or "").lower())
+        return {"technicians": technicians}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to list technicians: %s", e)
+        raise HTTPException(500, "Failed to list technicians")
 
 
 @app.post("/api/admin/user-permissions/invite")
@@ -1788,6 +1834,39 @@ def api_labour_rates():
     except Exception as e:
         logger.exception("Failed to fetch labour product for labour-rates: %s", e)
         return {"labour_rates": []}
+
+
+@app.get("/api/quick-quoter/catalog")
+def api_quick_quoter_catalog():
+    try:
+        supabase = get_supabase()
+        repair_types = get_quick_quoter_catalog(supabase)
+        return {"repair_types": repair_types}
+    except Exception as e:
+        logger.exception("Failed to fetch quick-quoter catalog: %s", e)
+        raise HTTPException(500, "Failed to load quick quoter catalog")
+
+
+@app.post("/api/quick-quoter/resolve")
+def api_quick_quoter_resolve(body: QuickQuoterResolveRequest):
+    try:
+        supabase = get_supabase()
+        selections_payload = [
+            selection.model_dump() if hasattr(selection, "model_dump") else selection.dict()
+            for selection in body.selections
+        ]
+        payload = resolve_quick_quoter_selection(
+            supabase=supabase,
+            profile=body.profile,
+            size_mm=body.size_mm,
+            selections=selections_payload,
+        )
+        if payload.get("validation_errors"):
+            return JSONResponse(status_code=400, content=payload)
+        return payload
+    except Exception as e:
+        logger.exception("Failed to resolve quick quoter selections: %s", e)
+        raise HTTPException(500, "Failed to resolve quick quoter selections")
 
 
 @app.post("/api/calculate-quote")

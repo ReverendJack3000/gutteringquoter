@@ -57,11 +57,11 @@
         <button type="button" class="toolbar-icon-btn btn-icon mobile-fit-view-btn" id="mobileFitViewBtn" title="Fit view" aria-label="Fit view" aria-hidden="true">
           <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         </button>
-        <button type="button" class="toolbar-icon-btn mobile-bonus-btn" id="mobileBonusDashboardBtn" title="Open GP Race scoreboard" aria-label="Open GP Race scoreboard" hidden>
+        <button type="button" class="toolbar-icon-btn mobile-bonus-btn" id="mobileBonusDashboardBtn" title="Open team pool" aria-label="Open team pool" hidden>
           <svg class="toolbar-icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2l2.5 5H20l-4.2 3.4 1.6 5.6L12 13l-5.4 3 1.6-5.6L4 7h5.5L12 2z"></path>
           </svg>
-          <span class="mobile-bonus-btn-label">GP Race</span>
+          <span class="mobile-bonus-btn-label">team pool</span>
         </button>
         <div class="toolbar-actions-secondary toolbar-servicem8-warning-wrap">
           <span id="servicem8ExportWarning" class="toolbar-servicem8-warning" title="" aria-label="ServiceM8 not connected" hidden aria-hidden="true">⚠</span>
@@ -224,13 +224,36 @@
           </div>
         </div>
         <canvas id="canvas" aria-label="Blueprint canvas"></canvas>
-        <div class="canvas-placeholder" id="canvasPlaceholder">
-          <div class="placeholder-card">
-            <button type="button" class="placeholder-icon" aria-label="Upload photo">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div class="canvas-entry-stack">
+          <div class="canvas-placeholder" id="canvasPlaceholder">
+            <div class="placeholder-card">
+              <button type="button" class="placeholder-icon" aria-label="Upload photo">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </button>
+              <span class="placeholder-title">Tap the Camera Icon to add or take a photo</span>
+              <span class="placeholder-steps">Drag products onto the blueprint — move, resize, and rotate like a Canva board</span>
+            </div>
+          </div>
+          <div class="quick-quoter-entry" id="quickQuoterEntry">
+            <button
+              type="button"
+              class="placeholder-card quick-quoter-entry-card"
+              id="quickQuoterEntryBtn"
+              aria-label="Open Quick Quoter"
+              aria-haspopup="dialog"
+              aria-controls="quickQuoterModal"
+            >
+              <span class="placeholder-icon quick-quoter-entry-icon" aria-hidden="true">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 6h13M8 12h13M8 18h13"/>
+                  <circle cx="4" cy="6" r="1.6"/>
+                  <circle cx="4" cy="12" r="1.6"/>
+                  <circle cx="4" cy="18" r="1.6"/>
+                </svg>
+              </span>
+              <span class="placeholder-title">Quick Quoter</span>
+              <span class="placeholder-steps">Add common repairs fast without drawing a diagram</span>
             </button>
-            <span class="placeholder-title">Tap the Camera Icon to add or take a photo</span>
-            <span class="placeholder-steps">Drag products onto the blueprint — move, resize, and rotate like a Canva board</span>
           </div>
         </div>
         <div class="canvas-tooltip" id="canvasTooltip" aria-live="polite" hidden></div>
@@ -724,7 +747,7 @@
             <p id="bonusPeriodDates" class="bonus-period-dates"></p>
           </section>
 
-          <section id="bonusRaceBoardMobile" class="bonus-race-board-mobile" aria-label="GP Race scoreboard">
+          <section id="bonusRaceBoardMobile" class="bonus-race-board-mobile" aria-label="Team pool scoreboard">
             <article class="bonus-pot-card">
               <div class="bonus-mobile-card-header">
                 <h2>Team Pool</h2>
@@ -1046,6 +1069,41 @@
     </div>
   </div>
 
+  <div class="auth-modal quick-quoter-modal" id="quickQuoterModal" role="dialog" aria-labelledby="quickQuoterModalTitle" aria-describedby="quickQuoterModalDescription" aria-modal="true" hidden>
+    <div class="auth-modal-backdrop" id="quickQuoterModalBackdrop"></div>
+    <div class="auth-modal-content quick-quoter-modal-content">
+      <div class="quick-quoter-modal-header">
+        <h2 id="quickQuoterModalTitle" class="auth-modal-title quick-quoter-modal-title">Quick Quoter</h2>
+        <button type="button" class="quick-quoter-close" id="quickQuoterModalClose" aria-label="Close Quick Quoter">×</button>
+      </div>
+      <p id="quickQuoterModalDescription" class="auth-modal-desc quick-quoter-modal-desc">Select one or more repair types and set quantity for each.</p>
+      <div class="quick-quoter-selectors" role="group" aria-label="Quick Quoter selectors">
+        <label class="quick-quoter-selector-field" for="quickQuoterProfileSelect">
+          <span>Profile</span>
+          <select id="quickQuoterProfileSelect">
+            <option value="">Select profile</option>
+            <option value="storm_cloud">Storm Cloud</option>
+            <option value="classic">Classic</option>
+          </select>
+        </label>
+        <label class="quick-quoter-selector-field" for="quickQuoterSizeSelect">
+          <span>Size mm</span>
+          <select id="quickQuoterSizeSelect">
+            <option value="">Select size</option>
+            <option value="65">65 mm</option>
+            <option value="80">80 mm</option>
+          </select>
+        </label>
+      </div>
+      <div class="quick-quoter-validation" id="quickQuoterValidation" role="alert" aria-live="polite" hidden></div>
+      <div class="quick-quoter-list" id="quickQuoterList" role="listbox" aria-multiselectable="true"></div>
+      <div class="quick-quoter-actions">
+        <button type="button" class="btn" id="quickQuoterClearBtn">Clear</button>
+        <button type="button" class="btn btn-primary" id="quickQuoterDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Quote modal: generate quote from canvas elements -->
   <div class="quote-modal" id="quoteModal" role="dialog" aria-labelledby="quoteModalTitle" aria-modal="true" hidden>
     <div class="quote-modal-backdrop" id="quoteModalBackdrop"></div>
@@ -1134,6 +1192,28 @@
               <span class="job-confirm-btn-text">Add to Job #<span id="jobConfirmAddId"></span></span>
               <span class="job-confirm-spinner job-confirm-spinner--white" aria-hidden="true"></span>
               <span class="job-confirm-done" aria-hidden="true">✅</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- Section 61.2: mandatory "doing it now?" choice for technicians before Create New Job (no dismiss without choice) -->
+      <div class="job-confirm-overlay doing-it-now-modal" id="doingItNowModal" role="dialog" aria-labelledby="doingItNowTitle" aria-describedby="doingItNowMessage" aria-modal="true" hidden>
+        <div class="job-confirm-backdrop" id="doingItNowBackdrop"></div>
+        <div class="job-confirm-card doing-it-now-card">
+          <h3 id="doingItNowTitle" class="job-confirm-header">Are you doing it now?</h3>
+          <p id="doingItNowMessage" class="doing-it-now-message">Choose whether you are completing this job now (seller + executor) or the office will schedule it (seller only).</p>
+          <div class="doing-it-now-coseller-wrap" id="doingItNowCoSellerWrap">
+            <label for="doingItNowCoSellerSelect" class="doing-it-now-coseller-label">Share seller credit with (optional)</label>
+            <select id="doingItNowCoSellerSelect" class="doing-it-now-coseller-select" aria-label="Optionally select a co-seller to share seller credit with">
+              <option value="">No one</option>
+            </select>
+          </div>
+          <div class="job-confirm-actions doing-it-now-actions">
+            <button type="button" class="job-confirm-create-new" id="doingItNowYesBtn">
+              <span class="job-confirm-btn-text">Yes, doing it now</span>
+            </button>
+            <button type="button" class="job-confirm-add-btn job-confirm-add-btn--secondary" id="doingItNowNoBtn">
+              <span class="job-confirm-btn-text">No, I can't do it now — please get the office to schedule</span>
             </button>
           </div>
         </div>

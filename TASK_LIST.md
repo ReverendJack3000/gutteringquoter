@@ -27,6 +27,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | Bonus period / job performance schema (Supabase) | [docs/tasks/section-58.md](docs/tasks/section-58.md) | 58 |
 | Technician quotes: team pool bonus (research + implementation) | [docs/tasks/section-59.md](docs/tasks/section-59.md) | 59 |
 | Technician bonus: spec refinements (labour rate, travel fee, estimation, spotter, margin, copy) | [docs/tasks/section-60.md](docs/tasks/section-60.md) | 60 |
+| Technician job creation, labour default, Create New Job pop-up (permissions, co-seller, stepper) | [docs/tasks/section-61.md](docs/tasks/section-61.md) | 61 |
+| Quick Quoter (mobile-first UI shell, local validation, future backend mapping) | [docs/tasks/section-62.md](docs/tasks/section-62.md) | 62 |
+| Quick Quoter Backend + Database Integration | [docs/tasks/section-63.md](docs/tasks/section-63.md) | 63 |
 
 **By section number — open the file that contains your section:**
 
@@ -45,13 +48,27 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 58 | [section-58.md](docs/tasks/section-58.md) |
 | 59 | [section-59.md](docs/tasks/section-59.md) |
 | 60 | [section-60.md](docs/tasks/section-60.md) |
+| 61 | [section-61.md](docs/tasks/section-61.md) |
+| 62 | [section-62.md](docs/tasks/section-62.md) |
+| 63 | [section-63.md](docs/tasks/section-63.md) |
 
 ---
 
 ## 🔁 Current Working Branch
 
-- Branch: main
-- Status: Stable
+- Branch: feature/61-1-technician-create-new-job-only
+- Based on: main
+- Status: In Progress
+- Related Tasks:
+  - [x] 61.1 Technician: Create New Job only (no Add to Job)
+  - [x] 61.2 Mandatory "Are you doing it now?" modal
+  - [x] 61.3 Co-seller dropdown in that modal
+  - [x] 61.4 Default labour cost $33; technician quantity-only (no edit labour cost)
+  - [x] 61.5 Labour stepper 0.25
+  - [x] 61.6 Show minutes when total labour &lt; 1 hr
+  - [x] 61.7 Regression and role safety
+  - [x] QA audit fixes (touch 44px, No button label, co-seller selfId, quote-close Promise/listener cleanup)
+  - [x] QA audit follow-up: closeAllModals invokes doing-it-now abort (Promise/listener cleanup when modal closed by any path)
 
 **Uncompleted tasks (by section):**
 
@@ -77,7 +94,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-| 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend (darker, Squircle, mesh gradient, ultraThinMaterial); expanded edge-snap behavior now covered by automated checks, final QA sign-off pending. |
+| 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4, **54.107.1** | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend; **54.107.1 Team pool button label and formatting (all mobile views, SVG fit).** |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.103.1–54.103.4 | (Mobile-only) Selection handles: corners-only (hide side pills), with hit-test parity, E2E/debug parity, and desktop guard. |
 | 54 | 54.104.1–54.104.6 | (Mobile-only) Two-finger selected-element transform smoothing: RAF-coalesced updates, angle continuity, no-jump transition, diagnostics hook, regression + manual QA, Railway-safe. |
@@ -93,7 +110,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-
+| 63 | 63.9 | Follow-up (baseline lock): mixed-length gutter accessory inference should use aggregated measured length consistently across packed pieces (current first-piece `length_mm` baseline preserved). |
 ---
 
 ## Locked decisions
