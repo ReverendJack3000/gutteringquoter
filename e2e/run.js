@@ -218,7 +218,32 @@ async function run() {
         const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         const href = String(url || '');
         if (href.includes('/api/admin/material-rules/quick-quoter')) {
-          return new Response(JSON.stringify({ repair_types: [], templates: [] }), {
+          return new Response(JSON.stringify({
+            repair_types: [
+              {
+                id: 'joiner_replacement',
+                label: 'Joiner Replacement',
+                active: true,
+                sort_order: 10,
+                requires_profile: true,
+                requires_size_mm: false,
+              },
+            ],
+            templates: [
+              {
+                id: '11111111-1111-1111-1111-111111111111',
+                repair_type_id: 'joiner_replacement',
+                product_id: 'GL-MAR',
+                qty_per_unit: 0.25,
+                condition_profile: null,
+                condition_size_mm: null,
+                length_mode: 'none',
+                fixed_length_mm: null,
+                active: true,
+                sort_order: 10,
+              },
+            ],
+          }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });
@@ -234,8 +259,8 @@ async function run() {
               screws_per_saddle_clip: 1,
               screws_per_adjustable_clip: 1,
               screw_product_id: 'SCR-SS',
-              bracket_product_id_sc: 'BRK-SC',
-              bracket_product_id_cl: 'BRK-CL',
+              bracket_product_id_sc: 'BRK-SC-MAR',
+              bracket_product_id_cl: 'BRK-CL-MAR',
               saddle_clip_product_id_65: 'SCL-65',
               saddle_clip_product_id_80: 'SCL-80',
               adjustable_clip_product_id_65: 'ACL-65',
@@ -254,10 +279,40 @@ async function run() {
     await delay(320);
     const desktopMaterialRulesViewState = await page.evaluate(() => {
       const visible = document.querySelector('.app-view:not(.hidden)');
+      const repairTypeRow = document.querySelector('#materialRulesRepairTypesBody tr[data-material-rules-repair-row="true"]');
+      const repairIdInput = document.querySelector('#materialRulesRepairTypesBody .material-rules-repair-id');
+      const templateRepairTypeInput = document.querySelector('#materialRulesTemplatesBody .material-rules-template-repair-type-id');
+      const templateProductInput = document.querySelector('#materialRulesTemplatesBody .material-rules-template-product-id');
+      const templateRowIdBadge = document.querySelector('#materialRulesTemplatesBody .material-rules-row-id');
+      const measuredSelectors = [
+        document.getElementById('materialRulesScrewProductId'),
+        document.getElementById('materialRulesBracketProductIdSc'),
+        document.getElementById('materialRulesBracketProductIdCl'),
+        document.getElementById('materialRulesSaddleClipProductId65'),
+        document.getElementById('materialRulesSaddleClipProductId80'),
+        document.getElementById('materialRulesAdjustableClipProductId65'),
+        document.getElementById('materialRulesAdjustableClipProductId80'),
+      ];
+      const hasLabourInTemplateProduct = templateProductInput && templateProductInput.tagName === 'SELECT'
+        ? Array.from(templateProductInput.options || []).some((opt) => String(opt.value || '').trim() === 'REP-LAB')
+        : null;
+      const hasLabourInMeasured = measuredSelectors
+        .filter((el) => el && el.tagName === 'SELECT')
+        .some((el) => Array.from(el.options || []).some((opt) => String(opt.value || '').trim() === 'REP-LAB'));
       return {
         visibleViewId: visible ? visible.id : null,
         hasQuickSection: !!document.getElementById('materialRulesQuickQuoterHeading'),
         hasMeasuredSection: !!document.getElementById('materialRulesMeasuredHeading'),
+        addRepairTypeBtnExists: !!document.getElementById('btnMaterialRulesAddRepairType'),
+        hasRepairTypeRowRemoveBtn: !!document.querySelector('#materialRulesRepairTypesBody .material-rules-row-remove-btn'),
+        repairIdVisible: !!repairIdInput,
+        repairIdPreservedInDataset: String(repairTypeRow?.dataset?.repairTypeId || '').trim(),
+        templateRowIdBadgeVisible: !!templateRowIdBadge,
+        templateRepairTypeTag: templateRepairTypeInput ? templateRepairTypeInput.tagName : null,
+        templateProductTag: templateProductInput ? templateProductInput.tagName : null,
+        measuredSelectorsAllSelect: measuredSelectors.every((el) => !!el && el.tagName === 'SELECT'),
+        hasLabourInTemplateProduct,
+        hasLabourInMeasured,
       };
     });
     if (desktopMaterialRulesViewState.visibleViewId !== 'view-material-rules') {
@@ -265,6 +320,36 @@ async function run() {
     }
     if (!desktopMaterialRulesViewState.hasQuickSection || !desktopMaterialRulesViewState.hasMeasuredSection) {
       throw new Error('Desktop Material Rules regression: expected both Quick Quoter and Measured sections');
+    }
+    if (desktopMaterialRulesViewState.addRepairTypeBtnExists) {
+      throw new Error('Desktop Material Rules regression: Add Repair Type button should not be present');
+    }
+    if (desktopMaterialRulesViewState.hasRepairTypeRowRemoveBtn) {
+      throw new Error('Desktop Material Rules regression: repair type rows should not have remove actions');
+    }
+    if (desktopMaterialRulesViewState.repairIdVisible) {
+      throw new Error('Desktop Material Rules regression: repair type ID should not be visible');
+    }
+    if (!desktopMaterialRulesViewState.repairIdPreservedInDataset) {
+      throw new Error('Desktop Material Rules regression: repair type ID must remain preserved in row dataset');
+    }
+    if (desktopMaterialRulesViewState.templateRowIdBadgeVisible) {
+      throw new Error('Desktop Material Rules regression: template internal row ID badge should not be visible');
+    }
+    if (desktopMaterialRulesViewState.templateRepairTypeTag !== 'SELECT') {
+      throw new Error('Desktop Material Rules regression: template repair type control should be a dropdown');
+    }
+    if (desktopMaterialRulesViewState.templateProductTag !== 'SELECT') {
+      throw new Error('Desktop Material Rules regression: template product control should be a dropdown');
+    }
+    if (!desktopMaterialRulesViewState.measuredSelectorsAllSelect) {
+      throw new Error('Desktop Material Rules regression: measured product controls should all be dropdowns');
+    }
+    if (desktopMaterialRulesViewState.hasLabourInTemplateProduct) {
+      throw new Error('Desktop Material Rules regression: template product dropdown should exclude REP-LAB');
+    }
+    if (desktopMaterialRulesViewState.hasLabourInMeasured) {
+      throw new Error('Desktop Material Rules regression: measured product dropdowns should exclude REP-LAB');
     }
     await page.evaluate(() => {
       if (window.__quoteAppE2eMaterialRulesFetchPatch?.originalFetch) {

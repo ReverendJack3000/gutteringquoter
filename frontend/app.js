@@ -341,6 +341,7 @@ const materialRulesState = {
   templates: [],
   measuredRules: null,
   productIds: [],
+  productMetaById: new Map(),
 };
 
 /** Snapshot of canvas + view + project name before loading a saved diagram; used for "Go back to previous". */
@@ -357,6 +358,20 @@ const PLACEHOLDER_PRODUCT_IDS = ['gutter', 'downpipe', 'bracket', 'stopend', 'ou
 
 /** Labour product ID(s) – excluded from Marley panel and quote Add item; labour is only via dedicated labour row(s). */
 const LABOUR_PRODUCT_IDS = ['REP-LAB'];
+
+/** Product IDs not allowed in Material Rules mappings (identity placeholders + labour). */
+const MATERIAL_RULES_DISALLOWED_PRODUCT_IDS = new Set([
+  'REP-LAB',
+  'gutter',
+  'downpipe',
+  'bracket',
+  'stopend',
+  'outlet',
+  'dropper',
+]);
+const MATERIAL_RULES_DISALLOWED_PRODUCT_IDS_UPPER = new Set(
+  Array.from(MATERIAL_RULES_DISALLOWED_PRODUCT_IDS).map((id) => String(id).toUpperCase())
+);
 
 /** Max size for product diagram SVG upload (2MB). */
 const PRODUCT_SVG_MAX_SIZE_BYTES = 2 * 1024 * 1024;
@@ -14755,9 +14770,20 @@ function getMaterialRulesApiError(payload, fallback) {
   if (typeof detail === 'string' && detail.trim()) return detail.trim();
   const validationErrors = Array.isArray(detail?.validation_errors) ? detail.validation_errors : [];
   if (validationErrors.length > 0) {
+    const codeFallbacks = {
+      repair_type_id_set_locked: 'Repair type IDs are locked and cannot be added, removed, or renamed in this UI.',
+      reserved_repair_type_missing: "Reserved repair type 'other' must remain present.",
+      disallowed_product_id: 'Selected product ID is not allowed for Material Rules.',
+      missing_product_pricing: 'Selected product is missing pricing fields required by quote calculation.',
+    };
     return validationErrors
       .slice(0, 3)
-      .map((err) => String(err?.message || '').trim())
+      .map((err) => {
+        const message = String(err?.message || '').trim();
+        if (message) return message;
+        const code = String(err?.code || '').trim();
+        return codeFallbacks[code] || '';
+      })
       .filter(Boolean)
       .join(' ');
   }
@@ -14768,28 +14794,107 @@ function updateMaterialRulesActionButtons() {
   const reloadBtn = document.getElementById('btnMaterialRulesReload');
   const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
   const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
-  const addRepairTypeBtn = document.getElementById('btnMaterialRulesAddRepairType');
   const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
   const disableAll = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
   if (reloadBtn) reloadBtn.disabled = disableAll;
   if (saveQuickQuoterBtn) saveQuickQuoterBtn.disabled = disableAll;
   if (saveMeasuredBtn) saveMeasuredBtn.disabled = disableAll;
-  if (addRepairTypeBtn) addRepairTypeBtn.disabled = disableAll;
   if (addTemplateBtn) addTemplateBtn.disabled = disableAll;
 }
 
-function renderMaterialRulesRepairTypeOptions() {
-  const datalist = document.getElementById('materialRulesRepairTypeIdOptions');
-  if (!datalist) return;
-  const ids = Array.from(new Set((materialRulesState.repairTypes || []).map((row) => String(row?.id || '').trim()).filter(Boolean))).sort();
-  datalist.innerHTML = ids.map((id) => `<option value="${escapeHtml(id)}"></option>`).join('');
+function isMaterialRulesDisallowedProductId(productId) {
+  const id = String(productId || '').trim();
+  if (!id) return false;
+  return MATERIAL_RULES_DISALLOWED_PRODUCT_IDS_UPPER.has(id.toUpperCase());
 }
 
-function renderMaterialRulesProductOptions() {
-  const datalist = document.getElementById('materialRulesProductIdOptions');
-  if (!datalist) return;
-  const ids = Array.from(new Set((materialRulesState.productIds || []).map((id) => String(id || '').trim()).filter(Boolean))).sort();
-  datalist.innerHTML = ids.map((id) => `<option value="${escapeHtml(id)}"></option>`).join('');
+function getMaterialRulesAllowedProductIds() {
+  const ids = Array.from(materialRulesState.productMetaById.keys()).filter((id) => !isMaterialRulesDisallowedProductId(id));
+  return ids.sort((a, b) => a.localeCompare(b));
+}
+
+function getMaterialRulesProductLabel(productId) {
+  const id = String(productId || '').trim();
+  if (!id) return '';
+  const meta = materialRulesState.productMetaById.get(id);
+  const name = String(meta?.name || '').trim();
+  return name ? `${id} — ${name}` : id;
+}
+
+function getMaterialRulesRepairTypeSelectOptionsHtml(selectedId) {
+  const selected = String(selectedId || '').trim();
+  const ids = Array.from(new Set((materialRulesState.repairTypes || []).map((row) => String(row?.id || '').trim()).filter(Boolean))).sort();
+  const parts = ['<option value="">Select…</option>'];
+  ids.forEach((id) => {
+    parts.push(`<option value="${escapeHtml(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(id)}</option>`);
+  });
+  if (selected && !ids.includes(selected)) {
+    parts.unshift(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(`⚠ Invalid: ${selected}`)}</option>`);
+  }
+  return parts.join('');
+}
+
+function getMaterialRulesProductSelectOptionsHtml(selectedId) {
+  const selected = String(selectedId || '').trim();
+  const allowedIds = getMaterialRulesAllowedProductIds();
+  const parts = ['<option value="">Select…</option>'];
+  allowedIds.forEach((id) => {
+    parts.push(
+      `<option value="${escapeHtml(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(getMaterialRulesProductLabel(id))}</option>`
+    );
+  });
+  if (selected && !allowedIds.includes(selected)) {
+    parts.unshift(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(`⚠ Invalid: ${selected}`)}</option>`);
+  }
+  return parts.join('');
+}
+
+function renderMaterialRulesMeasuredProductSelects(rules = null) {
+  const safe = rules || materialRulesState.measuredRules || {};
+  const fieldMap = [
+    ['materialRulesScrewProductId', safe.screw_product_id],
+    ['materialRulesBracketProductIdSc', safe.bracket_product_id_sc],
+    ['materialRulesBracketProductIdCl', safe.bracket_product_id_cl],
+    ['materialRulesSaddleClipProductId65', safe.saddle_clip_product_id_65],
+    ['materialRulesSaddleClipProductId80', safe.saddle_clip_product_id_80],
+    ['materialRulesAdjustableClipProductId65', safe.adjustable_clip_product_id_65],
+    ['materialRulesAdjustableClipProductId80', safe.adjustable_clip_product_id_80],
+  ];
+  fieldMap.forEach(([elementId, selected]) => {
+    const el = document.getElementById(elementId);
+    if (!(el instanceof HTMLSelectElement)) return;
+    el.innerHTML = getMaterialRulesProductSelectOptionsHtml(selected);
+  });
+}
+
+function getMaterialRulesDataWarnings() {
+  const warnings = [];
+  const catalogLoaded = materialRulesState.productMetaById.size > 0;
+  const disallowed = new Set();
+  const unknown = new Set();
+
+  const addProductWarning = (productId) => {
+    const pid = String(productId || '').trim();
+    if (!pid) return;
+    if (isMaterialRulesDisallowedProductId(pid)) disallowed.add(pid);
+    if (catalogLoaded && !materialRulesState.productMetaById.has(pid)) unknown.add(pid);
+  };
+
+  (materialRulesState.templates || []).forEach((row) => addProductWarning(row?.product_id));
+  const measured = materialRulesState.measuredRules || {};
+  [
+    measured.screw_product_id,
+    measured.bracket_product_id_sc,
+    measured.bracket_product_id_cl,
+    measured.saddle_clip_product_id_65,
+    measured.saddle_clip_product_id_80,
+    measured.adjustable_clip_product_id_65,
+    measured.adjustable_clip_product_id_80,
+  ].forEach(addProductWarning);
+
+  if (disallowed.size > 0) warnings.push(`Disallowed product IDs in current rules: ${Array.from(disallowed).sort().join(', ')}`);
+  if (unknown.size > 0) warnings.push(`Unknown product IDs in current rules: ${Array.from(unknown).sort().join(', ')}`);
+  return warnings;
 }
 
 let materialRulesLocalTemplateCounter = 0;
@@ -14806,19 +14911,14 @@ function appendMaterialRulesRepairTypeRow(row = {}) {
 
   const tr = document.createElement('tr');
   tr.dataset.materialRulesRepairRow = 'true';
+  tr.dataset.repairTypeId = id;
   tr.innerHTML = `
-    <td><input type="text" class="material-rules-repair-id" value="${escapeHtml(id)}" aria-label="Repair type ID" /></td>
     <td><input type="text" class="material-rules-repair-label" value="${escapeHtml(label)}" aria-label="Repair type label" /></td>
     <td><input type="number" class="material-rules-repair-sort" value="${escapeHtml(String(sortOrder))}" step="1" aria-label="Repair type sort order" /></td>
     <td><input type="checkbox" class="material-rules-repair-requires-profile" ${requiresProfile ? 'checked' : ''} aria-label="Requires profile" /></td>
     <td><input type="checkbox" class="material-rules-repair-requires-size" ${requiresSize ? 'checked' : ''} aria-label="Requires size" /></td>
     <td><input type="checkbox" class="material-rules-repair-active" ${active ? 'checked' : ''} aria-label="Active" /></td>
-    <td><button type="button" class="material-rules-row-remove-btn" aria-label="Remove repair type row">Remove</button></td>
   `;
-  const removeBtn = tr.querySelector('.material-rules-row-remove-btn');
-  removeBtn?.addEventListener('click', () => {
-    tr.remove();
-  });
   tbody.appendChild(tr);
 }
 
@@ -14842,8 +14942,16 @@ function appendMaterialRulesTemplateRow(row = {}) {
   tr.dataset.materialRulesTemplateRow = 'true';
   tr.dataset.templateId = localId;
   tr.innerHTML = `
-    <td><input type="text" class="material-rules-template-repair-type-id" list="materialRulesRepairTypeIdOptions" value="${escapeHtml(repairTypeId)}" aria-label="Template repair type ID" /></td>
-    <td><input type="text" class="material-rules-template-product-id" list="materialRulesProductIdOptions" value="${escapeHtml(productId)}" aria-label="Template product ID" /></td>
+    <td>
+      <select class="material-rules-template-repair-type-id" aria-label="Template repair type ID">
+        ${getMaterialRulesRepairTypeSelectOptionsHtml(repairTypeId)}
+      </select>
+    </td>
+    <td>
+      <select class="material-rules-template-product-id" aria-label="Template product ID">
+        ${getMaterialRulesProductSelectOptionsHtml(productId)}
+      </select>
+    </td>
     <td><input type="number" class="material-rules-template-qty" min="0" step="0.001" value="${escapeHtml(String(qtyPerUnit))}" aria-label="Template quantity per unit" /></td>
     <td>
       <select class="material-rules-template-profile" aria-label="Template condition profile">
@@ -14869,9 +14977,8 @@ function appendMaterialRulesTemplateRow(row = {}) {
     <td><input type="number" class="material-rules-template-fixed-length" min="1" step="1" value="${escapeHtml(fixedLength)}" aria-label="Template fixed length mm" /></td>
     <td><input type="checkbox" class="material-rules-template-active" ${active ? 'checked' : ''} aria-label="Template active" /></td>
     <td><input type="number" class="material-rules-template-sort" step="1" value="${escapeHtml(String(sortOrder))}" aria-label="Template sort order" /></td>
-    <td>
+    <td class="material-rules-template-actions-cell">
       <button type="button" class="material-rules-row-remove-btn" aria-label="Remove template row">Remove</button>
-      <div class="material-rules-row-id">${escapeHtml(existingId || 'new')}</div>
     </td>
   `;
 
@@ -14907,13 +15014,11 @@ function renderMaterialRulesQuickQuoterTables() {
 
   repairTypes.forEach((row) => appendMaterialRulesRepairTypeRow(row));
   templates.forEach((row) => appendMaterialRulesTemplateRow(row));
-
-  renderMaterialRulesRepairTypeOptions();
-  renderMaterialRulesProductOptions();
 }
 
 function populateMaterialRulesMeasuredForm(rules) {
   const safe = rules || {};
+  renderMaterialRulesMeasuredProductSelects(safe);
   const setValue = (id, value) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -14948,7 +15053,7 @@ function collectMaterialRulesRepairTypesPayload() {
   }
 
   rows.forEach((row, index) => {
-    const id = String(row.querySelector('.material-rules-repair-id')?.value || '').trim();
+    const id = String(row.dataset.repairTypeId || '').trim();
     const label = String(row.querySelector('.material-rules-repair-label')?.value || '').trim();
     const sortOrderRaw = String(row.querySelector('.material-rules-repair-sort')?.value || '').trim();
     const sortOrder = parseInt(sortOrderRaw, 10);
@@ -15011,6 +15116,12 @@ function collectMaterialRulesTemplatesPayload() {
 
     if (!repairTypeId) errors.push(`Template row ${rowNumber}: Repair type ID is required.`);
     if (!productId) errors.push(`Template row ${rowNumber}: Product ID is required.`);
+    if (productId && isMaterialRulesDisallowedProductId(productId)) {
+      errors.push(`Template row ${rowNumber}: Product ID '${productId}' is not allowed in Material Rules.`);
+    }
+    if (productId && materialRulesState.productMetaById.size > 0 && !materialRulesState.productMetaById.has(productId)) {
+      errors.push(`Template row ${rowNumber}: Product ID '${productId}' is not in the current product catalog.`);
+    }
     if (!Number.isFinite(qtyPerUnit) || qtyPerUnit < 0) errors.push(`Template row ${rowNumber}: Qty per unit must be a number >= 0.`);
     if (conditionProfile && conditionProfile !== 'SC' && conditionProfile !== 'CL') errors.push(`Template row ${rowNumber}: Profile must be SC, CL, or empty.`);
     if (conditionSize !== null && conditionSize !== 65 && conditionSize !== 80) errors.push(`Template row ${rowNumber}: Size must be 65, 80, or empty.`);
@@ -15091,6 +15202,12 @@ function collectMaterialRulesMeasuredPayload() {
     ['adjustable_clip_product_id_80', 'Adjustable clip product (80)'],
   ].forEach(([field, label]) => {
     if (!payload[field]) errors.push(`${label} is required.`);
+    if (payload[field] && isMaterialRulesDisallowedProductId(payload[field])) {
+      errors.push(`${label} cannot use '${payload[field]}' in Material Rules.`);
+    }
+    if (payload[field] && materialRulesState.productMetaById.size > 0 && !materialRulesState.productMetaById.has(payload[field])) {
+      errors.push(`${label} '${payload[field]}' is not in the current product catalog.`);
+    }
   });
 
   if (!['auto_by_acl_presence', 'force_saddle', 'force_adjustable'].includes(payload.clip_selection_mode)) {
@@ -15145,6 +15262,15 @@ async function fetchMaterialRules(options = {}) {
     materialRulesState.repairTypes = Array.isArray(quickQuoterPayload?.repair_types) ? quickQuoterPayload.repair_types : [];
     materialRulesState.templates = Array.isArray(quickQuoterPayload?.templates) ? quickQuoterPayload.templates : [];
     materialRulesState.measuredRules = measuredPayload?.rules || null;
+    materialRulesState.productMetaById = new Map(
+      (Array.isArray(products) ? products : [])
+        .map((product) => {
+          const id = String(product?.id || '').trim();
+          if (!id) return null;
+          return [id, product];
+        })
+        .filter(Boolean)
+    );
 
     const productIdsFromApi = (Array.isArray(products) ? products : [])
       .map((p) => String(p?.id || '').trim())
@@ -15170,7 +15296,12 @@ async function fetchMaterialRules(options = {}) {
 
     renderMaterialRulesQuickQuoterTables();
     populateMaterialRulesMeasuredForm(materialRulesState.measuredRules || {});
-    setMaterialRulesStatus(options.showSuccess ? 'Material rules loaded.' : '');
+    const warnings = getMaterialRulesDataWarnings();
+    if (warnings.length > 0) {
+      setMaterialRulesStatus(`Warning: ${warnings.join(' ')}`, 'error');
+    } else {
+      setMaterialRulesStatus(options.showSuccess ? 'Material rules loaded.' : '');
+    }
   } catch (err) {
     setMaterialRulesStatus(err?.message || 'Failed to load material rules.', 'error');
   } finally {
@@ -15284,7 +15415,6 @@ function initMaterialRulesView() {
   const reloadBtn = document.getElementById('btnMaterialRulesReload');
   const saveQuickQuoterBtn = document.getElementById('btnMaterialRulesSaveQuickQuoter');
   const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
-  const addRepairTypeBtn = document.getElementById('btnMaterialRulesAddRepairType');
   const addTemplateBtn = document.getElementById('btnMaterialRulesAddTemplate');
 
   backBtn?.addEventListener('click', () => {
@@ -15301,17 +15431,6 @@ function initMaterialRulesView() {
 
   saveMeasuredBtn?.addEventListener('click', () => {
     void saveMaterialRulesMeasured();
-  });
-
-  addRepairTypeBtn?.addEventListener('click', () => {
-    appendMaterialRulesRepairTypeRow({
-      id: '',
-      label: '',
-      active: true,
-      sort_order: 0,
-      requires_profile: false,
-      requires_size_mm: false,
-    });
   });
 
   addTemplateBtn?.addEventListener('click', () => {

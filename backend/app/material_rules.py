@@ -17,6 +17,19 @@ VALID_QUICK_QUOTER_PROFILES = {"SC", "CL"}
 VALID_QUICK_QUOTER_SIZES = {65, 80}
 VALID_QUICK_QUOTER_LENGTH_MODES = {"none", "missing_measurement", "fixed_mm"}
 
+MATERIAL_RULES_DISALLOWED_PRODUCT_IDS = {
+    "REP-LAB",
+    "gutter",
+    "downpipe",
+    "bracket",
+    "stopend",
+    "outlet",
+    "dropper",
+}
+MATERIAL_RULES_DISALLOWED_PRODUCT_IDS_UPPER = {
+    str(pid).strip().upper() for pid in MATERIAL_RULES_DISALLOWED_PRODUCT_IDS
+}
+
 MEASURED_RULE_PRODUCT_FIELDS = (
     "screw_product_id",
     "bracket_product_id_sc",
@@ -112,6 +125,10 @@ def _to_optional_updated_by(value: Any) -> Optional[str]:
     return text
 
 
+def _is_disallowed_material_rules_product_id(product_id: str) -> bool:
+    return _to_clean_str(product_id).upper() in MATERIAL_RULES_DISALLOWED_PRODUCT_IDS_UPPER
+
+
 def _fetch_existing_ids(supabase: Any, table: str, ids: set[str]) -> set[str]:
     if not ids:
         return set()
@@ -127,6 +144,24 @@ def _fetch_existing_ids(supabase: Any, table: str, ids: set[str]) -> set[str]:
         rid = _to_clean_str((row or {}).get("id"))
         if rid:
             out.add(rid)
+    return out
+
+
+def _fetch_products_by_id(supabase: Any, ids: set[str]) -> dict[str, dict[str, Any]]:
+    if not ids:
+        return {}
+    resp = (
+        supabase.table("products")
+        .select("id, category, cost_price, markup_percentage")
+        .in_("id", sorted(ids))
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in (resp.data or []):
+        rid = _to_clean_str((row or {}).get("id"))
+        if not rid:
+            continue
+        out[rid] = dict(row)
     return out
 
 
@@ -432,6 +467,37 @@ def save_quick_quoter_repair_types(
         for row in (existing_resp.data or [])
         if _to_clean_str((row or {}).get("id"))
     }
+    incoming_ids = {row["id"] for row in rows}
+
+    if existing_ids and incoming_ids != existing_ids:
+        added_ids = sorted(incoming_ids - existing_ids)
+        removed_ids = sorted(existing_ids - incoming_ids)
+        errors: list[dict[str, Any]] = []
+        if added_ids:
+            errors.append(
+                _validation_error(
+                    "repair_type_id_set_locked",
+                    f"Repair type IDs are locked in this UI. Added IDs are not allowed: {', '.join(added_ids)}.",
+                    "repair_types.id",
+                )
+            )
+        if removed_ids:
+            errors.append(
+                _validation_error(
+                    "repair_type_id_set_locked",
+                    f"Repair type IDs are locked in this UI. Removed IDs are not allowed: {', '.join(removed_ids)}.",
+                    "repair_types.id",
+                )
+            )
+        if "other" in existing_ids and "other" not in incoming_ids:
+            errors.append(
+                _validation_error(
+                    "reserved_repair_type_missing",
+                    "Reserved repair type ID 'other' must remain present.",
+                    "repair_types.id",
+                )
+            )
+        raise MaterialRulesValidationError(errors)
 
     now_iso = _now_iso()
     to_upsert = [
@@ -443,11 +509,6 @@ def save_quick_quoter_repair_types(
         for row in rows
     ]
     supabase.table("quick_quoter_repair_types").upsert(to_upsert, on_conflict="id").execute()
-
-    incoming_ids = {row["id"] for row in rows}
-    stale_ids = sorted(existing_ids - incoming_ids)
-    for stale_id in stale_ids:
-        supabase.table("quick_quoter_repair_types").delete().eq("id", stale_id).execute()
 
     return _list_quick_quoter_repair_types(supabase)
 
@@ -476,19 +537,43 @@ def save_quick_quoter_templates(
         )
 
     product_ids = {row["product_id"] for row in rows}
-    existing_product_ids = _fetch_existing_ids(supabase, "products", product_ids)
-    missing_product_ids = sorted(product_ids - existing_product_ids)
-    if missing_product_ids:
-        raise MaterialRulesValidationError(
-            [
+    products_by_id = _fetch_products_by_id(supabase, product_ids)
+    product_errors: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        product_id = row["product_id"]
+        product = products_by_id.get(product_id)
+        if product is None:
+            product_errors.append(
                 _validation_error(
                     "unknown_product_id",
-                    f"Unknown product_id: {pid}",
+                    f"Unknown product_id: {product_id}",
                     "templates.product_id",
+                    index,
                 )
-                for pid in missing_product_ids
-            ]
-        )
+            )
+            continue
+        if _is_disallowed_material_rules_product_id(product_id):
+            product_errors.append(
+                _validation_error(
+                    "disallowed_product_id",
+                    f"Product ID {product_id} is not allowed in Material Rules.",
+                    "templates.product_id",
+                    index,
+                )
+            )
+        cost_price = _to_float(product.get("cost_price"))
+        markup_percentage = _to_float(product.get("markup_percentage"))
+        if cost_price is None or markup_percentage is None:
+            product_errors.append(
+                _validation_error(
+                    "missing_product_pricing",
+                    f"Product ID {product_id} is missing cost_price and/or markup_percentage.",
+                    "templates.product_id",
+                    index,
+                )
+            )
+    if product_errors:
+        raise MaterialRulesValidationError(product_errors)
 
     existing_resp = supabase.table("quick_quoter_part_templates").select("id").execute()
     existing_ids = {
@@ -657,20 +742,42 @@ def save_measured_material_rules(
 ) -> dict[str, Any]:
     normalized = _normalize_measured_rules(payload)
     product_ids = set(normalized.pop("_product_ids", set()))
-
-    existing_product_ids = _fetch_existing_ids(supabase, "products", product_ids)
-    missing_product_ids = sorted(product_ids - existing_product_ids)
-    if missing_product_ids:
-        raise MaterialRulesValidationError(
-            [
+    products_by_id = _fetch_products_by_id(supabase, product_ids)
+    product_errors: list[dict[str, Any]] = []
+    for field in MEASURED_RULE_PRODUCT_FIELDS:
+        product_id = _to_clean_str(normalized.get(field))
+        if not product_id:
+            continue
+        product = products_by_id.get(product_id)
+        if product is None:
+            product_errors.append(
                 _validation_error(
                     "unknown_product_id",
-                    f"Unknown product_id: {pid}",
-                    "rules.product_id",
+                    f"Unknown product_id: {product_id}",
+                    f"rules.{field}",
                 )
-                for pid in missing_product_ids
-            ]
-        )
+            )
+            continue
+        if _is_disallowed_material_rules_product_id(product_id):
+            product_errors.append(
+                _validation_error(
+                    "disallowed_product_id",
+                    f"Product ID {product_id} is not allowed in Material Rules.",
+                    f"rules.{field}",
+                )
+            )
+        cost_price = _to_float(product.get("cost_price"))
+        markup_percentage = _to_float(product.get("markup_percentage"))
+        if cost_price is None or markup_percentage is None:
+            product_errors.append(
+                _validation_error(
+                    "missing_product_pricing",
+                    f"Product ID {product_id} is missing cost_price and/or markup_percentage.",
+                    f"rules.{field}",
+                )
+            )
+    if product_errors:
+        raise MaterialRulesValidationError(product_errors)
 
     payload_to_save = {
         "id": 1,

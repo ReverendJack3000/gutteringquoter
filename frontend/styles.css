@@ -2736,10 +2736,26 @@ body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-card {
 body[data-viewport-mode="mobile"] .quick-quoter-entry {
   display: flex;
 }
+/* 62.16: Same vertical padding as camera section; blue button (non–high-contrast) below */
 body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-card {
   max-width: 92%;
   min-height: 3.75rem;
-  padding: 0.75rem 1.25rem;
+  padding: 1.5rem 1.25rem;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-card {
+  background: #007aff;
+  border-color: transparent;
+  color: #fff;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .quick-quoter-entry-icon {
+  color: #fff;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-title,
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-steps {
+  color: #fff;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) .quick-quoter-entry .placeholder-card:focus-visible {
+  outline-color: #fff;
 }
 body[data-viewport-mode="mobile"] .canvas-placeholder .placeholder-icon,
 body[data-viewport-mode="mobile"] .quick-quoter-entry .placeholder-icon {
@@ -3959,6 +3975,12 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   color: #111827;
 }
 
+.material-rules-subsection-copy {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .material-rules-table-wrap {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
@@ -3969,7 +3991,15 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 .material-rules-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1040px;
+  min-width: 920px;
+}
+
+.material-rules-table--repair-types {
+  min-width: 700px;
+}
+
+.material-rules-table--templates {
+  min-width: 980px;
 }
 
 .material-rules-table th,
@@ -4030,9 +4060,8 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   background: #fee2e2;
 }
 
-.material-rules-row-id {
-  color: #64748b;
-  font-size: 12px;
+.material-rules-template-actions-cell {
+  min-width: 90px;
 }
 
 .material-rules-form-grid {

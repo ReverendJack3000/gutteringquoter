@@ -174,16 +174,19 @@ class TestMaterialRulesApi(unittest.TestCase):
         return FakeSupabase(
             {
                 "products": [
-                    {"id": "SCR-SS"},
-                    {"id": "BRK-SC-MAR"},
-                    {"id": "BRK-CL-MAR"},
-                    {"id": "SCL-65"},
-                    {"id": "SCL-80"},
-                    {"id": "ACL-65"},
-                    {"id": "ACL-80"},
-                    {"id": "GL-MAR"},
-                    {"id": "GUT-SC-MAR-3M"},
-                    {"id": "DP-65-3M"},
+                    {"id": "SCR-SS", "category": "material", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "BRK-SC-MAR", "category": "fixing", "cost_price": 2.0, "markup_percentage": 100.0},
+                    {"id": "BRK-CL-MAR", "category": "fixing", "cost_price": 2.0, "markup_percentage": 100.0},
+                    {"id": "SCL-65", "category": "fixing", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "SCL-80", "category": "fixing", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "ACL-65", "category": "fixing", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "ACL-80", "category": "fixing", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "GL-MAR", "category": "consumable", "cost_price": 1.0, "markup_percentage": 100.0},
+                    {"id": "GUT-SC-MAR-3M", "category": "channel", "cost_price": 2.0, "markup_percentage": 100.0},
+                    {"id": "DP-65-3M", "category": "pipe", "cost_price": 2.0, "markup_percentage": 100.0},
+                    {"id": "REP-LAB", "category": "labour", "cost_price": 100.0, "markup_percentage": 0.0},
+                    {"id": "gutter", "category": "channel", "cost_price": 2.0, "markup_percentage": 100.0},
+                    {"id": "BAD-NOPRICE", "category": "material", "cost_price": None, "markup_percentage": None},
                 ],
                 "quick_quoter_repair_types": [
                     {
@@ -283,6 +286,50 @@ class TestMaterialRulesApi(unittest.TestCase):
             self.assertEqual(bad_templates_resp.status_code, 400, bad_templates_resp.text)
             self.assertIn("unknown_product_id", self._validation_codes(bad_templates_resp.json()))
 
+            disallowed_templates_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/templates",
+                json={
+                    "templates": [
+                        {
+                            "id": "22222222-2222-2222-2222-222222222223",
+                            "repair_type_id": "joiner_replacement",
+                            "product_id": "REP-LAB",
+                            "qty_per_unit": 1,
+                            "condition_profile": None,
+                            "condition_size_mm": None,
+                            "length_mode": "none",
+                            "fixed_length_mm": None,
+                            "active": True,
+                            "sort_order": 10,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(disallowed_templates_resp.status_code, 400, disallowed_templates_resp.text)
+            self.assertIn("disallowed_product_id", self._validation_codes(disallowed_templates_resp.json()))
+
+            missing_pricing_templates_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/templates",
+                json={
+                    "templates": [
+                        {
+                            "id": "22222222-2222-2222-2222-222222222224",
+                            "repair_type_id": "joiner_replacement",
+                            "product_id": "BAD-NOPRICE",
+                            "qty_per_unit": 1,
+                            "condition_profile": None,
+                            "condition_size_mm": None,
+                            "length_mode": "none",
+                            "fixed_length_mm": None,
+                            "active": True,
+                            "sort_order": 10,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(missing_pricing_templates_resp.status_code, 400, missing_pricing_templates_resp.text)
+            self.assertIn("missing_product_pricing", self._validation_codes(missing_pricing_templates_resp.json()))
+
             bad_fixed_length_resp = self.client.put(
                 "/api/admin/material-rules/quick-quoter/templates",
                 json={
@@ -328,6 +375,109 @@ class TestMaterialRulesApi(unittest.TestCase):
             )
             self.assertEqual(bad_measured_resp.status_code, 400, bad_measured_resp.text)
             self.assertIn("invalid_clip_selection_mode", self._validation_codes(bad_measured_resp.json()))
+
+            disallowed_measured_resp = self.client.put(
+                "/api/admin/material-rules/measured",
+                json={
+                    "rules": {
+                        "bracket_spacing_mm": 400,
+                        "clip_spacing_mm": 1200,
+                        "screws_per_bracket": 3,
+                        "screws_per_dropper": 4,
+                        "screws_per_saddle_clip": 2,
+                        "screws_per_adjustable_clip": 2,
+                        "screw_product_id": "REP-LAB",
+                        "bracket_product_id_sc": "BRK-SC-MAR",
+                        "bracket_product_id_cl": "BRK-CL-MAR",
+                        "saddle_clip_product_id_65": "SCL-65",
+                        "saddle_clip_product_id_80": "SCL-80",
+                        "adjustable_clip_product_id_65": "ACL-65",
+                        "adjustable_clip_product_id_80": "ACL-80",
+                        "clip_selection_mode": "auto_by_acl_presence",
+                    }
+                },
+            )
+            self.assertEqual(disallowed_measured_resp.status_code, 400, disallowed_measured_resp.text)
+            self.assertIn("disallowed_product_id", self._validation_codes(disallowed_measured_resp.json()))
+
+            missing_pricing_measured_resp = self.client.put(
+                "/api/admin/material-rules/measured",
+                json={
+                    "rules": {
+                        "bracket_spacing_mm": 400,
+                        "clip_spacing_mm": 1200,
+                        "screws_per_bracket": 3,
+                        "screws_per_dropper": 4,
+                        "screws_per_saddle_clip": 2,
+                        "screws_per_adjustable_clip": 2,
+                        "screw_product_id": "BAD-NOPRICE",
+                        "bracket_product_id_sc": "BRK-SC-MAR",
+                        "bracket_product_id_cl": "BRK-CL-MAR",
+                        "saddle_clip_product_id_65": "SCL-65",
+                        "saddle_clip_product_id_80": "SCL-80",
+                        "adjustable_clip_product_id_65": "ACL-65",
+                        "adjustable_clip_product_id_80": "ACL-80",
+                        "clip_selection_mode": "auto_by_acl_presence",
+                    }
+                },
+            )
+            self.assertEqual(missing_pricing_measured_resp.status_code, 400, missing_pricing_measured_resp.text)
+            self.assertIn("missing_product_pricing", self._validation_codes(missing_pricing_measured_resp.json()))
+
+    def test_repair_type_id_set_is_locked(self):
+        self._set_role("admin", "00000000-0000-0000-0000-000000000099")
+        supabase = self._build_fake_supabase()
+
+        with patch.object(backend_main, "get_supabase", return_value=supabase):
+            rename_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/repair-types",
+                json={
+                    "repair_types": [
+                        {
+                            "id": "joiner_replacement_renamed",
+                            "label": "Joiner Replacement",
+                            "active": True,
+                            "sort_order": 10,
+                            "requires_profile": True,
+                            "requires_size_mm": False,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(rename_resp.status_code, 400, rename_resp.text)
+            self.assertIn("repair_type_id_set_locked", self._validation_codes(rename_resp.json()))
+
+            remove_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/repair-types",
+                json={"repair_types": []},
+            )
+            self.assertEqual(remove_resp.status_code, 400, remove_resp.text)
+
+            add_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/repair-types",
+                json={
+                    "repair_types": [
+                        {
+                            "id": "joiner_replacement",
+                            "label": "Joiner Replacement",
+                            "active": True,
+                            "sort_order": 10,
+                            "requires_profile": True,
+                            "requires_size_mm": False,
+                        },
+                        {
+                            "id": "new_type",
+                            "label": "New Type",
+                            "active": True,
+                            "sort_order": 20,
+                            "requires_profile": False,
+                            "requires_size_mm": False,
+                        },
+                    ]
+                },
+            )
+            self.assertEqual(add_resp.status_code, 400, add_resp.text)
+            self.assertIn("repair_type_id_set_locked", self._validation_codes(add_resp.json()))
 
     def test_successful_writes_set_updated_by_and_updated_at(self):
         actor_user_id = "00000000-0000-0000-0000-0000000000aa"

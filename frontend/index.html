@@ -687,19 +687,17 @@
             <div class="material-rules-subsection">
               <div class="material-rules-subsection-head">
                 <h3>Repair Types</h3>
-                <button type="button" id="btnMaterialRulesAddRepairType" class="btn">Add Repair Type</button>
               </div>
+              <p class="material-rules-subsection-copy">Repair Type IDs are locked system keys and cannot be added, removed, or renamed here.</p>
               <div class="material-rules-table-wrap">
-                <table class="material-rules-table" aria-label="Quick Quoter repair types table">
+                <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
                   <thead>
                     <tr>
-                      <th scope="col">ID</th>
                       <th scope="col">Label</th>
                       <th scope="col">Sort</th>
                       <th scope="col">Needs Profile</th>
                       <th scope="col">Needs Size</th>
                       <th scope="col">Active</th>
-                      <th scope="col">Action</th>
                     </tr>
                   </thead>
                   <tbody id="materialRulesRepairTypesBody"></tbody>
@@ -713,7 +711,7 @@
                 <button type="button" id="btnMaterialRulesAddTemplate" class="btn">Add Template</button>
               </div>
               <div class="material-rules-table-wrap">
-                <table class="material-rules-table" aria-label="Quick Quoter templates table">
+                <table class="material-rules-table material-rules-table--templates" aria-label="Quick Quoter templates table">
                   <thead>
                     <tr>
                       <th scope="col">Repair Type ID</th>
@@ -761,25 +759,25 @@
                 <input type="number" id="materialRulesScrewsPerAdjustableClip" min="0" step="1" inputmode="numeric" />
               </label>
               <label>Screw product ID
-                <input type="text" id="materialRulesScrewProductId" />
+                <select id="materialRulesScrewProductId" aria-label="Screw product ID"></select>
               </label>
               <label>Bracket product (SC)
-                <input type="text" id="materialRulesBracketProductIdSc" />
+                <select id="materialRulesBracketProductIdSc" aria-label="Bracket product SC"></select>
               </label>
               <label>Bracket product (CL)
-                <input type="text" id="materialRulesBracketProductIdCl" />
+                <select id="materialRulesBracketProductIdCl" aria-label="Bracket product CL"></select>
               </label>
               <label>Saddle clip product (65)
-                <input type="text" id="materialRulesSaddleClipProductId65" />
+                <select id="materialRulesSaddleClipProductId65" aria-label="Saddle clip product 65"></select>
               </label>
               <label>Saddle clip product (80)
-                <input type="text" id="materialRulesSaddleClipProductId80" />
+                <select id="materialRulesSaddleClipProductId80" aria-label="Saddle clip product 80"></select>
               </label>
               <label>Adjustable clip product (65)
-                <input type="text" id="materialRulesAdjustableClipProductId65" />
+                <select id="materialRulesAdjustableClipProductId65" aria-label="Adjustable clip product 65"></select>
               </label>
               <label>Adjustable clip product (80)
-                <input type="text" id="materialRulesAdjustableClipProductId80" />
+                <select id="materialRulesAdjustableClipProductId80" aria-label="Adjustable clip product 80"></select>
               </label>
               <label>Clip selection mode
                 <select id="materialRulesClipSelectionMode" aria-label="Clip selection mode">
@@ -790,8 +788,6 @@
               </label>
             </div>
           </section>
-          <datalist id="materialRulesRepairTypeIdOptions"></datalist>
-          <datalist id="materialRulesProductIdOptions"></datalist>
         </main>
       </div>
     </div>
