@@ -83,7 +83,7 @@
 
 - [x] **36.9** User can add a product (SVG + details) when logged in; the SVG is stored in `product-diagrams`, the row in `public.products`, and the Product Library grid shows it from Supabase. Signing out and back in or opening the app on another device shows the same products.
 - [x] **36.10** Handle “not logged in” in the Add Product flow: disable or hide “Create Product” and show “Sign in to add products,” or redirect to the login view and return to the modal after login.
-- [ ] **36.11** Optional: migration path for existing `localProducts` (e.g. one-time “Upload my local products to Supabase” or leave localStorage as legacy and only show Supabase products in the grid).
+- [x] **36.11** Optional: migration path for existing `localProducts` (e.g. one-time “Upload my local products to Supabase” or leave localStorage as legacy and only show Supabase products in the grid).
 
 **Admin role-permissions management follow-up (desktop-only):**
 
@@ -163,9 +163,9 @@
 
 *Context: Add a second dropdown in the Marley panel to filter products by downpipe/clip size (65 mm or 80 mm). Remove legacy placeholder or original elements from the UI now that real diagram assets are in use.*
 
-- [ ] **41.1** Add a second dropdown filter in the Marley panel with 65 mm or 80 mm filter options (alongside the existing profile filter); wire filtering so the product list shows only products matching the selected size where applicable.
+- [x] **41.1** Add a second dropdown filter in the Marley panel with 65 mm or 80 mm filter options (alongside the existing profile filter); wire filtering so the product list shows only products matching the selected size where applicable.
 - [x] **41.2** Remove the placeholder/original elements from the UI; they are no longer needed now that real Marley diagram assets are in place.
-- [ ] **41.3** Secondary 65 mm / 80 mm dropdown: include any relevant part (e.g. downpipes, clips, joiners). Dropdown should be blank by default until a matching part is uploaded; once a matching part exists, the thumbnail should automatically reflect 65 mm or 80 mm (e.g. show the correct size variant in the panel).
+- [x] **41.3** Secondary 65 mm / 80 mm dropdown: include any relevant part (e.g. downpipes, clips, joiners). Dropdown should be blank by default until a matching part is uploaded; once a matching part exists, the thumbnail should automatically reflect 65 mm or 80 mm (e.g. show the correct size variant in the panel).
 
 ---
 
@@ -209,8 +209,8 @@
 
 *Context: Further refine the canvas page UI by moving the blueprint transparency control into the center pill toolbar, and making the top-left project name editable so it drives the save name (with today’s date appended when saving).*
 
-- [ ] **44.1** Move the transparency icon (`#blueprintTransparencyBtn`) into the pill toolbar at the top (center). Currently it is positioned outside the blueprint top-left; relocate it as a pill button (same style as upload, zoom, colour wheel) and keep the existing transparency popover behaviour (visibility when blueprint exists and technical drawing off; slider and number input unchanged).
-- [ ] **44.2** Make the project name at the top left interactable: replace the read-only breadcrumb text with an editable control (e.g. inline editable span or input) that displays “Projects / [name]”. When the user saves the file, use the entered project name with today’s date appended (e.g. “Property HO3776 – 18 Feb 2026”) as the save name, and update the breadcrumb to that value after a successful save.
+- [x] **44.1** Move the transparency icon (`#blueprintTransparencyBtn`) into the pill toolbar at the top (center). Currently it is positioned outside the blueprint top-left; relocate it as a pill button (same style as upload, zoom, colour wheel) and keep the existing transparency popover behaviour (visibility when blueprint exists and technical drawing off; slider and number input unchanged).
+- [x] **44.2** Make the project name at the top left interactable: replace the read-only breadcrumb text with an editable control (e.g. inline editable span or input) that displays “Projects / [name]”. When the user saves the file, use the entered project name with today’s date appended (e.g. “Property HO3776 – 18 Feb 2026”) as the save name, and update the breadcrumb to that value after a successful save.
 
 ---
 
@@ -296,7 +296,7 @@
 
 **Pre-deploy: features to complete (blocking)**
 
-- [ ] **48.0.13** Section 35.7: After successful login, call `switchView('view-canvas')`; on Sign out, call `switchView('view-login')` – wire auth success/sign-out to view switching.
+- [x] **48.0.13** Section 35.7: After successful login, call `switchView('view-canvas')`; on Sign out, call `switchView('view-login')` – wire auth success/sign-out to view switching.
 - [ ] **48.0.14** Section 35.8: Verify no regressions when logged in – toolbar, panel, canvas, measurement deck, upload, export, quote, saved diagrams all work.
 - [x] **48.0.15** Section 22.15: Quote modal Print button – implement or verify Print flow works (or defer and hide button if out of scope).
 - [ ] **48.0.16** Ensure login/sign-up flow is reachable and functional (users can create accounts and sign in before using save/load).

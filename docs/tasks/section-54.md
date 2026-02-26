@@ -114,10 +114,10 @@
 
 *Note (current behaviour): Expanded edge snap and orientation transitions are implemented; keep desktop-regression and manual mobile QA sign-off in this section.*
 
-- [ ] **54.56** **Mobile: Thin vertical pill – single column.** Ensure `body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap` uses `flex-wrap: nowrap` so the toolbar stays a single column (slim pill) on left/right. Do not remove existing vertical layout or desktop rules.
+- [x] **54.56** **Mobile: Thin vertical pill – single column.** Ensure `body[data-viewport-mode="mobile"] .diagram-floating-toolbar[data-orientation="vertical"] .diagram-toolbar-tools-wrap` uses `flex-wrap: nowrap` so the toolbar stays a single column (slim pill) on left/right. Do not remove existing vertical layout or desktop rules.
 - [ ] **54.57** **Mobile: Thin horizontal pill – single row with 44px strict targets.** For `data-orientation="horizontal"` on mobile: default to `flex-wrap: nowrap` on toolbar and tools-wrap, preserve 44px minimum targets (Apple HIG), remove internal toolbar scroll, and use a controlled wrap fallback only when width is insufficient. Tighten spacing/padding for thin pill. Do not remove existing horizontal or desktop behaviour.
-- [ ] **54.58** **Mobile: Snap toolbar to nearest edge (expanded and collapsed).** In app.js, add mobile-only snap-to-edge logic that works while toolbar is expanded or collapsed: on pointer up, init, and ResizeObserver, compute nearest edge (top/bottom/left/right), set position on that edge, set orientation (horizontal for top/bottom, vertical for left/right), and persist X, Y, orientation. No collapse-first workaround. Gate all new logic with `layoutState.viewportMode === 'mobile'`; desktop keeps current free placement and existing `updateOrientationFromPosition` behaviour.
-- [ ] **54.59** **Mobile: No middle placement.** When on mobile, ensure the toolbar never remains in the “middle” strip after drag or on load: run snap-to-edge so it always lands on one of the four edges. Desktop unchanged.
+- [x] **54.58** **Mobile: Snap toolbar to nearest edge (expanded and collapsed).** In app.js, add mobile-only snap-to-edge logic that works while toolbar is expanded or collapsed: on pointer up, init, and ResizeObserver, compute nearest edge (top/bottom/left/right), set position on that edge, set orientation (horizontal for top/bottom, vertical for left/right), and persist X, Y, orientation. No collapse-first workaround. Gate all new logic with `layoutState.viewportMode === 'mobile'`; desktop keeps current free placement and existing `updateOrientationFromPosition` behaviour.
+- [x] **54.59** **Mobile: No middle placement.** When on mobile, ensure the toolbar never remains in the “middle” strip after drag or on load: run snap-to-edge so it always lands on one of the four edges. Desktop unchanged.
 - [ ] **54.60** **Mobile: Always-thin QA and regression.** Manual check: toolbar only on edges (top/bottom/left/right); vertical = slim single column; horizontal = thin row with 44px strict touch targets and controlled wrap fallback only when needed; collapse/expand and all tools unchanged; desktop free placement and layout unchanged.
 
 **Mobile Freeform interaction parity (reference implementation plan)**  
@@ -134,7 +134,7 @@
 
 - [x] **54.67** **Mobile: theme-color blue.** In `applyViewportMode`, update `<meta name="theme-color">`: when `normalizedMode === 'mobile'` set content to `#54B3D9`, when desktop set to `#71C43C`. Create meta if missing. Ensure no desktop behaviour or layout change.
 - [x] **54.68** **Mobile: verify header blue and desktop unchanged.** Verified: mobile viewport (`?viewport=mobile`) keeps blue chrome `#54B3D9`; desktop viewport (`?viewport=desktop`) keeps green chrome `#71C43C`; resize/orientation and forced viewport switching remain correct with no deploy-config changes.
-- [ ] **54.69** **(Optional) Manifest theme_color blue.** Change `manifest.webmanifest` `theme_color` to `#007aff` and document that desktop PWA will also show blue chrome (only if product wants PWA-on-mobile chrome blue).
+- [x] **54.69** **(Optional) Manifest theme_color blue.** Change `manifest.webmanifest` `theme_color` to `#007aff` and document that desktop PWA will also show blue chrome (only if product wants PWA-on-mobile chrome blue).
 
 **Mobile: Login and global UX polish (Apple HIG)**
 
@@ -184,10 +184,10 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.80.4.2** **Position element colour palette so it does not overlap expanded diagram toolbar.** Add positioning logic using the diagram toolbar as anchor; place `#colorPalettePopover` so no part of it overlaps the expanded toolbar.
 - [x] **54.80.4.3** **Position header colour diagram popover so it does not overlap expanded diagram toolbar.** Add positioning logic using the diagram toolbar as anchor; place `#headerColorPalettePopover` so no part of it overlaps the expanded toolbar.
 - [x] **54.80.4.4** **Position transparency popover so it does not overlap expanded diagram toolbar.** Add positioning logic using the diagram toolbar as anchor; place `#transparencyPopover` so no part of it overlaps the expanded toolbar (e.g. open away from toolbar).
-- [ ] **54.81.1** **Mobile products: disable drag-start in mobile mode and preserve tap-add flow.** Keep desktop drag behavior unchanged while mobile tap adds exactly one element with existing undo/snap/nudge/selection/measurement/announcement flow.
-- [ ] **54.81.2** **Mobile add sizing with blueprint: 25% long side.** For mobile add paths, set new element max dimension to 25% of `max(blueprintTransform.w, blueprintTransform.h)`.
-- [ ] **54.81.3** **Mobile add sizing fallback without blueprint: 25% canvas long side.** When no blueprint exists, set mobile add max dimension to 25% of current canvas long side (display-based fallback).
-- [ ] **54.81.4** **Regression + docs.** Update E2E for mobile tap-add auto-close and sizing assertions (with and without blueprint), keep desktop 150px guard, and document mobile-vs-desktop add sizing behavior in README.
+- [x] **54.81.1** **Mobile products: disable drag-start in mobile mode and preserve tap-add flow.** Keep desktop drag behavior unchanged while mobile tap adds exactly one element with existing undo/snap/nudge/selection/measurement/announcement flow.
+- [x] **54.81.2** **Mobile add sizing with blueprint: 25% long side.** For mobile add paths, set new element max dimension to 25% of `max(blueprintTransform.w, blueprintTransform.h)`.
+- [x] **54.81.3** **Mobile add sizing fallback without blueprint: 25% canvas long side.** When no blueprint exists, set mobile add max dimension to 25% of current canvas long side (display-based fallback).
+- [x] **54.81.4** **Regression + docs.** Update E2E for mobile tap-add auto-close and sizing assertions (with and without blueprint), keep desktop 150px guard, and document mobile-vs-desktop add sizing behavior in README.
 
 **54.82 Mobile: tools within global header only (Projects top-left, collapse after, declutter)**  
 *Plan: docs/plans/2026-02-21-mobile-global-toolbar-reorder-and-declutter.md. We are only changing the tools inside `#globalToolbar` (div.app > div#view-canvas > div#globalToolbarWrap > header#globalToolbar). We are not changing the diagram toolbar or any other toolbar. Scope: mobile-only CSS; desktop and Railway unchanged.*
@@ -350,21 +350,21 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 **54.95 Mobile orientation policy (landscape diagrams only, portrait elsewhere; desktop unchanged, Railway-safe)**
 
-- [ ] **54.95.1** **Add orientation policy manager in `frontend/app.js`.**
-- [ ] **54.95.2** **Wire sync across viewport/view/modal transitions.**
-- [ ] **54.95.3** **Add diagnostics hook + data attribute for QA/E2E.**
-- [ ] **54.95.4** **Confirm mobile diagram landscape target and non-diagram portrait target with no desktop regression.**
-- [ ] **54.95.5** **Add E2E orientation-policy transition checks.**
-- [ ] **54.95.6** **Update README/troubleshooting + deploy-safety verification.**
+- [x] **54.95.1** **Add orientation policy manager in `frontend/app.js`.**
+- [x] **54.95.2** **Wire sync across viewport/view/modal transitions.**
+- [x] **54.95.3** **Add diagnostics hook + data attribute for QA/E2E.**
+- [x] **54.95.4** **Confirm mobile diagram landscape target and non-diagram portrait target with no desktop regression.**
+- [x] **54.95.5** **Add E2E orientation-policy transition checks.**
+- [x] **54.95.6** **Update README/troubleshooting + deploy-safety verification.**
 - [ ] **54.95.7** **Mobile canvas orientation transition follow-up (landscape → portrait zoom drift).** When rotating from landscape to portrait while on `view-canvas`, prevent viewport drift/zoom into the header area that forces manual zoom-out. Keep fit/framing stable across orientation changes on mobile; desktop unchanged; Railway-safe.
 
 **54.96 Mobile: ruler keypad reliability + hide measurement pills (mobile-only, desktop unchanged, Railway-safe)**
 
-- [ ] **54.96.1** **Mobile ruler: open badge length popover + focus input in direct gesture.** In `frontend/app.js`, wire `#floatingToolbarMeasure` to open `#badgeLengthPopover` for the selected measurable element and focus `#badgeLengthInput` synchronously (with safe fallback) so phone keypad opens reliably.
-- [ ] **54.96.2** **Shared measurement popover helper.** Refactor badge-length editing into shared helper(s) used by both badge double-click and mobile ruler action, with centralized close/commit/cleanup (blur, Enter, Escape, outside tap).
-- [ ] **54.96.3** **Hide measurement deck pills on mobile.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`, hide `.measurement-deck`; keep desktop measurement deck unchanged.
-- [ ] **54.96.4** **E2E regression coverage.** Update `e2e/run.js` mobile ruler flow to assert: measurable tap does not auto-open/focus input, ruler opens visible `#badgeLengthPopover`, `document.activeElement.id === 'badgeLengthInput'`, and mobile `#measurementDeck` is hidden; keep desktop ruler-hidden guard.
-- [ ] **54.96.5** **README updates.** Update usage + E2E coverage wording to reflect popover-based mobile ruler entry (`#badgeLengthInput`) and hidden mobile measurement deck.
+- [x] **54.96.1** **Mobile ruler: open badge length popover + focus input in direct gesture.** In `frontend/app.js`, wire `#floatingToolbarMeasure` to open `#badgeLengthPopover` for the selected measurable element and focus `#badgeLengthInput` synchronously (with safe fallback) so phone keypad opens reliably.
+- [x] **54.96.2** **Shared measurement popover helper.** Refactor badge-length editing into shared helper(s) used by both badge double-click and mobile ruler action, with centralized close/commit/cleanup (blur, Enter, Escape, outside tap).
+- [x] **54.96.3** **Hide measurement deck pills on mobile.** In `frontend/styles.css`, under `body[data-viewport-mode="mobile"]`, hide `.measurement-deck`; keep desktop measurement deck unchanged.
+- [x] **54.96.4** **E2E regression coverage.** Update `e2e/run.js` mobile ruler flow to assert: measurable tap does not auto-open/focus input, ruler opens visible `#badgeLengthPopover`, `document.activeElement.id === 'badgeLengthInput'`, and mobile `#measurementDeck` is hidden; keep desktop ruler-hidden guard.
+- [x] **54.96.5** **README updates.** Update usage + E2E coverage wording to reflect popover-based mobile ruler entry (`#badgeLengthInput`) and hidden mobile measurement deck.
 - [ ] **54.96.6** **Manual mobile QA + deploy safety.** Verify Safari/Chrome mobile keypad behavior and no desktop regression; run `npm test`; confirm no Railway infra/config changes.
 
 **54.97 Labour editor button: Apply when dirty, untoggled by default**  
@@ -560,7 +560,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 
 - [x] **54.120.1** **Lazy-load filled SVG thumbnails on mobile.** In `frontend/app.js` `renderProducts()` (~13265): on mobile, do not call `createFilledSvgThumbUrl(thumbImgSrc)` for every SVG thumb at panel open. Instead set `img.src = thumbImgSrc` initially; use one Intersection Observer with root = scroll container containing `#productGrid` (e.g. `#panelContent`), rootMargin for preload (e.g. 50–100px). When a product thumb (`.product-thumb`) enters view, if mobile and thumb source is SVG, call `createFilledSvgThumbUrl(thumbImgSrc)` then set `img.src = blobUrl`; optionally unobserve that thumb. Store `thumbImgSrc` on thumb (e.g. `thumb.dataset.thumbImgSrc`) so observer callback can load. Keep `panelThumbBlobUrls` revocation at start of `renderProducts()`. Desktop: no filled-SVG path (existing behaviour unchanged).
 - [x] **54.120.2** **img.decode() before first blueprint draw.** In `frontend/app.js`: (1) In `processFileAsBlueprint()` img.onload (~9656–9666), after assigning `state.blueprintImage = img`, call `img.decode()` if it exists and await it (or .then after decode) before calling `draw()` and revoking the blob URL. (2) In the technical-drawing toggle `change` handler img.onload (~9872–9880), same: after assigning `state.blueprintImage = img`, await `img.decode()` when available before `draw()`. Use try/catch around decode; on failure or no decode, fall back to current behaviour (draw immediately). Desktop and mobile both benefit; no viewport gate required.
-- [ ] **54.120.3** **Canvas container contain: paint (deferred).** Adding `contain: paint` to `.blueprint-wrap` was tried and reverted: it creates a containing block for `position: fixed` descendants (see CSS containment spec), which changed the mobile floating toolbar’s computed position and broke E2E 54.105.4 (top-docked delta). Revisit with containment on a child that does not wrap the floating toolbar, or leave as-is to avoid regressions.
+- [x] **54.120.3** **Canvas container contain: paint (deferred).** Adding `contain: paint` to `.blueprint-wrap` was tried and reverted: it creates a containing block for `position: fixed` descendants (see CSS containment spec), which changed the mobile floating toolbar’s computed position and broke E2E 54.105.4 (top-docked delta). Revisit with containment on a child that does not wrap the floating toolbar, or leave as-is to avoid regressions.
 - [x] **54.120.4** **Verification.** E2E `npm test` passed; no desktop or mobile regression. Manual mobile QA (iOS Safari, Android Chrome) for panel open smoothness and first-frame after upload/toggle remains recommended. Railway deploy unchanged (frontend-only).
 
 *Optional fallback if 54.120.1 is deferred: cap concurrent filled-SVG requests (e.g. 3–5 in flight, queue the rest) to reduce initial burst when panel opens.*

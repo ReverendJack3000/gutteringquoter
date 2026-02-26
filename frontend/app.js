@@ -8938,8 +8938,16 @@ function initCanvas() {
       } else {
         setSelection([hit.element.id].concat(state.selectedIds.filter((id) => id !== hit.element.id)));
       }
-      const desktopBadgeHit = layoutState.viewportMode !== 'mobile' ? hitTestBadge(e.clientX, e.clientY) : null;
-      const clickedOwnBadge = !!desktopBadgeHit && desktopBadgeHit.id === hit.element.id;
+      let clickedOwnBadge = false;
+      if (layoutState.viewportMode !== 'mobile' && hit.element.sequenceId && state.selectedIds.length === 1) {
+        const display = clientToCanvasDisplay(e.clientX, e.clientY);
+        if (display) {
+          const badgePos = getElementDrawPosition(hit.element);
+          const badgeCx = state.offsetX + (badgePos.x + hit.element.width / 2) * state.scale;
+          const badgeCy = state.offsetY + (badgePos.y + hit.element.height / 2) * state.scale;
+          clickedOwnBadge = Math.hypot(display.x - badgeCx, display.y - badgeCy) <= (MEASUREMENT_BADGE_RADIUS + 2);
+        }
+      }
       if (layoutState.viewportMode !== 'mobile' && hit.element.sequenceId && state.selectedIds.length === 1 && !clickedOwnBadge) {
         scrollToMeasurementCardAndFocus(hit.element.id);
       }
@@ -9652,7 +9660,14 @@ function initCanvas() {
   });
 
   canvas.addEventListener('dblclick', (e) => {
-    const el = hitTestBadge(e.clientX, e.clientY);
+    let el = hitTestBadge(e.clientX, e.clientY);
+    if (!el && layoutState.viewportMode !== 'mobile') {
+      const canvasPos = clientToCanvas(e.clientX, e.clientY);
+      const topHit = getSelectionAt(canvasPos.x, canvasPos.y)?.top;
+      if (topHit?.type === 'element' && topHit.element?.sequenceId > 0) {
+        el = topHit.element;
+      }
+    }
     if (!el) return;
     e.preventDefault();
     e.stopPropagation();
@@ -13582,13 +13597,13 @@ function renderProducts(products) {
 
 /**
  * Hit-test: return the element whose measurement badge contains the given client point, or null.
- * Badge is drawn at element center in canvas buffer space with MEASUREMENT_BADGE_RADIUS.
+ * Badge is drawn in canvas display/logical space with MEASUREMENT_BADGE_RADIUS.
  */
 function hitTestBadge(clientX, clientY) {
-  const rect = getCanvasRect();
-  if (!rect || !rect.width || !rect.height) return null;
-  const bufX = (clientX - rect.left) * (state.canvasWidth / rect.width);
-  const bufY = (clientY - rect.top) * (state.canvasHeight / rect.height);
+  const display = clientToCanvasDisplay(clientX, clientY);
+  if (!display) return null;
+  const px = display.x;
+  const py = display.y;
   const radius = MEASUREMENT_BADGE_RADIUS;
   const withSequence = state.elements.filter((el) => el.sequenceId != null);
   for (let i = withSequence.length - 1; i >= 0; i--) {
@@ -13596,7 +13611,7 @@ function hitTestBadge(clientX, clientY) {
     const pos = getElementDrawPosition(el);
     const bcx = state.offsetX + (pos.x + el.width / 2) * state.scale;
     const bcy = state.offsetY + (pos.y + el.height / 2) * state.scale;
-    if (Math.hypot(bufX - bcx, bufY - bcy) <= radius) return el;
+    if (Math.hypot(px - bcx, py - bcy) <= radius) return el;
   }
   return null;
 }

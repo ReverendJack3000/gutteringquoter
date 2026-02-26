@@ -65,50 +65,35 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 | Section | Task | Description |
 |---------|------|-------------|
-| 7 | 7.10 | Revisit gutter rotation constraint (E2E Alt override, hysteresis; optional) |
-| 13 | 13.4, 13.5 | (Optional) Uploaded images uniform sizing; min/max size guards |
-| 15 | 15.5, 15.6 | (Optional) Live dimension/angle display during resize/rotate |
+| 15 | 15.5 | (Optional) Live dimension display during resize |
 | 16 | 16.10–16.14 | Desktop canvas transform/usability audit fixes (includes shared mobile-path guards for 16.10 and 16.11). |
-| 20 | 20.2 | E2E resize test passes or update if intentional |
-| 22 | 22.20 | (Optional) Pricing edit permissions by role |
-| 22 | 22.21 | Document ServiceM8 integration |
 | 22 | 22.22–22.24 | Quote manual testing, error handling tests, optional E2E |
-| 22 | 22.29 | ServiceM8 API response Success/Error wiring |
 | 24 | 24.4 | (Optional) product_template_id for CSV diagram mapping |
 | 26 | 26.2 | Manual guttering distance entry UI |
-| 33 | 33.4–33.10 | Signed-in server autosave recovery (prompt restore/discard, strict threshold delete, hidden rolling draft) + job-stamp save-path auth-header fix; desktop/mobile + Railway-safe validation. |
-| 36 | 36.11 | Product Library follow-up: optional localProducts migration only (desktop admin user-permissions management completed in 36.12–36.18; invite/remove in 36.19–36.21). |
-| 41 | 41.1, 41.3 | 65/80 mm filter dropdown in Marley panel |
-| 44 | 44.1, 44.2 | Transparency in pill; editable project name (superseded by 46?) |
+| 33 | 33.10 | Autosave recovery: QA matrix + Railway safety verification (33.4–33.9 implemented). |
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
-| **50** | **50.1–50.9** | **Quote modal: Labour as table row, independent from materials** |
-| **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
+| 50 | 50.9, 50.18 | Quote modal + REP-LAB: smoke-test and Railway deploy check (50.1–50.8, 50.10–50.17 implemented). |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
-| 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-| 54 | 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60). |
+| 54 | 54.52–54.53, 54.57, 54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56, 54.58, 54.59 done). |
 | 54 | 54.122.4 | Diagram toolbar drag-handle polish + top-center open reset (desktop + mobile): E2E assertions stabilized; manual QA + Railway safety sign-off pending. |
 | 54 | 54.126.5 | Desktop diagram toolbar header-occlusion fix follow-up: manual QA + Railway safety sign-off pending (load/expand no clipping under header; desktop primary, mobile safe-top guard unchanged). |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |
-| 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
-| 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
-| 54 | 54.93.8.1–54.93.8.4 | Mobile quote: stepper for section-header metres (Gutter/Downpipe length). Plan: docs/plans/2026-02-21-mobile-quote-section-header-metres-stepper.md. Context: app.js syncMobileQuoteLineSummaries 1366+, desktop cleanup 1376–1411, rebuild 3719–3735 / 3776–3792, profileLengthOverride 3654–3670, getElementsFromQuoteTable header read 3002–3022; styles.css .quote-mobile-qty-stepper 5749–5784. |
 | 54 | 54.98.6 | Mobile quote non-labour line editor popup: real-device manual QA/sign-off pending (iOS Safari + Android Chrome). Implementation + E2E regression coverage complete; desktop unchanged; Railway-safe. |
 | 54 | 54.100.5 | Mobile quote material footer Apply action parity: manual mobile QA + Railway safety verification pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). |
-| 54 | 54.95.1–54.95.7 | Mobile-only orientation policy (landscape diagram canvas, portrait non-diagram UI, graceful fallback, E2E/docs) + follow-up to prevent landscape→portrait canvas zoom drift into header. |
-| 54 | 54.102.1–54.102.4 | (Mobile-only) Prevent double-tap zoom on canvas view; Fit in global toolbar; double-tap empty canvas → Fit; QA. Plan: docs/plans/2026-02-22-mobile-double-tap-zoom-and-graceful-zoom-out.md. |
-| 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
+| 54 | 54.95.7 | Mobile orientation policy follow-up: landscape→portrait canvas zoom drift into header (54.95.1–54.95.6 implemented). |
+| 54 | 54.102.4 | (Mobile-only) Double-tap/zoom-out QA: manual mobile sign-off (54.102.1–54.102.3 implemented). |
+| 54 | 54.96.6 | (Mobile-only) Ruler/keypad + measurement deck: manual mobile QA + deploy safety (54.96.1–54.96.5 implemented). |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
 | 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
 | 54 | 54.119.3 | Mobile upload/toolbar perf hardening follow-up: manual mobile QA + Railway safety sign-off pending (upload same-file relaunch, drag-handle a11y behavior, draw/observer smoothness). |
-| 54 | 54.120.3 | Mobile speed: contain: paint on .blueprint-wrap deferred (would break mobile floating toolbar top-dock; see section-54.md). 54.120.1, 54.120.2, 54.120.4 done. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
-| 63 | 63.9, 63.16 | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). |
+| 63 | 63.16 | Material Rules: manual desktop QA + Railway production sign-off (63.9 baseline locked; migration applied via 63.16.0). |
 ---
 
 ## Locked decisions

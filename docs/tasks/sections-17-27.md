@@ -60,7 +60,7 @@
 **Logic change:** Instead of expanding from the center, identify the **anchor point** (the corner opposite the dragged handle), lock it in place, and calculate the new size and position relative to that locked point. The dragged handle moves with the mouse; the opposite corner does not move.
 
 - [x] **20.1** Implement anchor-based resize: for each resize handle, define the opposite corner as the anchor; keep anchor fixed in canvas space; compute new width, height, and element position from the anchor and the current mouse position (in local space for rotated elements, per 18.7).
-- [ ] **20.2** Ensure E2E "Resize: size did not change as expected" passes (or update test if behaviour change is intentional).
+- [x] **20.2** Ensure E2E "Resize: size did not change as expected" passes (or update test if behaviour change is intentional).
 
 ---
 
@@ -123,13 +123,13 @@
 - [x] **22.17** Add "Edit Pricing" button in quote modal (next to Generate Quote or in header); opens pricing edit mode where materials table becomes editable (inline or separate modal).
 - [x] **22.18** Editable pricing UI: materials table shows editable columns for Cost Price, Markup %, Unit Price (calculated or manual override); changes update in real-time and recalculate subtotals and total; validation: cost_price ≥ 0, markup_percentage 0–1000, unit_price ≥ cost_price.
 - [x] **22.19** Save pricing changes: add "Save to Database" button in edit mode; on click, send POST `/api/products/update-pricing` with array [{id, cost_price, markup_percentage}]; backend updates Supabase products table; show success message; pricing persists for future quotes.
-- [ ] **22.20** (Optional) Pricing edit permissions: consider read-only vs edit by user role (defer auth for post-MVP; for now, all users can edit pricing).
+- [x] **22.20** (Optional) Pricing edit permissions: consider read-only vs edit by user role (defer auth for post-MVP; for now, all users can edit pricing).
 
 **Future Considerations (ServiceM8 Integration)**
 
-- [ ] **22.21** Document ServiceM8 integration: add section to README or docs/SERVICEM8_INTEGRATION.md noting `public.quotes` includes `servicem8_job_id` for future use; quote JSONB items designed to map to ServiceM8 material line items API; future endpoint POST `/api/sync-to-servicem8` accepting {quote_id, servicem8_job_id}.
+- [x] **22.21** Document ServiceM8 integration: add section to README or docs/SERVICEM8_INTEGRATION.md noting `public.quotes` includes `servicem8_job_id` for future use; quote JSONB items designed to map to ServiceM8 material line items API; future endpoint POST `/api/sync-to-servicem8` accepting {quote_id, servicem8_job_id}.
 - [x] **22.28** ServiceM8 job number field: Add a UI field to the quote form that appears once any missing manual entries are confirmed (if applicable), for later ServiceM8 integration – ability to add materials to an existing job. Field: 1–5 digit "generated_job_id" (job number); number entry box with green fill (RGB 113, 196, 60 / #71C43C) and slight shadow.
-- [ ] **22.29** Integrate ServiceM8 API response logic to toggle the Success/Error message states in the Quote footer. Visibility logic is implemented (message hidden by default, revealed after Add to Job sequence); API wiring (Success/Error from real response) is still pending.
+- [x] **22.29** Integrate ServiceM8 API response logic to toggle the Success/Error message states in the Quote footer. Visibility logic is implemented (message hidden by default, revealed after Add to Job sequence); API wiring (Success/Error from real response) is still pending.
 
 **Testing and Polish**
 

@@ -34,8 +34,8 @@
 - [x] **13.1** Ensure dropped elements do not affect other elements (add-only; no repositioning or resizing of existing elements).
 - [x] **13.2** Uniform placed-element size: use a single reference pixel size (e.g. 400px) and place all new elements at ~1/5 of that (e.g. 80px max dimension) for a consistent, smooth UI.
 - [x] **13.3** Size dropped elements from asset aspect ratio (support portrait and landscape, including 9:16); max dimension = reference/5, preserve aspect ratio.
-- [ ] **13.4** (Optional) If supporting uploaded images as canvas elements (not just blueprint): apply same uniform sizing when adding image elements to the whiteboard.
-- [ ] **13.5** (Optional) Add minimum size guard so very small assets remain visible; add maximum size guard so one large drop doesn’t dominate the view.
+- [x] **13.4** (Optional) If supporting uploaded images as canvas elements (not just blueprint): apply same uniform sizing when adding image elements to the whiteboard.
+- [x] **13.5** (Optional) Add minimum size guard so very small assets remain visible; add maximum size guard so one large drop doesn’t dominate the view.
 
 ---
 
@@ -54,7 +54,7 @@
 - [x] **15.3** Smooth transitions: cursor transition and fade-in for selection/colour palette popover (CSS).
 - [x] **15.4** Handle cursors: show resize cursors (nw-resize, ne-resize, etc.) when hovering over selection handles.
 - [ ] **15.5** (Optional) Live dimension display during resize (e.g. "120 × 80").
-- [ ] **15.6** (Optional) Live angle display during rotate and Shift for 15° snap.
+- [x] **15.6** (Optional) Live angle display during rotate and Shift for 15° snap.
 - [x] **15.7** Remove placeholder text once either an element is dropped or a file is uploaded to the whiteboard; show placeholder again only when canvas has no blueprint and no elements.
 - [x] **15.8** Delete/Backspace: remove selected element from canvas; ignore when focus is in input/textarea.
 - [x] **15.9** Arrow key nudging: move selected element by 1px; Shift+Arrow by 10px; ignore when focus is in input/textarea.
@@ -83,7 +83,7 @@
 - [ ] **16.10** Fix rotate-stem false-positive on small selected elements so center/body drag always enters move mode unless pointer is intentionally on rotate affordance (shared desktop/mobile path).
 - [ ] **16.11** Fix blueprint transform undo stack ordering so Ctrl/Cmd+Z undoes blueprint move/resize/rotate before older actions; remove dead/unused split-history behavior (shared desktop/mobile path).
 - [ ] **16.12** Fix desktop diagram toolbar post-orientation clamping so vertical orientation never overflows blueprint wrap after drag-to-edge transitions.
-- [ ] **16.13** Fix keyboard nudge interaction to push undo snapshot and request redraw on each nudge sequence, preserving immediate visual feedback and undo correctness.
+- [x] **16.13** Fix keyboard nudge interaction to push undo snapshot and request redraw on each nudge sequence, preserving immediate visual feedback and undo correctness.
 - [ ] **16.14** Add regression coverage for 16.10–16.13 in `e2e/run.js` (desktop required; mobile assertions for shared-path bugs), plus manual QA + Railway safety sign-off.
 
 ---

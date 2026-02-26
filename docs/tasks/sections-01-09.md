@@ -72,7 +72,7 @@
 - [x] **7.7** Ensure handles and bounding box use same transform (rotation) as element for correct positioning
 - [x] **7.8** Prevent canvas drag/scroll from triggering element drag when intended (e.g. only move when drag starts on element)
 - [x] **7.9** Gutter rotation constraint: gutter elements cannot be rotated into the band 60°–80° (config in ROTATION_CONSTRAINTS.gutter); clamp to nearest boundary with hysteresis; Alt key overrides; visual feedback when at limit (cursor not-allowed, tooltip "Max angle")
-- [ ] **7.10** Revisit gutter rotation constraint: consider E2E for Alt override, hysteresis tuning, or other UX polish; feature implemented in app.js + Puppeteer tests (programmatic clamp and drag-forbidden-band).
+- [x] **7.10** Revisit gutter rotation constraint: consider E2E for Alt override, hysteresis tuning, or other UX polish; feature implemented in app.js + Puppeteer tests (programmatic clamp and drag-forbidden-band).
 - [x] **7.11** Element transform: add horizontal and vertical flip (flip controls) while preserving the element’s rotation and size.
 
 ---
