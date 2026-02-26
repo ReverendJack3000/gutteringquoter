@@ -1777,11 +1777,47 @@ async function run() {
     const diagramToolbar = await page.$('#diagramFloatingToolbar');
     const collapseBtn = await page.$('#diagramToolbarCollapseBtn');
     if (!diagramToolbar || !collapseBtn) throw new Error('Diagram floating toolbar or collapse button missing');
+    const readDesktopToolbarOpenState = () => page.evaluate(() => {
+      const toolbar = document.getElementById('diagramFloatingToolbar');
+      const wrap = toolbar ? toolbar.closest('.blueprint-wrap') : null;
+      const handle = document.getElementById('diagramToolbarDragHandle');
+      if (!toolbar || !wrap || !handle) return null;
+      const tr = toolbar.getBoundingClientRect();
+      const wr = wrap.getBoundingClientRect();
+      const hr = handle.getBoundingClientRect();
+      const hs = window.getComputedStyle(handle);
+      return {
+        collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
+        orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
+        centerDelta: Math.abs((tr.left + tr.width / 2) - (wr.left + wr.width / 2)),
+        topDelta: Math.abs((tr.top - wr.top) - 12),
+        handleVisible: hs.display !== 'none'
+          && hs.visibility !== 'hidden'
+          && parseFloat(hs.opacity || '1') > 0.05
+          && hr.width >= 20
+          && hr.height >= 20,
+      };
+    });
     const wasExpanded = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
     if (!wasExpanded) {
       await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
       await delay(400);
     }
+    const desktopOpenState = await readDesktopToolbarOpenState();
+    if (!desktopOpenState) throw new Error('Desktop top-center open regression: toolbar state unavailable');
+    if (desktopOpenState.collapsed) throw new Error('Desktop top-center open regression: toolbar should be expanded on open');
+    if (desktopOpenState.orientation !== 'horizontal') {
+      throw new Error(`Desktop top-center open regression: expected horizontal orientation on open, got ${desktopOpenState.orientation}`);
+    }
+    if (desktopOpenState.centerDelta > 24 || desktopOpenState.topDelta > 24) {
+      throw new Error(
+        `Desktop top-center open regression: expected top-center (centerDelta=${desktopOpenState.centerDelta.toFixed(2)}, topDelta=${desktopOpenState.topDelta.toFixed(2)})`
+      );
+    }
+    if (!desktopOpenState.handleVisible) {
+      throw new Error('Desktop drag-handle polish regression: expanded handle should be visible and sizeable');
+    }
+    console.log('  ✓ Desktop diagram toolbar opens top-centered with visible drag handle');
     await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
     await delay(400);
     const isCollapsed = await page.evaluate(() => document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
@@ -1790,6 +1826,19 @@ async function run() {
     await delay(400);
     const isExpandedAgain = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
     if (!isExpandedAgain) throw new Error('Diagram toolbar should expand after clicking expand button');
+    const desktopReopenState = await readDesktopToolbarOpenState();
+    if (!desktopReopenState) throw new Error('Desktop reopen top-center regression: toolbar state unavailable');
+    if (desktopReopenState.orientation !== 'horizontal') {
+      throw new Error(`Desktop reopen top-center regression: expected horizontal orientation after expand, got ${desktopReopenState.orientation}`);
+    }
+    if (desktopReopenState.centerDelta > 24 || desktopReopenState.topDelta > 24) {
+      throw new Error(
+        `Desktop reopen top-center regression: expected top-center after expand (centerDelta=${desktopReopenState.centerDelta.toFixed(2)}, topDelta=${desktopReopenState.topDelta.toFixed(2)})`
+      );
+    }
+    if (!desktopReopenState.handleVisible) {
+      throw new Error('Desktop drag-handle polish regression: handle should remain visible after expand');
+    }
     console.log('  ✓ Diagram toolbar collapse/expand (desktop): −/+ swap works');
 
     const desktopToolbarDragProbe = await page.evaluate(() => {
@@ -4471,6 +4520,58 @@ async function run() {
         throw new Error(`Mobile viewport regression: landscape horizontal overflow ${landscapeCheck.overflow}px`);
       }
 
+      const readMobileToolbarOpenState = () => mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('diagramFloatingToolbar');
+        const wrap = document.getElementById('blueprintWrap');
+        const handle = document.getElementById('diagramToolbarDragHandle');
+        if (!toolbar || !wrap || !handle) return null;
+        const tr = toolbar.getBoundingClientRect();
+        const wr = wrap.getBoundingClientRect();
+        const hr = handle.getBoundingClientRect();
+        const hs = window.getComputedStyle(handle);
+        const pad = 12;
+        const globalToolbarWrap = document.getElementById('globalToolbarWrap');
+        const headerBottom = globalToolbarWrap ? globalToolbarWrap.getBoundingClientRect().bottom : wr.top;
+        const topPad = headerBottom > wr.top ? Math.max(pad, Math.round((headerBottom - wr.top) + pad)) : pad;
+        const maxTop = wr.height - tr.height - pad;
+        const topAnchor = Math.min(topPad, maxTop);
+        return {
+          collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
+          orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
+          centerDelta: Math.abs((tr.left + tr.width / 2) - (wr.left + wr.width / 2)),
+          topSafeDelta: Math.abs((tr.top - wr.top) - topAnchor),
+          handleVisible: hs.display !== 'none'
+            && hs.visibility !== 'hidden'
+            && parseFloat(hs.opacity || '1') > 0.05
+          && hr.width >= 30
+          && hr.height >= 30,
+        };
+      });
+      const mobileWasCollapsedBeforeOpenCheck = await mobilePage.evaluate(() => {
+        const toolbar = document.getElementById('diagramFloatingToolbar');
+        return !!toolbar && toolbar.classList.contains('diagram-floating-toolbar--collapsed');
+      });
+      if (mobileWasCollapsedBeforeOpenCheck) {
+        await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn');
+        await delay(420);
+      }
+      const mobileOpenState = await readMobileToolbarOpenState();
+      if (!mobileOpenState) throw new Error('Mobile top-center open regression: toolbar state unavailable');
+      if (mobileOpenState.collapsed) throw new Error('Mobile top-center open regression: toolbar should be expanded on open');
+      if (mobileOpenState.orientation !== 'horizontal') {
+        throw new Error(`Mobile top-center open regression: expected horizontal orientation on open, got ${mobileOpenState.orientation}`);
+      }
+      if (mobileOpenState.centerDelta > 24 || mobileOpenState.topSafeDelta > 24) {
+        throw new Error(
+          `Mobile top-center open regression: expected top-center safe-top open ` +
+          `(centerDelta=${mobileOpenState.centerDelta.toFixed(2)}, topSafeDelta=${mobileOpenState.topSafeDelta.toFixed(2)})`
+        );
+      }
+      if (!mobileOpenState.handleVisible) {
+        throw new Error('Mobile drag-handle polish regression: expanded handle should be visible and sizeable');
+      }
+      console.log('  ✓ Mobile diagram toolbar opens top-centered at safe top with visible drag handle');
+
       // Diagram toolbar collapse/expand (mobile): − and + swap in same position
       const mobileToolbar = await mobilePage.$('#diagramFloatingToolbar');
       const mobileCollapseBtn = await mobilePage.$('#diagramToolbarCollapseBtn');
@@ -4490,6 +4591,20 @@ async function run() {
       await delay(400);
       const mobileExpanded = await mobilePage.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
       if (!mobileExpanded) throw new Error('Mobile: diagram toolbar should expand after tap on + with slight drift below drag threshold');
+      const mobileReopenState = await readMobileToolbarOpenState();
+      if (!mobileReopenState) throw new Error('Mobile reopen top-center regression: toolbar state unavailable');
+      if (mobileReopenState.orientation !== 'horizontal') {
+        throw new Error(`Mobile reopen top-center regression: expected horizontal orientation after expand, got ${mobileReopenState.orientation}`);
+      }
+      if (mobileReopenState.centerDelta > 24 || mobileReopenState.topSafeDelta > 24) {
+        throw new Error(
+          `Mobile reopen top-center regression: expected top-center safe-top after expand ` +
+          `(centerDelta=${mobileReopenState.centerDelta.toFixed(2)}, topSafeDelta=${mobileReopenState.topSafeDelta.toFixed(2)})`
+        );
+      }
+      if (!mobileReopenState.handleVisible) {
+        throw new Error('Mobile drag-handle polish regression: handle should remain visible after expand');
+      }
       console.log('  ✓ Diagram toolbar collapse/expand (mobile): user tap path works, including slight drift');
 
       function getToolbarScreenState(pageRef) {

@@ -53,6 +53,38 @@ function getDiagramToolbarTopPad(wrapRect, basePad, getViewportMode) {
   return Math.max(basePad, Math.round(overlap + basePad));
 }
 
+/**
+ * Open/reset position policy: always place diagram toolbar at top-center of the canvas wrap.
+ * Used on init and on expand from collapsed so open behavior is deterministic across desktop/mobile.
+ */
+function placeDiagramToolbarAtTopCenter(toolbar, wrap, getViewportMode) {
+  if (!toolbar || !wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const toolRect = toolbar.getBoundingClientRect();
+  const pad = DIAGRAM_TOOLBAR_EDGE_SNAP_PAD;
+  const topPad = getDiagramToolbarTopPad(wrapRect, pad, getViewportMode);
+
+  if (wrapRect.width < 20 || wrapRect.height < 20) {
+    applyDiagramToolbarPosition(toolbar, pad, topPad, 'horizontal');
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(pad)));
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(topPad)));
+    localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
+    return;
+  }
+
+  const tw = toolRect.width;
+  const th = toolRect.height;
+  const maxLeft = Math.max(pad, wrapRect.width - tw - pad);
+  const maxTop = wrapRect.height - th - pad;
+  const minTop = Math.min(topPad, maxTop);
+  const left = clampNumber((wrapRect.width - tw) / 2, pad, maxLeft);
+  const top = clampNumber(topPad, minTop, maxTop);
+  applyDiagramToolbarPosition(toolbar, left, top, 'horizontal');
+  localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(left)));
+  localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y, String(Math.round(top)));
+  localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION, 'horizontal');
+}
+
 function computeMobileToolbarEdgeSnap(toolbar, wrap, options = {}, getViewportMode) {
   if (!toolbar || !wrap || getViewportMode() !== 'mobile') return null;
   const wrapRect = wrap.getBoundingClientRect();
@@ -205,27 +237,6 @@ export function initDiagramToolbarDrag(options = {}) {
   if (!toolbar || !dragHandle || !wrap) return { collapseIfExpanded: function () {} };
 
   diagramToolbarDragCleanupIfNeeded();
-
-  const wrapRect = wrap.getBoundingClientRect();
-  const toolRect = toolbar.getBoundingClientRect();
-  let orient = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_ORIENTATION) || (getViewportMode() === 'mobile' ? 'vertical' : 'horizontal');
-  let x = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X));
-  let y = Number(localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_Y));
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    if (getViewportMode() === 'mobile') {
-      x = 12;
-      y = getDiagramToolbarTopPad(wrapRect, 12, getViewportMode);
-    } else {
-      x = (wrapRect.width - toolRect.width) / 2;
-      y = 12;
-    }
-  }
-  applyDiagramToolbarPosition(toolbar, x, y, orient);
-  if (getViewportMode() === 'mobile') {
-    clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
-    applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
-  }
-  updateDockedSide(toolbar, wrap);
   dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
@@ -250,6 +261,12 @@ export function initDiagramToolbarDrag(options = {}) {
     collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
     collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
   }
+  placeDiagramToolbarAtTopCenter(toolbar, wrap, getViewportMode);
+  clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
+  if (getViewportMode() === 'mobile') {
+    applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
+  }
+  updateDockedSide(toolbar, wrap);
 
   let dragStartX = 0;
   let dragStartY = 0;
@@ -260,6 +277,37 @@ export function initDiagramToolbarDrag(options = {}) {
   let lastDragEndAt = 0;
   let suppressNextExpandTap = false;
   let collapsedExpandDragCandidate = null;
+  let expandRecenterTimerIds = [];
+  let expandRecenterTransitionHandler = null;
+
+  function clearExpandRecenterTimers() {
+    if (!expandRecenterTimerIds.length) return;
+    for (const timerId of expandRecenterTimerIds) {
+      window.clearTimeout(timerId);
+    }
+    expandRecenterTimerIds = [];
+  }
+
+  function clearExpandRecenterTransitionHook() {
+    if (typeof expandRecenterTransitionHandler !== 'function') return;
+    toolbar.removeEventListener('transitionend', expandRecenterTransitionHandler, true);
+    expandRecenterTransitionHandler = null;
+  }
+
+  function clearExpandRecentering() {
+    clearExpandRecenterTimers();
+    clearExpandRecenterTransitionHook();
+  }
+
+  function recenterAfterExpandTransitionIfNeeded() {
+    if (toolbar.classList.contains('diagram-floating-toolbar--collapsed')) return;
+    placeDiagramToolbarAtTopCenter(toolbar, wrap, getViewportMode);
+    clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
+    if (getViewportMode() === 'mobile') {
+      applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
+    }
+    updateDockedSide(toolbar, wrap);
+  }
 
   /* Zone logic (54.41, 54.48): same for desktop and mobile – top/bottom 20% → horizontal; left/right 20% → vertical; else horizontal. */
   function updateOrientationFromPosition(opts = {}) {
@@ -474,14 +522,38 @@ export function initDiagramToolbarDrag(options = {}) {
       collapseBtn.setAttribute('aria-label', collapsed ? 'Expand toolbar' : 'Collapse toolbar');
       collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
     }
+    clearExpandRecentering();
     /* Keep collapsed pill on-screen (no jumping off or requiring scroll). On mobile, use two frames so collapsed 44×44 layout is applied before clamp. */
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (!collapsed) {
+          placeDiagramToolbarAtTopCenter(toolbar, wrap, getViewportMode);
+        }
         clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
         if (getViewportMode() === 'mobile') {
           applyMobileToolbarEdgeSnap(toolbar, wrap, computeMobileToolbarEdgeSnap(toolbar, wrap, {}, getViewportMode), getViewportMode);
         }
         updateDockedSide(toolbar, wrap);
+        if (!collapsed) {
+          /* Expanded width/height animate in; recenter a few times across the transition so open position remains top-center. */
+          const recenterDelaysMs = [120, 220, 320, 360];
+          expandRecenterTimerIds = recenterDelaysMs.map((delayMs) => window.setTimeout(() => {
+            recenterAfterExpandTransitionIfNeeded();
+          }, delayMs));
+          expandRecenterTransitionHandler = (event) => {
+            if (toolbar.classList.contains('diagram-floating-toolbar--collapsed')) return;
+            if (!(event.target instanceof Element)) return;
+            const target = event.target;
+            const isToolbarTarget = target === toolbar;
+            const isToolsWrapTarget = target.classList.contains('diagram-toolbar-tools-wrap');
+            if (!isToolbarTarget && !isToolsWrapTarget) return;
+            const watchedProps = new Set(['max-width', 'width', 'padding', 'gap']);
+            if (!watchedProps.has(event.propertyName)) return;
+            clearExpandRecenterTransitionHook();
+            recenterAfterExpandTransitionIfNeeded();
+          };
+          toolbar.addEventListener('transitionend', expandRecenterTransitionHandler, true);
+        }
       });
     });
   }
@@ -562,6 +634,7 @@ export function initDiagramToolbarDrag(options = {}) {
       cancelAnimationFrame(resizeObserverRafId);
       resizeObserverRafId = null;
     }
+    clearExpandRecentering();
     ro.disconnect();
     dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });

@@ -15,6 +15,7 @@
 - [x] **2.3** Ensure blueprint area and panel are responsive to window resize (layout reflows correctly)
 - [x] **2.4** Add canvas element in left area that fills the 2/3 column (correct dimensions and scaling)
 - [x] **2.5** Add resizable divider between blueprint area and right panel (drag to change width)
+- [x] **2.6** **Desktop: right panel (product menu) no horizontal scroll.** Ensure the right-side Marley products panel content (filters, search, product grid) always fits within the panel width on desktop—no horizontal scrolling inside the panel. Scope: desktop-only CSS (and minimal JS if needed); mobile panel unchanged; Railway-safe.
 
 ---
 

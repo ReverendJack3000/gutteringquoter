@@ -56,10 +56,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/mobile-perf-54-117
+- Branch: main
 - Based on: main
 - Status: In Progress
-- Related Tasks: 54.121.1–54.121.8, 49.34.1–49.34.2
+- Related Tasks: 54.122.1–54.122.4, 49.34.1–49.34.2
 
 **Uncompleted tasks (by section):**
 
@@ -87,6 +87,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
 | 54 | 54.49, 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60). |
+| 54 | 54.122.4 | Diagram toolbar drag-handle polish + top-center open reset (desktop + mobile): manual QA + Railway safety sign-off pending. |
+| 54 | 54.123.1–54.123.4 | Mobile product thumbnails: profile badge (Storm/Classic) + label without profile text (mobile-only; desktop unchanged; Railway-safe). |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |

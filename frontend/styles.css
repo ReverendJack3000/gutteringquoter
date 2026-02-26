@@ -1902,6 +1902,11 @@ body.a11y-force-motion .toggle-icon::after {
   min-width: 280px;
 }
 
+/* 2.6: desktop – panel never causes page-level horizontal scroll */
+body[data-viewport-mode="desktop"] .panel.expanded {
+  max-width: min(320px, calc(100vw - 200px - 6px));
+}
+
 .panel.collapsed {
   width: 48px;
   min-width: 48px;
@@ -2727,26 +2732,27 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  min-height: 30px;
-  width: 30px;
-  height: 30px;
+  min-width: 32px;
+  min-height: 32px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   margin: 0;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(17, 24, 39, 0.18);
   cursor: grab;
   touch-action: none;
-  background: rgba(255, 255, 255, 0.92);
-  color: rgba(0, 0, 0, 0.5);
-  opacity: 0.6;
-  box-shadow: none;
-  transition: opacity 0.2s ease, box-shadow 0.2s ease, color 0.15s ease;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(241, 245, 249, 0.95) 100%);
+  color: rgba(17, 24, 39, 0.72);
+  opacity: 0.9;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.14);
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, color 0.15s ease, transform 0.15s ease;
   overflow: hidden; /* clip grip icon to pull-tab rounded shape */
   box-sizing: border-box;
 }
 .diagram-toolbar-drag-handle:hover {
-  opacity: 0.85;
-  color: rgba(0, 0, 0, 0.65);
+  opacity: 1;
+  color: rgba(17, 24, 39, 0.88);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
 }
 .diagram-toolbar-drag-handle:active {
   cursor: grabbing;
@@ -2754,8 +2760,9 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
 /* "Lifted" state when drag is registered: full opacity + subtle shadow. */
 .diagram-toolbar-drag-handle.diagram-toolbar-drag-handle--dragging {
   opacity: 1;
-  color: rgba(0, 0, 0, 0.75);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  color: rgba(17, 24, 39, 0.92);
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.24);
+  transform: scale(1.02);
 }
 /* Pull-tab: rounded only on the outer (jutting) side so it reads as a tab attached to the pill. */
 .diagram-floating-toolbar[data-orientation="vertical"].is-docked-left .diagram-toolbar-drag-handle { border-radius: 0 8px 8px 0; }
@@ -2782,7 +2789,10 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
 .diagram-toolbar-drag-handle .diagram-toolbar-grip-icon {
   display: block;
   flex-shrink: 0;
-  transform: scale(0.8);
+  width: 20px;
+  height: 12px;
+  transform: scale(0.84);
+  opacity: 0.92;
 }
 /* Padding so icon sits inside tab and doesn’t overlap the pill border. */
 .diagram-floating-toolbar[data-orientation="vertical"].is-docked-left .diagram-toolbar-drag-handle { padding-left: 5px; }
@@ -2817,16 +2827,13 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar:not(.diagram-floatin
   width: 44px;
   height: 44px;
   z-index: -1; /* Behind the toolbar pill so the pill paints on top where they overlap */
-  background: rgba(45, 48, 52, 0.88);
+  background: linear-gradient(180deg, rgba(36, 40, 46, 0.96) 0%, rgba(26, 31, 38, 0.94) 100%);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  color: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-/* Hide grip icon only on mobile (handle stays for drag functionality). */
-body[data-viewport-mode="mobile"] .diagram-toolbar-drag-handle .diagram-toolbar-grip-icon {
-  display: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(248, 250, 252, 0.96);
+  opacity: 1;
+  box-shadow: 0 2px 9px rgba(15, 23, 42, 0.32);
 }
 
 /* 54.79.4: Squircle-style inner buttons, white fill (preserve 44px touch targets). */
@@ -3311,9 +3318,11 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   border-color: #007aff;
 }
 
+/* Desktop: no horizontal scroll; content fits panel width (task 2.6). Mobile overrides below. */
 .product-grid {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -3333,6 +3342,7 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   cursor: grab;
   background: #fafafa;
   padding: 8px;
+  min-width: 0; /* 2.6: allow grid columns to shrink below content size */
 }
 
 .product-thumb:focus-visible {
@@ -3355,6 +3365,11 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   margin-top: 4px;
   text-align: center;
   color: #444;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ----- Crop modal ----- */
