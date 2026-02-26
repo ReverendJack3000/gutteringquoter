@@ -80,6 +80,10 @@
 - [x] **16.7** Canvas Porter – Center-Drop: When a product is **clicked** (not dragged) in the sidebar, place it at the centre of the current viewport at normalized size.
 - [x] **16.8** E2E: Add tests for Recenter View button, stable viewport (no refit within 250ms after interaction), import normalization (max dimension ≤ 150px after drop), center-drop (click adds one element), and resize/rotate using real mouse and selection-box handle positions (`__quoteAppGetSelectionBoxInCanvasCoords`); document manual checks in README (aspect lock, handle padding, viewport behaviour).
 - [x] **16.9** Add E2E/test hooks: `__quoteAppGetViewport`, `__quoteAppGetElements`, `__quoteAppGetSelectionBoxInCanvasCoords`; add `aria-label` on canvas and product thumbs for accessibility and automation.
+- [ ] **16.10** Fix rotate-stem false-positive on small selected elements so center/body drag always enters move mode unless pointer is intentionally on rotate affordance (shared desktop/mobile path).
+- [ ] **16.11** Fix blueprint transform undo stack ordering so Ctrl/Cmd+Z undoes blueprint move/resize/rotate before older actions; remove dead/unused split-history behavior (shared desktop/mobile path).
+- [ ] **16.12** Fix desktop diagram toolbar post-orientation clamping so vertical orientation never overflows blueprint wrap after drag-to-edge transitions.
+- [ ] **16.13** Fix keyboard nudge interaction to push undo snapshot and request redraw on each nudge sequence, preserving immediate visual feedback and undo correctness.
+- [ ] **16.14** Add regression coverage for 16.10–16.13 in `e2e/run.js` (desktop required; mobile assertions for shared-path bugs), plus manual QA + Railway safety sign-off.
 
 ---
-

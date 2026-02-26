@@ -187,11 +187,11 @@ function clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode) {
     toolbar.style.top = top + 'px';
     return;
   }
-  const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
-  const maxTop = wh - (isVertical ? tw : th) - pad;
+  const maxLeft = Math.max(pad, ww - tw - pad);
+  const maxTop = wh - th - pad;
   const minTop = Math.min(topPad, maxTop);
-  left = Math.max(pad, Math.min(ww - (isVertical ? th : tw) - pad, left));
-  top = Math.max(minTop, Math.min(maxTop, top));
+  left = clampNumber(left, pad, maxLeft);
+  top = clampNumber(top, minTop, maxTop);
   toolbar.style.left = left + 'px';
   toolbar.style.top = top + 'px';
 }
@@ -391,10 +391,8 @@ export function initDiagramToolbarDrag(options = {}) {
     }
     const wrapRect = wrap.getBoundingClientRect();
     const toolRect = toolbar.getBoundingClientRect();
-    const isVertical = toolbar.getAttribute('data-orientation') === 'vertical';
-    const useRealDimensions = getViewportMode() === 'mobile';
-    const tw = useRealDimensions ? toolRect.width : (isVertical ? toolRect.height : toolRect.width);
-    const th = useRealDimensions ? toolRect.height : (isVertical ? toolRect.width : toolRect.height);
+    const tw = toolRect.width;
+    const th = toolRect.height;
     const topPad = getDiagramToolbarTopPad(wrapRect, 8, getViewportMode);
     const maxTop = wrapRect.height - th - 8;
     const minTop = Math.min(topPad, maxTop);
@@ -424,6 +422,7 @@ export function initDiagramToolbarDrag(options = {}) {
     clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
     const dragDelta = { dx: e.clientX - dragStartX, dy: e.clientY - dragStartY };
     updateOrientationFromPosition({ dragDelta });
+    clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
     lastDragEndAt = Date.now();
     suppressNextExpandTap = !!didDragThisSession;
     const finalLeft = parseFloat(toolbar.style.left) || 0;

@@ -93,6 +93,7 @@ const state = {
   transparencyPopoverOpen: false, // toggled by #blueprintTransparencyBtn; only way to open transparency slider
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
   floatingToolbarUserMoved: false, // 54.20: when true, draw() does not reposition the element toolbar
+  keyboardNudgeActiveKey: null, // Arrow key currently held so nudge undo snapshot is captured once per key-hold sequence
 };
 
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
@@ -926,7 +927,6 @@ let labourEditorJustApplied = false;
 const MAX_UNDO_HISTORY = 50;
 let undoHistory = [];
 let redoHistory = [];
-let blueprintUndoHistory = []; // Separate stack for blueprint moves/resize/rotate so Ctrl+Z doesn't undo background when tweaking parts
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic'];
 const ACCEPTED_PDF_TYPE = 'application/pdf';
@@ -7190,8 +7190,10 @@ async function restoreStateFromSnapshot(snapshot) {
   state.selectedBlueprint = false;
 }
 
-function pushUndoSnapshot() {
-  undoHistory.push(cloneStateForUndo());
+function pushUndoSnapshot(snapshot = null) {
+  const snapshotToStore = snapshot || cloneStateForUndo();
+  if (!snapshotToStore) return;
+  undoHistory.push(snapshotToStore);
   if (undoHistory.length > MAX_UNDO_HISTORY) undoHistory.shift();
   redoHistory.length = 0;
   updateUndoRedoButtons?.();
@@ -8509,9 +8511,12 @@ function hitTestHandle(clientX, clientY) {
     if (Math.hypot(lx - rotateHandle.x, ly - rotateHandle.y) <= ROTATE_HANDLE_PROXIMITY_PX) {
       return { element: selected, handle: 'rotate', cursor: 'grab' };
     }
-    const distToStem = pointToSegmentDistance(lx, ly, paddedCx, paddedSy, paddedCx, rotY);
-    if (distToStem <= stemHitRadius) {
-      return { element: selected, handle: 'rotate', cursor: 'grab' };
+    const stemIntentYMax = paddedSy + 4; // Keep stem hit above top edge so tiny-element center drag remains move
+    if (ly <= stemIntentYMax) {
+      const distToStem = pointToSegmentDistance(lx, ly, paddedCx, paddedSy, paddedCx, rotY);
+      if (distToStem <= stemHitRadius) {
+        return { element: selected, handle: 'rotate', cursor: 'grab' };
+      }
     }
   }
   return null;
@@ -9254,14 +9259,7 @@ function initCanvas() {
     }
     const wasInteraction = state.mode && state.mode !== 'pan' && state.snapshotAtActionStart;
     if (wasInteraction) {
-      const isBlueprintMode = state.mode === 'blueprint-move' || state.mode === 'blueprint-resize' || state.mode === 'blueprint-rotate';
-      if (isBlueprintMode) {
-        blueprintUndoHistory.push(state.snapshotAtActionStart);
-        if (blueprintUndoHistory.length > MAX_UNDO_HISTORY) blueprintUndoHistory.shift();
-      } else {
-        undoHistory.push(state.snapshotAtActionStart);
-        if (undoHistory.length > MAX_UNDO_HISTORY) undoHistory.shift();
-      }
+      pushUndoSnapshot(state.snapshotAtActionStart);
     }
     state.snapshotAtActionStart = null;
     state.dragGhostX = null;
@@ -9440,6 +9438,10 @@ function initCanvas() {
     }
     if (!inInput && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && state.selectedIds.length > 0) {
       e.preventDefault();
+      if (state.keyboardNudgeActiveKey !== e.key) {
+        pushUndoSnapshot();
+        state.keyboardNudgeActiveKey = e.key;
+      }
       const step = e.shiftKey ? 10 : 1;
       const toMove = getElementsToMove();
       toMove.forEach((id) => {
@@ -9451,6 +9453,7 @@ function initCanvas() {
           else if (e.key === 'ArrowRight') el.x += step;
         }
       });
+      requestDraw('keyboard-nudge');
     }
     if (!inInput && e.key === 'd' && cmd && state.selectedIds.length > 0) {
       e.preventDefault();
@@ -9493,6 +9496,16 @@ function initCanvas() {
         elementIds: state.selectedIds.slice(),
       });
     }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && state.keyboardNudgeActiveKey === e.key) {
+      state.keyboardNudgeActiveKey = null;
+    }
+  });
+
+  window.addEventListener('blur', () => {
+    state.keyboardNudgeActiveKey = null;
   });
 
   canvas.addEventListener('dragover', (e) => {
@@ -16606,7 +16619,8 @@ function renderTechnicianBonusDashboard(payload) {
   const previousMyGp = Number(previousPayload?.hero?.my_total_gp_contributed || 0);
   const teamPot = Number(hero?.total_team_pot || 0);
   const myGp = Number(hero?.my_total_gp_contributed || 0);
-  const isMobileBonusView = layoutState.viewportMode === 'mobile';
+  /* 59.18.4: desktop uses same ledger chip markup as mobile (role/sniper/penalty) */
+  const isMobileBonusView = true;
 
   if (periodNameEl) {
     periodNameEl.textContent = period?.period_name

@@ -149,6 +149,7 @@ The following are **locked decisions**. Full rationale and implementation notes:
     - [x] **59.18.2.4** Badge/streak/penalty icon mapping + tooltip UX.
     - [x] **59.18.2.5** Mobile accessibility and regression QA pass.
   - [x] **59.18.3** Team Pot gauge on desktop: add the same half-speedometer gauge (inline SVG, centered value, heat zones, sweep animation, slot-machine tally replay, reduced-motion) to the desktop technician bonus view so both desktop and mobile show the gauge. Plan: see below.
+  - [x] **59.18.4** My Bonus view: bring the full mobile UI to desktop so desktop shows and functions the same as mobile (race board visible, hero grid hidden; ledger uses interactive role/penalty/sniper chips on both). No logic or UI regressions; Railway-safe.
 
 **Plan for 59.18.3 (no assumptions; code-based):**
 

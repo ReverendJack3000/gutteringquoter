@@ -73,6 +73,7 @@ async function run() {
   }
   page.setDefaultNavigationTimeout(10000);
   page.setDefaultTimeout(8000);
+  const undoModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
   const logs = [];
   page.on('console', (msg) => {
@@ -836,6 +837,24 @@ async function run() {
         `Desktop blueprint move regression: unlocked drag should move blueprint (dx=${desktopUnlockDx.toFixed(2)}, dy=${desktopUnlockDy.toFixed(2)})`
       );
     }
+    await page.keyboard.down(undoModifier);
+    await page.keyboard.press('z');
+    await page.keyboard.up(undoModifier);
+    await delay(240);
+    const desktopBlueprintAfterUndo = await page.evaluate(() => {
+      return typeof window.__quoteAppGetBlueprintTransform === 'function' ? window.__quoteAppGetBlueprintTransform() : null;
+    });
+    if (!desktopBlueprintAfterUndo) {
+      throw new Error('Desktop blueprint undo regression: undo should not remove blueprint after move');
+    }
+    const desktopUndoDx = Math.abs(desktopBlueprintAfterUndo.x - desktopBlueprintBeforeUnlock.x);
+    const desktopUndoDy = Math.abs(desktopBlueprintAfterUndo.y - desktopBlueprintBeforeUnlock.y);
+    if (desktopUndoDx > 1.5 || desktopUndoDy > 1.5) {
+      throw new Error(
+        `Desktop blueprint undo regression: expected move undo to restore prior transform (dx=${desktopUndoDx.toFixed(2)}, dy=${desktopUndoDy.toFixed(2)})`
+      );
+    }
+    console.log('  ✓ Desktop blueprint move undo restores transform instead of removing blueprint');
 
     const desktopBlueprintBeforeLockedDrag = await page.evaluate(() => {
       if (typeof window.__quoteAppSetBlueprintLocked === 'function') window.__quoteAppSetBlueprintLocked(true);
@@ -959,6 +978,150 @@ async function run() {
       }
       console.log(`  ✓ Live region emits announcements ("${announcerText}")`);
     }
+
+    const desktopTinyCenterDrag = await page.evaluate((preferredId) => {
+      const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const selected = (window.__quoteAppGetSelection && window.__quoteAppGetSelection()) || [];
+      const targetId = preferredId || selected[0] || (elements[0] && elements[0].id);
+      if (!targetId) return null;
+      if (typeof window.__quoteAppSetElementRotation === 'function') window.__quoteAppSetElementRotation(targetId, 0);
+      if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(targetId);
+      const candidateSizes = [20, 28, 36, 44, 52, 60, 68, 76, 84];
+      let center = null;
+      let minHandleDistance = 0;
+      if (typeof window.__quoteAppSetElementSize === 'function' && typeof window.__quoteAppGetSelectionBoxInScreenCoords === 'function') {
+        for (const size of candidateSizes) {
+          window.__quoteAppSetElementSize(targetId, size, size);
+          if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(targetId);
+          const candidateCenter = typeof window.__quoteAppGetElementScreenCenter === 'function'
+            ? window.__quoteAppGetElementScreenCenter(targetId)
+            : null;
+          const box = window.__quoteAppGetSelectionBoxInScreenCoords();
+          if (!candidateCenter || !box || !box.handles) continue;
+          const nonRotateHandles = Object.entries(box.handles).filter(([key]) => key !== 'rotate');
+          const distances = nonRotateHandles.map(([, pt]) => Math.hypot(pt.x - candidateCenter.x, pt.y - candidateCenter.y));
+          const minDist = distances.length ? Math.min(...distances) : 0;
+          center = candidateCenter;
+          minHandleDistance = minDist;
+          if (minDist >= 26) break;
+        }
+      }
+      if (!center && typeof window.__quoteAppGetElementScreenCenter === 'function') {
+        center = window.__quoteAppGetElementScreenCenter(targetId);
+      }
+      const updated = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const el = updated.find((item) => item.id === targetId) || null;
+      if (!el || !center) return null;
+      return {
+        id: targetId,
+        center,
+        minHandleDistance,
+        before: { x: el.x, y: el.y, rotation: el.rotation || 0 },
+      };
+    }, droppedEl ? droppedEl.id : null);
+    if (!desktopTinyCenterDrag) throw new Error('Desktop tiny-element drag regression: setup failed');
+    const getDesktopTinySnapshot = async () => page.evaluate((id) => {
+      const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const el = elements.find((item) => item.id === id) || null;
+      return el ? { x: el.x, y: el.y, rotation: el.rotation || 0 } : null;
+    }, desktopTinyCenterDrag.id);
+    const dragDesktopTinyFromCenter = async (dx, dy) => {
+      const center = await page.evaluate((id) => {
+        return typeof window.__quoteAppGetElementScreenCenter === 'function'
+          ? window.__quoteAppGetElementScreenCenter(id)
+          : null;
+      }, desktopTinyCenterDrag.id);
+      if (!center) return false;
+      await page.mouse.move(center.x, center.y);
+      await page.mouse.down();
+      await page.mouse.move(center.x + dx, center.y + dy, { steps: 10 });
+      await page.mouse.up();
+      await delay(260);
+      return true;
+    };
+    await dragDesktopTinyFromCenter(64, 44);
+    let desktopTinyAfter = await getDesktopTinySnapshot();
+    if (!desktopTinyAfter) throw new Error('Desktop tiny-element drag regression: element missing after drag');
+    let desktopTinyMoveDx = desktopTinyAfter.x - desktopTinyCenterDrag.before.x;
+    let desktopTinyMoveDy = desktopTinyAfter.y - desktopTinyCenterDrag.before.y;
+    let desktopTinyMoveDist = Math.hypot(desktopTinyMoveDx, desktopTinyMoveDy);
+    let desktopTinyRotationDelta = (desktopTinyAfter.rotation - desktopTinyCenterDrag.before.rotation) % 360;
+    if (desktopTinyRotationDelta > 180) desktopTinyRotationDelta -= 360;
+    if (desktopTinyRotationDelta < -180) desktopTinyRotationDelta += 360;
+    if (desktopTinyMoveDist < 4 && Math.abs(desktopTinyRotationDelta) <= 1.5) {
+      await dragDesktopTinyFromCenter(96, 72);
+      desktopTinyAfter = await getDesktopTinySnapshot();
+      if (!desktopTinyAfter) throw new Error('Desktop tiny-element drag regression: element missing after retry drag');
+      desktopTinyMoveDx = desktopTinyAfter.x - desktopTinyCenterDrag.before.x;
+      desktopTinyMoveDy = desktopTinyAfter.y - desktopTinyCenterDrag.before.y;
+      desktopTinyMoveDist = Math.hypot(desktopTinyMoveDx, desktopTinyMoveDy);
+      desktopTinyRotationDelta = (desktopTinyAfter.rotation - desktopTinyCenterDrag.before.rotation) % 360;
+      if (desktopTinyRotationDelta > 180) desktopTinyRotationDelta -= 360;
+      if (desktopTinyRotationDelta < -180) desktopTinyRotationDelta += 360;
+    }
+    if (desktopTinyMoveDist < 4) {
+      throw new Error(
+        `Desktop tiny-element drag regression: center drag should move element (dx=${desktopTinyMoveDx.toFixed(2)}, dy=${desktopTinyMoveDy.toFixed(2)})`
+      );
+    }
+    if (Math.abs(desktopTinyRotationDelta) > 1.5) {
+      throw new Error(
+        `Desktop tiny-element drag regression: center drag should not rotate (rotation delta=${desktopTinyRotationDelta.toFixed(2)}°)`
+      );
+    }
+    console.log('  ✓ Desktop tiny-element center drag moves without unintended rotate-stem capture');
+
+    const desktopNudgeBefore = await page.evaluate((id) => {
+      if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(id);
+      const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const el = elements.find((item) => item.id === id) || null;
+      const renderStats = (window.__quoteAppGetRenderLoopDiagnostics && window.__quoteAppGetRenderLoopDiagnostics()) || null;
+      if (!el) return null;
+      return { x: el.x, y: el.y, drawCount: renderStats ? Number(renderStats.drawCount || 0) : null };
+    }, desktopTinyCenterDrag.id);
+    if (!desktopNudgeBefore) throw new Error('Desktop keyboard nudge regression: setup failed');
+    await page.keyboard.press('ArrowRight');
+    await delay(180);
+    const desktopNudgeAfter = await page.evaluate((id) => {
+      const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const el = elements.find((item) => item.id === id) || null;
+      const renderStats = (window.__quoteAppGetRenderLoopDiagnostics && window.__quoteAppGetRenderLoopDiagnostics()) || null;
+      if (!el) return null;
+      return { x: el.x, y: el.y, drawCount: renderStats ? Number(renderStats.drawCount || 0) : null };
+    }, desktopTinyCenterDrag.id);
+    if (!desktopNudgeAfter) throw new Error('Desktop keyboard nudge regression: missing post-nudge element');
+    if (desktopNudgeAfter.x <= desktopNudgeBefore.x + 0.5) {
+      throw new Error(
+        `Desktop keyboard nudge regression: ArrowRight should move x by 1 (before=${desktopNudgeBefore.x}, after=${desktopNudgeAfter.x})`
+      );
+    }
+    if (
+      Number.isFinite(desktopNudgeBefore.drawCount)
+      && Number.isFinite(desktopNudgeAfter.drawCount)
+      && desktopNudgeAfter.drawCount <= desktopNudgeBefore.drawCount
+    ) {
+      throw new Error(
+        `Desktop keyboard nudge regression: draw count should increase (before=${desktopNudgeBefore.drawCount}, after=${desktopNudgeAfter.drawCount})`
+      );
+    }
+    await page.keyboard.down(undoModifier);
+    await page.keyboard.press('z');
+    await page.keyboard.up(undoModifier);
+    await delay(220);
+    const desktopNudgeAfterUndo = await page.evaluate((id) => {
+      const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+      const el = elements.find((item) => item.id === id) || null;
+      return el ? { x: el.x, y: el.y } : null;
+    }, desktopTinyCenterDrag.id);
+    if (!desktopNudgeAfterUndo) throw new Error('Desktop keyboard nudge regression: element missing after undo');
+    const desktopNudgeUndoDx = Math.abs(desktopNudgeAfterUndo.x - desktopNudgeBefore.x);
+    const desktopNudgeUndoDy = Math.abs(desktopNudgeAfterUndo.y - desktopNudgeBefore.y);
+    if (desktopNudgeUndoDx > 0.5 || desktopNudgeUndoDy > 0.5) {
+      throw new Error(
+        `Desktop keyboard nudge regression: undo should restore pre-nudge position (dx=${desktopNudgeUndoDx.toFixed(2)}, dy=${desktopNudgeUndoDy.toFixed(2)})`
+      );
+    }
+    console.log('  ✓ Desktop keyboard nudge redraws immediately and undoes one step');
 
     // Gutter rotation constraint: 60°–80° band must clamp to 60 or 80 (never stay in band)
     const elementsForGutterTest = await page.evaluate(() => (window.__quoteAppGetElements && window.__quoteAppGetElements()) || []);
@@ -1469,6 +1632,63 @@ async function run() {
     const isExpandedAgain = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
     if (!isExpandedAgain) throw new Error('Diagram toolbar should expand after clicking expand button');
     console.log('  ✓ Diagram toolbar collapse/expand (desktop): −/+ swap works');
+
+    const desktopToolbarDragProbe = await page.evaluate(() => {
+      const toolbar = document.getElementById('diagramFloatingToolbar');
+      const dragHandle = document.getElementById('diagramToolbarDragHandle');
+      const wrap = toolbar ? toolbar.closest('.blueprint-wrap') : null;
+      if (!toolbar || !dragHandle || !wrap) return null;
+      if (toolbar.classList.contains('diagram-floating-toolbar--collapsed')) {
+        const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
+        if (collapseBtn) collapseBtn.click();
+      }
+      const handleRect = dragHandle.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      return {
+        startX: handleRect.left + handleRect.width / 2,
+        startY: handleRect.top + handleRect.height / 2,
+        targetX: wrapRect.right - 20,
+        targetY: wrapRect.top + (wrapRect.height * 0.72),
+      };
+    });
+    if (!desktopToolbarDragProbe) throw new Error('Desktop toolbar clamp regression: drag setup failed');
+    await page.mouse.move(desktopToolbarDragProbe.startX, desktopToolbarDragProbe.startY);
+    await page.mouse.down();
+    await page.mouse.move(desktopToolbarDragProbe.targetX, desktopToolbarDragProbe.targetY, { steps: 14 });
+    await page.mouse.up();
+    await delay(260);
+    const desktopToolbarClampCheck = await page.evaluate(() => {
+      const toolbar = document.getElementById('diagramFloatingToolbar');
+      const wrap = toolbar ? toolbar.closest('.blueprint-wrap') : null;
+      if (!toolbar || !wrap) return null;
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      return {
+        orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
+        overflowLeft: wrapRect.left - toolbarRect.left,
+        overflowTop: wrapRect.top - toolbarRect.top,
+        overflowRight: toolbarRect.right - wrapRect.right,
+        overflowBottom: toolbarRect.bottom - wrapRect.bottom,
+      };
+    });
+    if (!desktopToolbarClampCheck) throw new Error('Desktop toolbar clamp regression: could not read bounds after drag');
+    if (desktopToolbarClampCheck.orientation !== 'vertical') {
+      throw new Error(`Desktop toolbar clamp regression: expected right-edge drag to switch orientation to vertical, got ${desktopToolbarClampCheck.orientation}`);
+    }
+    const toolbarOverflowTolerance = 1.5;
+    if (
+      desktopToolbarClampCheck.overflowLeft > toolbarOverflowTolerance
+      || desktopToolbarClampCheck.overflowTop > toolbarOverflowTolerance
+      || desktopToolbarClampCheck.overflowRight > toolbarOverflowTolerance
+      || desktopToolbarClampCheck.overflowBottom > toolbarOverflowTolerance
+    ) {
+      throw new Error(
+        `Desktop toolbar clamp regression: toolbar overflowed wrap after orientation update ` +
+        `(left=${desktopToolbarClampCheck.overflowLeft.toFixed(2)}, top=${desktopToolbarClampCheck.overflowTop.toFixed(2)}, ` +
+        `right=${desktopToolbarClampCheck.overflowRight.toFixed(2)}, bottom=${desktopToolbarClampCheck.overflowBottom.toFixed(2)})`
+      );
+    }
+    console.log('  ✓ Desktop toolbar stays clamped after right-edge orientation switch');
 
     // Center-drop: click product thumb (no drag) adds element at viewport center
     const countBeforeClick = await page.evaluate(() => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0);
@@ -2571,6 +2791,24 @@ async function run() {
           `Mobile blueprint move regression: unlocked drag should move blueprint (dx=${mobileUnlockDx.toFixed(2)}, dy=${mobileUnlockDy.toFixed(2)})`
         );
       }
+      await mobilePage.keyboard.down(undoModifier);
+      await mobilePage.keyboard.press('z');
+      await mobilePage.keyboard.up(undoModifier);
+      await delay(240);
+      const mobileBlueprintAfterUndo = await mobilePage.evaluate(() => {
+        return typeof window.__quoteAppGetBlueprintTransform === 'function' ? window.__quoteAppGetBlueprintTransform() : null;
+      });
+      if (!mobileBlueprintAfterUndo) {
+        throw new Error('Mobile blueprint undo regression: undo should not remove blueprint after move');
+      }
+      const mobileUndoDx = Math.abs(mobileBlueprintAfterUndo.x - mobileBlueprintBeforeUnlock.x);
+      const mobileUndoDy = Math.abs(mobileBlueprintAfterUndo.y - mobileBlueprintBeforeUnlock.y);
+      if (mobileUndoDx > 1.5 || mobileUndoDy > 1.5) {
+        throw new Error(
+          `Mobile blueprint undo regression: expected move undo to restore prior transform (dx=${mobileUndoDx.toFixed(2)}, dy=${mobileUndoDy.toFixed(2)})`
+        );
+      }
+      console.log('  ✓ Mobile blueprint move undo restores transform instead of removing blueprint');
 
       const mobileBlueprintBeforeLockedDrag = await mobilePage.evaluate(() => {
         if (typeof window.__quoteAppSetBlueprintLocked === 'function') window.__quoteAppSetBlueprintLocked(true);
@@ -2790,6 +3028,95 @@ async function run() {
         );
       }
       console.log('  ✓ Mobile blueprint tap-add uses 25% of blueprint long side and auto-closes panel');
+
+      const mobileTinyCenterDrag = await mobilePage.evaluate((targetId) => {
+        if (!targetId) return null;
+        if (typeof window.__quoteAppSetElementRotation === 'function') window.__quoteAppSetElementRotation(targetId, 0);
+        if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(targetId);
+        const candidateSizes = [20, 28, 36, 44, 52, 60, 68, 76, 84];
+        let center = null;
+        let minHandleDistance = 0;
+        if (typeof window.__quoteAppSetElementSize === 'function' && typeof window.__quoteAppGetSelectionBoxInScreenCoords === 'function') {
+          for (const size of candidateSizes) {
+            window.__quoteAppSetElementSize(targetId, size, size);
+            if (typeof window.__quoteAppSelectElementById === 'function') window.__quoteAppSelectElementById(targetId);
+            const candidateCenter = typeof window.__quoteAppGetElementScreenCenter === 'function'
+              ? window.__quoteAppGetElementScreenCenter(targetId)
+              : null;
+            const box = window.__quoteAppGetSelectionBoxInScreenCoords();
+            if (!candidateCenter || !box || !box.handles) continue;
+            const nonRotateHandles = Object.entries(box.handles).filter(([key]) => key !== 'rotate');
+            const distances = nonRotateHandles.map(([, pt]) => Math.hypot(pt.x - candidateCenter.x, pt.y - candidateCenter.y));
+            const minDist = distances.length ? Math.min(...distances) : 0;
+            center = candidateCenter;
+            minHandleDistance = minDist;
+            if (minDist >= 26) break;
+          }
+        }
+        if (!center && typeof window.__quoteAppGetElementScreenCenter === 'function') {
+          center = window.__quoteAppGetElementScreenCenter(targetId);
+        }
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        const el = elements.find((item) => item.id === targetId) || null;
+        if (!el || !center) return null;
+        return {
+          id: targetId,
+          center,
+          minHandleDistance,
+          before: { x: el.x, y: el.y, rotation: el.rotation || 0 },
+        };
+      }, mobileTapAddState.last.id);
+      if (!mobileTinyCenterDrag) throw new Error('Mobile tiny-element drag regression: setup failed');
+      const getMobileTinySnapshot = async () => mobilePage.evaluate((id) => {
+        const elements = (window.__quoteAppGetElements && window.__quoteAppGetElements()) || [];
+        const el = elements.find((item) => item.id === id) || null;
+        return el ? { x: el.x, y: el.y, rotation: el.rotation || 0 } : null;
+      }, mobileTinyCenterDrag.id);
+      const dragMobileTinyFromCenter = async (dx, dy) => {
+        const center = await mobilePage.evaluate((id) => {
+          return typeof window.__quoteAppGetElementScreenCenter === 'function'
+            ? window.__quoteAppGetElementScreenCenter(id)
+            : null;
+        }, mobileTinyCenterDrag.id);
+        if (!center) return false;
+        await mobilePage.mouse.move(center.x, center.y);
+        await mobilePage.mouse.down();
+        await mobilePage.mouse.move(center.x + dx, center.y + dy, { steps: 10 });
+        await mobilePage.mouse.up();
+        await delay(260);
+        return true;
+      };
+      await dragMobileTinyFromCenter(52, 36);
+      let mobileTinyAfter = await getMobileTinySnapshot();
+      if (!mobileTinyAfter) throw new Error('Mobile tiny-element drag regression: element missing after drag');
+      let mobileTinyMoveDx = mobileTinyAfter.x - mobileTinyCenterDrag.before.x;
+      let mobileTinyMoveDy = mobileTinyAfter.y - mobileTinyCenterDrag.before.y;
+      let mobileTinyMoveDist = Math.hypot(mobileTinyMoveDx, mobileTinyMoveDy);
+      let mobileTinyRotationDelta = (mobileTinyAfter.rotation - mobileTinyCenterDrag.before.rotation) % 360;
+      if (mobileTinyRotationDelta > 180) mobileTinyRotationDelta -= 360;
+      if (mobileTinyRotationDelta < -180) mobileTinyRotationDelta += 360;
+      if (mobileTinyMoveDist < 4 && Math.abs(mobileTinyRotationDelta) <= 1.5) {
+        await dragMobileTinyFromCenter(82, 58);
+        mobileTinyAfter = await getMobileTinySnapshot();
+        if (!mobileTinyAfter) throw new Error('Mobile tiny-element drag regression: element missing after retry drag');
+        mobileTinyMoveDx = mobileTinyAfter.x - mobileTinyCenterDrag.before.x;
+        mobileTinyMoveDy = mobileTinyAfter.y - mobileTinyCenterDrag.before.y;
+        mobileTinyMoveDist = Math.hypot(mobileTinyMoveDx, mobileTinyMoveDy);
+        mobileTinyRotationDelta = (mobileTinyAfter.rotation - mobileTinyCenterDrag.before.rotation) % 360;
+        if (mobileTinyRotationDelta > 180) mobileTinyRotationDelta -= 360;
+        if (mobileTinyRotationDelta < -180) mobileTinyRotationDelta += 360;
+      }
+      if (mobileTinyMoveDist < 4) {
+        throw new Error(
+          `Mobile tiny-element drag regression: center drag should move element (dx=${mobileTinyMoveDx.toFixed(2)}, dy=${mobileTinyMoveDy.toFixed(2)})`
+        );
+      }
+      if (Math.abs(mobileTinyRotationDelta) > 1.5) {
+        throw new Error(
+          `Mobile tiny-element drag regression: center drag should not rotate (rotation delta=${mobileTinyRotationDelta.toFixed(2)}°)`
+        );
+      }
+      console.log('  ✓ Mobile tiny-element center drag moves without unintended rotate-stem capture');
 
       // Mobile measurement entry: element tap should not auto-open/focus input; ruler button should open/focus badge popover input.
       const measurableThumbSelector = '.product-thumb[data-product-id^="GUT-"], .product-thumb[data-product-id^="DP-"], .product-thumb[data-product-id="DROPPER"], .product-thumb[data-product-id^="DRP-"]';

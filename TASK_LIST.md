@@ -66,6 +66,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 7 | 7.10 | Revisit gutter rotation constraint (E2E Alt override, hysteresis; optional) |
 | 13 | 13.4, 13.5 | (Optional) Uploaded images uniform sizing; min/max size guards |
 | 15 | 15.5, 15.6 | (Optional) Live dimension/angle display during resize/rotate |
+| 16 | 16.10–16.14 | Desktop canvas transform/usability audit fixes (includes shared mobile-path guards for 16.10 and 16.11). |
 | 20 | 20.2 | E2E resize test passes or update if intentional |
 | 22 | 22.20 | (Optional) Pricing edit permissions by role |
 | 22 | 22.21 | Document ServiceM8 integration |

@@ -4745,10 +4745,9 @@ body[data-viewport-mode="mobile"] .technician-bonus-view-container {
   background: #eceff4;
 }
 
+/* 59.18.4: hidden on both viewports; desktop and mobile use race board only */
 .bonus-hero-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
+  display: none;
 }
 
 .bonus-hero-card {
@@ -5006,8 +5005,10 @@ body[data-viewport-mode="mobile"] .technician-bonus-view-container {
   pointer-events: none;
 }
 
+/* 59.18.4: visible on both desktop and mobile; mobile adds safe-area padding below */
 .bonus-race-board-mobile {
-  display: none;
+  display: grid;
+  gap: 14px;
 }
 
 .bonus-race-leaderboard {
@@ -5256,20 +5257,15 @@ body[data-viewport-mode="mobile"] .technician-bonus-view-container {
 }
 
 body[data-viewport-mode="mobile"] .bonus-race-board-mobile {
-  display: grid;
-  gap: 14px;
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0));
 }
 
-body[data-viewport-mode="mobile"] .bonus-hero-grid {
-  display: none;
-}
-
-body[data-viewport-mode="mobile"] .bonus-pot-card,
-body[data-viewport-mode="mobile"] .bonus-race-card,
-body[data-viewport-mode="mobile"] .bonus-effects-card {
+/* 59.18.4: shared race board card styles (desktop + mobile) */
+.bonus-pot-card,
+.bonus-race-card,
+.bonus-effects-card {
   border: 1px solid #d7e2f0;
   border-radius: 14px;
   background: #fff;
@@ -5277,14 +5273,14 @@ body[data-viewport-mode="mobile"] .bonus-effects-card {
   box-shadow: 0 5px 14px rgba(13, 23, 39, 0.05);
 }
 
-/* 59.18.2.1: Apple HIG 44px min touch targets for mobile team pool */
-body[data-viewport-mode="mobile"] .bonus-race-board-mobile .bonus-tally-btn {
+/* 59.18.2.1 / 59.18.4: 44px min touch targets (desktop + mobile) */
+.bonus-race-board-mobile .bonus-tally-btn {
   min-height: 44px;
   min-width: 44px;
   padding: 10px 14px;
 }
 
-body[data-viewport-mode="mobile"] .bonus-race-board-mobile .bonus-tally-value {
+.bonus-race-board-mobile .bonus-tally-value {
   min-height: 44px;
   min-width: 44px;
   display: inline-flex;
@@ -5293,14 +5289,14 @@ body[data-viewport-mode="mobile"] .bonus-race-board-mobile .bonus-tally-value {
   padding: 8px;
 }
 
-body[data-viewport-mode="mobile"] .bonus-race-leaderboard .bonus-badge-chip {
+.bonus-race-leaderboard .bonus-badge-chip {
   min-height: 44px;
   padding: 10px 14px;
   font-size: 12px;
 }
 
-/* Race section gamified (mobile only): category toggle + podium + catch-up */
-body[data-viewport-mode="mobile"] .bonus-race-category-toggle-wrap {
+/* Race section: category toggle + podium (desktop + mobile) */
+.bonus-race-category-toggle-wrap {
   display: flex;
   gap: 0;
   margin: 12px 0 14px;
@@ -5309,13 +5305,13 @@ body[data-viewport-mode="mobile"] .bonus-race-category-toggle-wrap {
   border-radius: 999px;
   border: 1px solid #d0dce8;
 }
-body[data-viewport-mode="mobile"] .bonus-race-category-toggle-wrap[hidden] {
+.bonus-race-category-toggle-wrap[hidden] {
   display: none !important;
 }
-body[data-viewport-mode="mobile"] .bonus-race-leaderboard {
+.bonus-race-leaderboard {
   transition: opacity 0.22s ease;
 }
-body[data-viewport-mode="mobile"] .bonus-race-category-btn {
+.bonus-race-category-btn {
   flex: 1;
   min-height: 44px;
   padding: 10px 14px;
@@ -5328,25 +5324,25 @@ body[data-viewport-mode="mobile"] .bonus-race-category-btn {
   cursor: pointer;
   transition: background 0.25s ease, color 0.25s ease, box-shadow 0.2s ease;
 }
-body[data-viewport-mode="mobile"] .bonus-race-category-btn[aria-pressed="true"][data-category="sellers"] {
+.bonus-race-category-btn[aria-pressed="true"][data-category="sellers"] {
   background: linear-gradient(135deg, #f0c14b 0%, #e6a90a 100%);
   color: #3d3006;
   box-shadow: 0 2px 8px rgba(230, 169, 10, 0.4);
 }
-body[data-viewport-mode="mobile"] .bonus-race-category-btn[aria-pressed="true"][data-category="executors"] {
+.bonus-race-category-btn[aria-pressed="true"][data-category="executors"] {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: #fff;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
 }
 
-/* Podium: King of the Hill (1st place) */
-body[data-viewport-mode="mobile"] .bonus-racer--king {
+/* Podium: King of the Hill (1st place) (desktop + mobile) */
+.bonus-racer--king {
   border-width: 3px;
   border-color: #e6a90a;
   box-shadow: 0 0 0 1px #e6a90a, 0 8px 24px rgba(230, 169, 10, 0.35);
   padding: 14px 12px;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar {
+.bonus-racer--king .bonus-racer-avatar {
   width: 48px;
   height: 48px;
   min-width: 48px;
@@ -5354,7 +5350,7 @@ body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar {
   font-size: 18px;
   background-color: #0ea5e9;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-crown {
+.bonus-racer--king .bonus-racer-crown {
   position: absolute;
   top: -8px;
   left: 50%;
@@ -5363,18 +5359,18 @@ body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-crown {
   line-height: 1;
   pointer-events: none;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--king .bonus-racer-avatar-wrap {
+.bonus-racer--king .bonus-racer-avatar-wrap {
   position: relative;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--contender {
+.bonus-racer--contender {
   padding: 8px 10px;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-bar-wrap,
-body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-meta,
-body[data-viewport-mode="mobile"] .bonus-racer--contender .bonus-racer-view-details {
+.bonus-racer--contender .bonus-racer-bar-wrap,
+.bonus-racer--contender .bonus-racer-meta,
+.bonus-racer--contender .bonus-racer-view-details {
   display: none;
 }
-body[data-viewport-mode="mobile"] .bonus-racer-avatar {
+.bonus-racer-avatar {
   width: 32px;
   height: 32px;
   min-width: 32px;
@@ -5390,72 +5386,72 @@ body[data-viewport-mode="mobile"] .bonus-racer-avatar {
   flex-shrink: 0;
   background-color: #0ea5e9;
 }
-body[data-viewport-mode="mobile"] .bonus-racer-avatar-wrap {
+.bonus-racer-avatar-wrap {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-body[data-viewport-mode="mobile"] .bonus-racer-gp--major {
+.bonus-racer-gp--major {
   font-size: 16px;
   font-weight: 800;
   color: #0c4a6e;
 }
-body[data-viewport-mode="mobile"] .bonus-racer-catch-up {
+.bonus-racer-catch-up {
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
   margin-top: 4px;
 }
-body[data-viewport-mode="mobile"] .bonus-racer-catch-up strong {
+.bonus-racer-catch-up strong {
   color: #0f172a;
 }
 /* Placeholder / Challenger slots */
-body[data-viewport-mode="mobile"] .bonus-racer--placeholder {
+.bonus-racer--placeholder {
   border: 2px dashed #cbd5e1;
   background: rgba(248, 250, 252, 0.7);
   opacity: 0.85;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-bar-wrap,
-body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-meta,
-body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-view-details {
+.bonus-racer--placeholder .bonus-racer-bar-wrap,
+.bonus-racer--placeholder .bonus-racer-meta,
+.bonus-racer--placeholder .bonus-racer-view-details {
   display: none;
 }
-body[data-viewport-mode="mobile"] .bonus-racer--placeholder .bonus-racer-slot-open {
+.bonus-racer--placeholder .bonus-racer-slot-open {
   font-size: 12px;
   color: #64748b;
   font-style: italic;
   margin-top: 4px;
 }
-/* Whole card clickable on mobile (no separate View details) */
-body[data-viewport-mode="mobile"] .bonus-racer[role="button"] {
+/* Whole card clickable (desktop + mobile) */
+.bonus-racer[role="button"] {
   cursor: pointer;
   text-align: left;
 }
-body[data-viewport-mode="mobile"] .bonus-racer[role="button"]:focus-visible {
+.bonus-racer[role="button"]:focus-visible {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
 
-body[data-viewport-mode="mobile"] .bonus-effects-summary .bonus-badge-chip {
+.bonus-effects-summary .bonus-badge-chip {
   min-height: 44px;
   padding: 10px 14px;
   font-size: 12px;
 }
 
-body[data-viewport-mode="mobile"] .bonus-mobile-card-header .bonus-tally-btn {
+.bonus-mobile-card-header .bonus-tally-btn {
   flex-shrink: 0;
 }
 
-/* Section 60.9–60.11: How it works (mobile only) */
-body[data-viewport-mode="mobile"] .bonus-how-it-works {
+/* Section 60.9–60.11 / 59.18.4: How it works (desktop + mobile) */
+.bonus-how-it-works {
   border: 1px solid #d7e2f0;
   border-radius: 14px;
   background: #f8fafc;
   padding: 0;
   overflow: hidden;
 }
-body[data-viewport-mode="mobile"] .bonus-how-it-works summary {
+.bonus-how-it-works summary {
   padding: 12px 14px;
   font-weight: 600;
   cursor: pointer;
@@ -5464,23 +5460,23 @@ body[data-viewport-mode="mobile"] .bonus-how-it-works summary {
   display: flex;
   align-items: center;
 }
-body[data-viewport-mode="mobile"] .bonus-how-it-works summary::-webkit-details-marker {
+.bonus-how-it-works summary::-webkit-details-marker {
   display: none;
 }
-body[data-viewport-mode="mobile"] .bonus-how-it-works-content {
+.bonus-how-it-works-content {
   padding: 0 14px 14px;
   font-size: 0.9rem;
   line-height: 1.45;
   color: #334155;
 }
-body[data-viewport-mode="mobile"] .bonus-how-it-works-content p {
+.bonus-how-it-works-content p {
   margin: 0 0 0.75em;
 }
-body[data-viewport-mode="mobile"] .bonus-how-it-works-content p:last-child {
+.bonus-how-it-works-content p:last-child {
   margin-bottom: 0;
 }
 
-body[data-viewport-mode="mobile"] .bonus-pot-gauge .bonus-pot-value {
+.bonus-pot-gauge .bonus-pot-value {
   margin: 0;
   font-size: clamp(1.5rem, 1.3rem + 0.9vw, 1.95rem);
   color: #0c4a8a;
