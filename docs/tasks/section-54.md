@@ -607,6 +607,14 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.125.2** **Add standard `line-clamp` for compatibility (styles.css ~L2524).** In the rule `body[data-viewport-mode="mobile"] .product-grid .product-thumb span`, add the standard property `line-clamp: 2;` alongside `-webkit-line-clamp: 2;` to satisfy the vendorPrefix linter and future-proof. Keep existing `-webkit-box` / `-webkit-box-orient` / `overflow: hidden`. Scope: mobile product thumb label only; desktop unchanged.
 - [x] **54.125.3** **Verification.** Confirm no new linter warnings for these two rules; run `npm test`; confirm Railway deploy unchanged (frontend-only CSS).
 
+**54.126 Desktop diagram toolbar: prevent header occlusion on load/expand (desktop + mobile guard, Railway-safe)**
+
+- [x] **54.126.1** **Hidden-view toolbar height guard.** In `frontend/app.js`, harden `applyGlobalToolbarPadding()` so it does not write `--global-toolbar-height` when `#globalToolbarWrap` measurement is invalid (`offsetHeight <= 0`), preventing zero-height padding when canvas view is hidden.
+- [x] **54.126.2** **Canvas activation + toolbar resize re-sync.** In `frontend/app.js`, re-sync global toolbar padding when `switchView('view-canvas')` activates the view (before diagram toolbar init and once post-layout via rAF), and add a dedicated `ResizeObserver` for `#globalToolbarWrap/#globalToolbar` to keep padding current and sync diagram toolbar clamp/orientation when visible.
+- [x] **54.126.3** **Desktop top-safe placement uses header overlap.** In `frontend/toolbar.js`, generalize `getDiagramToolbarTopPad(...)` to account for global header overlap on desktop as well as mobile (while keeping bottom-docked toolbar bypass and existing mobile safe-top behavior intact).
+- [x] **54.126.4** **E2E desktop header-occlusion regression checks.** In `e2e/run.js`, extend desktop toolbar open/reopen assertions with header overlap (`headerBottom - toolbarTop`, clamped at `>= 0`) plus top-safe anchor delta checks, and fail when overlap is detected.
+- [ ] **54.126.5** **Manual QA + Railway safety sign-off.** Validate desktop (fresh load into canvas, diagram toolbar collapse/expand, global header collapse/expand, 1280x720 and 1920x1080) and mobile safe-top smoke; confirm no Railway env/build/config changes.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

@@ -1783,11 +1783,18 @@ async function run() {
       if (!toolbar || !wrap) return null;
       const tr = toolbar.getBoundingClientRect();
       const wr = wrap.getBoundingClientRect();
+      const pad = 12;
+      const globalToolbarWrap = document.getElementById('globalToolbarWrap');
+      const headerBottom = globalToolbarWrap ? globalToolbarWrap.getBoundingClientRect().bottom : wr.top;
+      const topPad = headerBottom > wr.top ? Math.max(pad, Math.round((headerBottom - wr.top) + pad)) : pad;
+      const maxTop = wr.height - tr.height - pad;
+      const topAnchor = Math.min(topPad, maxTop);
       return {
         collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
         orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
         centerDelta: Math.abs((tr.left + tr.width / 2) - (wr.left + wr.width / 2)),
-        topDelta: Math.abs((tr.top - wr.top) - 12),
+        topSafeDelta: Math.abs((tr.top - wr.top) - topAnchor),
+        headerOverlap: Math.max(0, headerBottom - tr.top),
       };
     });
     const wasExpanded = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
@@ -1801,9 +1808,15 @@ async function run() {
     if (desktopOpenState.orientation !== 'horizontal') {
       throw new Error(`Desktop top-center open regression: expected horizontal orientation on open, got ${desktopOpenState.orientation}`);
     }
-    if (desktopOpenState.centerDelta > 24 || desktopOpenState.topDelta > 24) {
+    if (desktopOpenState.centerDelta > 24 || desktopOpenState.topSafeDelta > 24) {
       throw new Error(
-        `Desktop top-center open regression: expected top-center (centerDelta=${desktopOpenState.centerDelta.toFixed(2)}, topDelta=${desktopOpenState.topDelta.toFixed(2)})`
+        `Desktop top-center open regression: expected top-center safe-top ` +
+        `(centerDelta=${desktopOpenState.centerDelta.toFixed(2)}, topSafeDelta=${desktopOpenState.topSafeDelta.toFixed(2)})`
+      );
+    }
+    if (desktopOpenState.headerOverlap > 1) {
+      throw new Error(
+        `Desktop header-occlusion regression: toolbar overlaps header on open (overlap=${desktopOpenState.headerOverlap.toFixed(2)}px)`
       );
     }
     console.log('  ✓ Desktop diagram toolbar opens top-centered');
@@ -1820,9 +1833,15 @@ async function run() {
     if (desktopReopenState.orientation !== 'horizontal') {
       throw new Error(`Desktop reopen top-center regression: expected horizontal orientation after expand, got ${desktopReopenState.orientation}`);
     }
-    if (desktopReopenState.centerDelta > 24 || desktopReopenState.topDelta > 24) {
+    if (desktopReopenState.centerDelta > 24 || desktopReopenState.topSafeDelta > 24) {
       throw new Error(
-        `Desktop reopen top-center regression: expected top-center after expand (centerDelta=${desktopReopenState.centerDelta.toFixed(2)}, topDelta=${desktopReopenState.topDelta.toFixed(2)})`
+        `Desktop reopen top-center regression: expected top-center safe-top after expand ` +
+        `(centerDelta=${desktopReopenState.centerDelta.toFixed(2)}, topSafeDelta=${desktopReopenState.topSafeDelta.toFixed(2)})`
+      );
+    }
+    if (desktopReopenState.headerOverlap > 1) {
+      throw new Error(
+        `Desktop header-occlusion regression: toolbar overlaps header after expand (overlap=${desktopReopenState.headerOverlap.toFixed(2)}px)`
       );
     }
     console.log('  ✓ Diagram toolbar collapse/expand (desktop): −/+ swap works');
@@ -2460,11 +2479,77 @@ async function run() {
       await delay(500);
       
       const elementsBeforeQuote = await page.evaluate(() => (window.__quoteAppGetElements && window.__quoteAppGetElements()) || []);
-      const gutterElement = elementsBeforeQuote.find(el => el.assetId && el.assetId.startsWith('GUT-'));
+      const gutterElement = elementsBeforeQuote.slice().reverse().find((el) => el.assetId && el.assetId.startsWith('GUT-'));
       if (!gutterElement) {
         throw new Error('Quote test: Failed to place gutter element on canvas');
       }
       console.log(`  ✓ Placed gutter element: ${gutterElement.assetId}`);
+
+      const checkDesktopBadgePopoverState = async () => page.evaluate(() => {
+        const popover = document.getElementById('badgeLengthPopover');
+        const input = document.getElementById('badgeLengthInput');
+        const deck = document.getElementById('measurementDeck');
+        const active = document.activeElement;
+        return {
+          popoverVisible: !!popover && !popover.hasAttribute('hidden'),
+          inputExists: !!input,
+          focusMatches: !!input && active === input,
+          deckContainsActive: !!deck && !!active && deck.contains(active),
+        };
+      });
+
+      let gutterBadgeCenter = await page.evaluate((id) => {
+        return typeof window.__quoteAppGetElementScreenCenter === 'function'
+          ? window.__quoteAppGetElementScreenCenter(id)
+          : null;
+      }, gutterElement.id);
+      if (!gutterBadgeCenter) {
+        throw new Error('Desktop badge dblclick regression: could not resolve badge center for measurable gutter');
+      }
+
+      await page.mouse.click(gutterBadgeCenter.x, gutterBadgeCenter.y, { clickCount: 2, delay: 40 });
+      await delay(360);
+      let desktopBadgePopoverState = await checkDesktopBadgePopoverState();
+      if (
+        !desktopBadgePopoverState.popoverVisible
+        || !desktopBadgePopoverState.inputExists
+        || !desktopBadgePopoverState.focusMatches
+        || desktopBadgePopoverState.deckContainsActive
+      ) {
+        await page.keyboard.press('Escape');
+        await delay(120);
+        gutterBadgeCenter = await page.evaluate((id) => {
+          return typeof window.__quoteAppGetElementScreenCenter === 'function'
+            ? window.__quoteAppGetElementScreenCenter(id)
+            : null;
+        }, gutterElement.id);
+        if (!gutterBadgeCenter) {
+          throw new Error('Desktop badge dblclick regression: could not resolve badge center on retry');
+        }
+        await page.mouse.click(gutterBadgeCenter.x, gutterBadgeCenter.y, { clickCount: 2, delay: 40 });
+        await delay(360);
+        desktopBadgePopoverState = await checkDesktopBadgePopoverState();
+      }
+
+      if (!desktopBadgePopoverState.popoverVisible || !desktopBadgePopoverState.inputExists) {
+        throw new Error('Desktop badge dblclick regression: badge popover should open on double-click');
+      }
+      if (!desktopBadgePopoverState.focusMatches) {
+        throw new Error('Desktop badge dblclick regression: badge input should be focused after double-click');
+      }
+      if (desktopBadgePopoverState.deckContainsActive) {
+        throw new Error('Desktop badge dblclick regression: focus should not jump to Measurement Deck input');
+      }
+      await page.keyboard.press('Escape');
+      await delay(120);
+      const badgePopoverClosed = await page.evaluate(() => {
+        const popover = document.getElementById('badgeLengthPopover');
+        return !popover || popover.hasAttribute('hidden');
+      });
+      if (!badgePopoverClosed) {
+        throw new Error('Desktop badge dblclick regression: popover should close on Escape');
+      }
+      console.log('  ✓ Desktop badge double-click opens inline popover input (not Measurement Deck)');
 
       // Open quote modal
       const generateQuoteBtn = await page.$('#generateQuoteBtn');

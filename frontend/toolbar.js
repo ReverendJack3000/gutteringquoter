@@ -42,11 +42,11 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-/** 54.64: Mobile-only top safe offset so diagram toolbar never tucks under the global header/notch. */
+/** 54.64 + 54.126: Top safe offset so diagram toolbar never tucks under the global header. */
 function getDiagramToolbarTopPad(wrapRect, basePad, getViewportMode) {
-  if (getViewportMode() !== 'mobile') return basePad;
   const globalToolbarWrap = document.getElementById('globalToolbarWrap');
   if (!globalToolbarWrap || !wrapRect) return basePad;
+  if (globalToolbarWrap.classList.contains('global-toolbar-wrap--bottom')) return basePad;
   const headerBottom = globalToolbarWrap.getBoundingClientRect().bottom;
   const overlap = headerBottom - wrapRect.top;
   if (overlap <= 0) return basePad;
@@ -262,9 +262,9 @@ export function initDiagramToolbarDrag(options = {}) {
   syncDragHandleAccessibility();
 
   const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
-  /* Default to expanded (fully visible); on mobile always start expanded so app opens with toolbar visible. */
-  let collapsed = localStorage.getItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED) === 'true';
-  if (getViewportMode() === 'mobile') collapsed = false;
+  /* Always open expanded on init (desktop + mobile). */
+  let collapsed = false;
+  localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_COLLAPSED, 'false');
   if (collapseBtn) {
     toolbar.classList.toggle('diagram-floating-toolbar--collapsed', collapsed);
     collapseBtn.setAttribute('aria-expanded', !collapsed);

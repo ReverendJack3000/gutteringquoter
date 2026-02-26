@@ -3527,6 +3527,7 @@ function updateServiceM8SectionState(hasIncomplete) {
   const section = document.getElementById('quoteServicem8Section');
   const input = document.getElementById('servicem8JobIdInput');
   const btn = document.getElementById('servicem8AddToJobBtn');
+  const notesInput = document.getElementById('servicem8NotesAboveInput');
   const reasonEl = document.getElementById('quoteServicem8DisabledReason');
   const labourWarnEl = document.getElementById('quoteLabourWarning');
   if (!section || !input || !btn) return;
@@ -3542,6 +3543,7 @@ function updateServiceM8SectionState(hasIncomplete) {
     section.classList.add('quote-servicem8-section--disabled');
     input.disabled = true;
     btn.disabled = true;
+    if (notesInput) notesInput.disabled = true;
     if (reasonEl) {
       reasonEl.textContent = !window.servicem8Connected
         ? 'Not signed in to ServiceM8'
@@ -3552,6 +3554,7 @@ function updateServiceM8SectionState(hasIncomplete) {
     section.classList.remove('quote-servicem8-section--disabled');
     input.disabled = false;
     btn.disabled = false;
+    if (notesInput) notesInput.disabled = false;
     if (reasonEl) reasonEl.hidden = true;
     // Section 61.1: technicians see "Create new job" only; editor/admin see "Add to existing job"
     const titleEl = section.querySelector('.quote-servicem8-title');
@@ -3768,6 +3771,10 @@ function getAddToJobPayload(jobUuid) {
   materialCost = Math.round(materialCost * 100) / 100;
   const userName = authState.user?.user_metadata?.full_name || authState.user?.email || authState.email || 'Quote App User';
 
+  // Optional notes above job note (49.35)
+  const notesAboveEl = document.getElementById('servicem8NotesAboveInput');
+  const job_notes_above = (notesAboveEl?.value || '').trim() || null;
+
   // Material-only lines for quote persistence (59.19); exclude labour (REP-LAB) and lines with no id
   let quote_materials = [];
   if (lastQuoteData?.materials?.length) {
@@ -3782,7 +3789,7 @@ function getAddToJobPayload(jobUuid) {
       });
   }
 
-  return {
+  const payload = {
     job_uuid: jobUuid,
     elements,
     quote_total: quoteTotal,
@@ -3793,6 +3800,8 @@ function getAddToJobPayload(jobUuid) {
     people_count: peopleCount,
     quote_materials,
   };
+  if (job_notes_above != null) payload.job_notes_above = job_notes_above;
+  return payload;
 }
 
 /**
@@ -3951,6 +3960,7 @@ function initJobConfirmationOverlay() {
       quote_materials: payload.quote_materials ?? [],
       image_base64: imageBase64,
     };
+    if (payload.job_notes_above != null) body.job_notes_above = payload.job_notes_above;
     if (createNewBtn) {
       createNewBtn.disabled = true;
       createNewBtn.classList.add('job-confirm-create-new--loading');
@@ -7957,8 +7967,6 @@ function draw() {
   const BADGE_EMPTY_BG = '#c62828';   // red when no value
   const BADGE_FILLED_BG = '#2e7d32';  // green when value entered
   const BADGE_NUMBER_COLOR = '#fff';  // white number inside circle
-  const BADGE_MEASURE_FILLED = '#2e7d32'; // green for measurement text when filled
-  const BADGE_MEASURE_OFFSET = 4;     // gap between circle and measurement text
   const measurableForBadges = state.elements
     .filter((el) => el.sequenceId != null && el.sequenceId > 0)
     .sort((a, b) => (a.sequenceId || 0) - (b.sequenceId || 0));
@@ -7966,6 +7974,8 @@ function draw() {
     if (el.sequenceId == null) return;
     const hasLength = el.measuredLength != null && el.measuredLength > 0;
     const displayLabel = getMeasurementDisplayLabel(el, measurableForBadges);
+    const measureText = hasLength ? formatMetres(el.measuredLength) : '';
+    const centerText = hasLength && measureText ? measureText : displayLabel;
     const pos = getElementDrawPosition(el);
     const badgeCx = offsetX + pos.x * scale + (el.width * scale) / 2;
     const badgeCy = offsetY + pos.y * scale + (el.height * scale) / 2;
@@ -7977,16 +7987,9 @@ function draw() {
     ctx.fill();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 14px sans-serif';
+    ctx.font = hasLength ? 'bold 11px sans-serif' : 'bold 14px sans-serif';
     ctx.fillStyle = BADGE_NUMBER_COLOR;
-    ctx.fillText(displayLabel, 0, 0);
-    if (hasLength) {
-      const measureText = formatMetres(el.measuredLength);
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = BADGE_MEASURE_FILLED;
-      ctx.textBaseline = 'top';
-      ctx.fillText(measureText, 0, BADGE_RADIUS + BADGE_MEASURE_OFFSET);
-    }
+    ctx.fillText(centerText, 0, 0);
     ctx.restore();
   });
 
@@ -8935,7 +8938,9 @@ function initCanvas() {
       } else {
         setSelection([hit.element.id].concat(state.selectedIds.filter((id) => id !== hit.element.id)));
       }
-      if (layoutState.viewportMode !== 'mobile' && hit.element.sequenceId && state.selectedIds.length === 1) {
+      const desktopBadgeHit = layoutState.viewportMode !== 'mobile' ? hitTestBadge(e.clientX, e.clientY) : null;
+      const clickedOwnBadge = !!desktopBadgeHit && desktopBadgeHit.id === hit.element.id;
+      if (layoutState.viewportMode !== 'mobile' && hit.element.sequenceId && state.selectedIds.length === 1 && !clickedOwnBadge) {
         scrollToMeasurementCardAndFocus(hit.element.id);
       }
       if (shouldSelectOnlyOnMobile) {
@@ -12629,16 +12634,28 @@ const GLOBAL_TOOLBAR_STORAGE_KEY_COLLAPSED = 'quoteApp_globalToolbarCollapsed';
 /** 54.33: Undo/Redo aria-hidden MutationObserver; disconnect on re-init or future teardown. */
 let globalToolbarUndoRedoAriaObserver = null;
 let globalToolbarController = null;
+let globalToolbarSizeObserver = null;
+let globalToolbarSizeObserverRafId = null;
 
 function applyGlobalToolbarPadding() {
   const wrap = document.getElementById('globalToolbarWrap');
   const viewCanvas = document.getElementById('view-canvas');
   if (!wrap || !viewCanvas) return;
   const h = wrap.offsetHeight;
+  if (!Number.isFinite(h) || h <= 0) return;
   viewCanvas.style.setProperty('--global-toolbar-height', h + 'px');
 }
 
 function initGlobalToolbar() {
+  if (globalToolbarSizeObserver) {
+    globalToolbarSizeObserver.disconnect();
+    globalToolbarSizeObserver = null;
+  }
+  if (globalToolbarSizeObserverRafId != null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(globalToolbarSizeObserverRafId);
+    globalToolbarSizeObserverRafId = null;
+  }
+
   const wrap = document.getElementById('globalToolbarWrap');
   const toolbar = document.getElementById('globalToolbar');
   const collapseBtn = document.getElementById('toolbarCollapseBtn');
@@ -12796,6 +12813,29 @@ function initGlobalToolbar() {
     });
   }
   updateUndoRedoButtons();
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const syncGlobalToolbarSize = () => {
+      applyGlobalToolbarPadding();
+      if (getVisibleViewId() === 'view-canvas') {
+        diagramToolbarApi?.syncAfterViewportResize?.();
+      }
+    };
+    const sizeObserver = new ResizeObserver(() => {
+      if (typeof requestAnimationFrame !== 'function') {
+        syncGlobalToolbarSize();
+        return;
+      }
+      if (globalToolbarSizeObserverRafId != null) return;
+      globalToolbarSizeObserverRafId = requestAnimationFrame(() => {
+        globalToolbarSizeObserverRafId = null;
+        syncGlobalToolbarSize();
+      });
+    });
+    sizeObserver.observe(wrap);
+    sizeObserver.observe(toolbar);
+    globalToolbarSizeObserver = sizeObserver;
+  }
 }
 
 function initPanel() {
@@ -17857,9 +17897,14 @@ function switchView(viewId, options = {}) {
   if (target) {
     target.classList.remove('hidden');
     if (viewId === 'view-canvas') {
+      applyGlobalToolbarPadding();
       resizeCanvas();
       draw();
       initDiagramToolbarDragWithApp();
+      requestAnimationFrame(() => {
+        applyGlobalToolbarPadding();
+        diagramToolbarApi?.syncAfterViewportResize?.();
+      });
     } else if (viewId === 'view-products') {
       renderProductLibrary();
     } else if (viewId === 'view-user-permissions') {

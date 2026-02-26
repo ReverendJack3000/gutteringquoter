@@ -6539,6 +6539,11 @@ body[data-viewport-mode="mobile"] .quick-quoter-list {
   background: #f8f8f8;
   font-weight: 600;
 }
+/* Double top border on header row only to separate from notes section above */
+.quote-parts-table thead th {
+  border-top-width: 2px;
+  border-top-style: solid;
+}
 
 .quote-parts-table tbody tr:nth-child(even) {
   background: #fafafa;
@@ -7052,6 +7057,64 @@ body[data-viewport-mode="mobile"] .quick-quoter-list {
   color: #1d1d1f;
   letter-spacing: -0.01em;
   line-height: 1.35;
+}
+
+/* Optional notes above job note (49.35): label + textarea; when in modal above table (quote-modal-notes-above) */
+.quote-servicem8-notes-above-wrap {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.quote-modal-notes-above {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+.quote-servicem8-notes-above-wrap .quote-servicem8-job-label {
+  display: block;
+  margin-bottom: 6px;
+}
+.quote-servicem8-notes-above-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  background: #F5F5F7;
+  color: #1d1d1f;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  resize: vertical;
+}
+.quote-servicem8-notes-above-input::placeholder {
+  color: #8e8e93;
+}
+.quote-servicem8-notes-above-input:focus {
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+/* Desktop: white background when focused (standard input look) */
+body:not([data-viewport-mode="mobile"]) .quote-servicem8-notes-above-input:focus {
+  background: #fff;
+}
+.quote-servicem8-notes-above-input:disabled {
+  background: #e5e5e7;
+  color: #8e8e93;
+}
+
+/* 49.36: Notes above job note – mobile-only spacing/readability (desktop unchanged) */
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-notes-above-wrap {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-notes-above-wrap .quote-servicem8-job-label {
+  margin-bottom: 10px;
+}
+body[data-viewport-mode="mobile"] #quoteModal .quote-servicem8-notes-above-input {
+  padding: 14px 16px;
+  min-height: 4.5em;
+  line-height: 1.5;
 }
 
 /* Horizontal controls row: Job # label + input + button, 12px gap */

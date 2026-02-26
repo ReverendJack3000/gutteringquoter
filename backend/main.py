@@ -890,6 +890,7 @@ class AddToJobRequest(BaseModel):
     profile: str = Field("spouting", description="stormcloud | classic | spouting for material line name")
     people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
     quote_materials: Optional[list[QuoteMaterialLine]] = Field(None, description="Material lines (id, qty) for quote items; exclude labour (REP-LAB)")
+    job_notes_above: Optional[str] = Field(None, description="Optional text prepended above the job note when posting to ServiceM8 (49.35)")
 
 
 class UploadJobAttachmentRequest(BaseModel):
@@ -910,6 +911,7 @@ class CreateNewJobRequest(BaseModel):
     people_count: int = Field(1, ge=1, description="Number of labour lines / people (for job note: People Req)")
     quote_materials: Optional[list[QuoteMaterialLine]] = Field(None, description="Material lines (id, qty) for quote items; exclude labour (REP-LAB)")
     image_base64: Optional[str] = Field(None, description="PNG blueprint image as base64 (no data URL prefix); attached to both original and new job")
+    job_notes_above: Optional[str] = Field(None, description="Optional text prepended above job note/description when posting to ServiceM8 (49.35)")
 
 
 class CreateBonusPeriodRequest(BaseModel):
@@ -2372,6 +2374,9 @@ def api_servicem8_add_to_job(
         body.people_count,
         body.material_cost,
     )
+    notes_above = (body.job_notes_above or "").strip()
+    if notes_above:
+        note_text = notes_above + "\n\n" + note_text
     ok, err = sm8.add_job_note(tokens["access_token"], body.job_uuid, note_text)
     if not ok:
         raise HTTPException(502, f"Failed to add job note: {err or 'unknown'}")
@@ -2512,6 +2517,9 @@ def api_servicem8_create_new_job(
         body.material_cost,
     )
     job_description = "New job created via Jacks app for repairs.\n\n" + job_description
+    notes_above = (body.job_notes_above or "").strip()
+    if notes_above:
+        job_description = notes_above + "\n\n" + job_description
 
     # Build create-job payload from original job (required: company_uuid; copy optional fields)
     create_payload = {
@@ -2559,6 +2567,8 @@ def api_servicem8_create_new_job(
         body.people_count,
         body.material_cost,
     )
+    if notes_above:
+        note_text = notes_above + "\n\n" + note_text
     ok, err = sm8.add_job_note(access_token, body.original_job_uuid, note_text)
     if not ok:
         raise HTTPException(502, f"Failed to add note to original job: {err or 'unknown'}")
