@@ -3333,6 +3333,20 @@ body[data-viewport-mode="mobile"] .product-thumb img {
   color: #888;
 }
 
+/* Storm Cloud selected: match thumbnail badge (yellow bg, black text) */
+#profileFilter.profile-filter--storm-cloud {
+  background: #FDED3D;
+  color: #000000;
+  border-color: #e0d535;
+}
+
+/* Classic selected: match thumbnail badge (black bg, yellow text) */
+#profileFilter.profile-filter--classic {
+  background: #000000;
+  color: #FDED3D;
+  border-color: #333;
+}
+
 .panel-filters select:focus {
   outline: none;
   border-color: #007aff;

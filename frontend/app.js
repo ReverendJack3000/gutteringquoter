@@ -456,6 +456,21 @@ function getProfileFromAssetId(assetId) {
   return null;
 }
 
+/**
+ * Return panel profile filter value for auto-filter when adding a part: 'storm_cloud' | 'classic' | null.
+ * Used by canvas drop and panel thumb click to set #profileFilter without touching #productFilterProfile.
+ * Prefer state.products lookup by productId; fallback getProfileFromAssetId and map SC→storm_cloud, CL→classic.
+ */
+function getProfileForPanelFilter(productId, product) {
+  if (product && (product.profile === 'storm_cloud' || product.profile === 'classic')) return product.profile;
+  const p = state.products.find((x) => x.id === productId);
+  if (p && (p.profile === 'storm_cloud' || p.profile === 'classic')) return p.profile;
+  const code = getProfileFromAssetId(productId);
+  if (code === 'SC') return 'storm_cloud';
+  if (code === 'CL') return 'classic';
+  return null;
+}
+
 /** Get gutter length in metres from asset ID (e.g. GUT-SC-MAR-5M → 5). */
 function getGutterLengthMetres(assetId) {
   const m = GUTTER_PATTERN.exec(String(assetId || '').trim());
@@ -7454,6 +7469,7 @@ function clearCanvasToEmpty(options = {}) {
   renderMeasurementDeck();
   draw();
   if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+  setPanelFiltersAndApply('', '');
 }
 
 function rotatedRectBbox(x, y, w, h, rotationDeg) {
@@ -9742,6 +9758,8 @@ function initCanvas() {
         el.measuredLength = 0;
       }
       state.elements.push(el);
+      const panelProfile = getProfileForPanelFilter(productId);
+      if (panelProfile) setPanelFiltersAndApply(panelProfile, undefined);
       setSelection([el.id]);
       if (typeof announceCanvas === 'function') announceCanvas('Product added to canvas.');
       updatePlaceholderVisibility();
@@ -13293,6 +13311,8 @@ function renderProducts(products) {
         renderMeasurementDeck();
         draw();
         if (layoutState.viewportMode === 'mobile') setPanelExpanded(false);
+        const panelProfile = getProfileForPanelFilter(p.id, p);
+        if (panelProfile) setPanelFiltersAndApply(panelProfile, undefined);
       } catch (err) {
         console.error('Failed to load diagram image', err);
       }
@@ -13640,10 +13660,38 @@ function applyProductFilters() {
   renderProducts(filtered);
 }
 
+/**
+ * Set canvas panel profile and/or size filter (state + DOM) and re-apply grid. Used by add-path (profile only) and clearCanvasToEmpty (both to '').
+ * profileValue / sizeValue: pass string to set, or undefined to leave unchanged.
+ */
+function setPanelFiltersAndApply(profileValue, sizeValue) {
+  const profileEl = document.getElementById('profileFilter');
+  const sizeEl = document.getElementById('sizeFilter');
+  if (profileValue !== undefined) {
+    state.profileFilter = (profileValue || '').trim();
+    if (profileEl) {
+      profileEl.value = state.profileFilter;
+      profileEl.classList.toggle('profile-filter--storm-cloud', state.profileFilter === 'storm_cloud');
+      profileEl.classList.toggle('profile-filter--classic', state.profileFilter === 'classic');
+    }
+  }
+  if (sizeValue !== undefined) {
+    state.sizeFilter = (sizeValue || '').trim();
+    if (sizeEl) {
+      sizeEl.value = state.sizeFilter;
+      sizeEl.classList.toggle('size-filter-default', !state.sizeFilter);
+    }
+  }
+  if (!panelProductsLoadedOnce || panelProductsDirty) void ensurePanelProductsLoaded({ reason: 'panel-filters-sync' });
+  applyProductFilters();
+}
+
 function initProducts() {
   const profileFilter = document.getElementById('profileFilter');
   profileFilter?.addEventListener('change', (e) => {
     state.profileFilter = (e.target.value || '').trim();
+    profileFilter.classList.toggle('profile-filter--storm-cloud', state.profileFilter === 'storm_cloud');
+    profileFilter.classList.toggle('profile-filter--classic', state.profileFilter === 'classic');
     if (!panelProductsLoadedOnce || panelProductsDirty) void ensurePanelProductsLoaded({ reason: 'profile-filter-change' });
     applyProductFilters();
   });
