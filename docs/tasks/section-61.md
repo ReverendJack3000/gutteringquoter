@@ -40,4 +40,10 @@
 
 ---
 
-*For the index and uncompleted table, see TASK_LIST.md. Implementation order: 61.1 (permissions) first; then 61.2–61.3 (pop-up); then 61.4–61.6 (labour); 61.7 (regression) last.*
+### Confirm Job overlay button wiring (regression)
+
+- [x] **61.8** **Confirm Job Details overlay: Add to Job / Create New Job buttons.** Ensure both buttons in the Confirm Job Details popup (`#jobConfirmAddBtn`, `#jobConfirmCreateNew`) trigger the loading wheel and the correct API calls (add-to-job, create-new-job). If wiring was broken (listeners not attached or clicks not reaching buttons), fix init order, z-index/pointer-events, or early returns in `handleConfirm`/`handleCreateNew` so loading state and fetch always run on click. Desktop and mobile; Railway deploy must remain successful. See `docs/plans/PLAN_CONFIRM_JOB_OVERLAY_BUTTONS.md`.
+
+---
+
+*For the index and uncompleted table, see TASK_LIST.md. Implementation order: 61.1 (permissions) first; then 61.2–61.3 (pop-up); then 61.4–61.6 (labour); 61.7 (regression); 61.8 (confirm overlay buttons) last.*

@@ -2569,6 +2569,18 @@ async function run() {
       }
       console.log('  ✓ Quote modal opened');
 
+      // Job confirm overlay (61.8): ensure overlay and action buttons exist so Add to Job / Create New Job can run
+      const jobConfirmButtonsExist = await page.evaluate(() => {
+        const overlay = document.getElementById('jobConfirmOverlay');
+        const addBtn = document.getElementById('jobConfirmAddBtn');
+        const createNewBtn = document.getElementById('jobConfirmCreateNew');
+        return { overlay: !!overlay, addBtn: !!addBtn, createNewBtn: !!createNewBtn };
+      });
+      if (!jobConfirmButtonsExist.addBtn || !jobConfirmButtonsExist.createNewBtn) {
+        throw new Error(`Quote test: Job confirm overlay buttons missing (overlay=${jobConfirmButtonsExist.overlay}, addBtn=${jobConfirmButtonsExist.addBtn}, createNewBtn=${jobConfirmButtonsExist.createNewBtn})`);
+      }
+      console.log('  ✓ Quote test: Job confirm overlay and buttons present');
+
       // Wait for labour row UI to initialize (current implementation uses inline labour rows).
       await delay(500);
       const labourRowState = await page.evaluate(() => {

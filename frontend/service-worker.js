@@ -1,4 +1,5 @@
-const SW_VERSION = '1';
+const SW_VERSION = '3';
+const ASSET_VERSION = '20260226-loadspeed2';
 const CACHE_PREFIX = 'quote-app';
 const SHELL_CACHE = `${CACHE_PREFIX}-shell-v${SW_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v${SW_VERSION}`;
@@ -8,9 +9,11 @@ const ACTIVE_CACHES = [SHELL_CACHE, RUNTIME_CACHE];
 const SHELL_ASSETS = [
   '/',
   '/index.html',
-  '/styles.css?v=40',
-  '/app.js',
-  '/pwa.js',
+  `/styles.css?v=${ASSET_VERSION}`,
+  `/app.js?v=${ASSET_VERSION}`,
+  `/toolbar.js?v=${ASSET_VERSION}`,
+  `/modules/admin-products-bonus.js?v=${ASSET_VERSION}`,
+  `/pwa.js?v=${ASSET_VERSION}`,
   '/manifest.webmanifest',
   '/offline.html',
   '/favicon.ico',

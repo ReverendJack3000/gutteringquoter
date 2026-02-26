@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Confirm Job overlay (61.8): defensive null-guard on addBtn in handleConfirm – 2026-02
+
+- **Symptom / context:** QA audit found that in `handleConfirm` (job confirm overlay “Add to Job” handler), `addBtn` was used without a null check in four cleanup paths (!resp.ok, handleAuthFailure(attachResp), success path, catch), while `handleCreateNew` consistently used `if (createNewBtn)` for all cleanup. If `addBtn` were ever null in those paths, the code would throw.
+- **Cause:** Listeners are attached with `addBtn?.addEventListener`, so in current flow the handler does not run when `addBtn` is null. The gap was defensive consistency and future-proofing (e.g. DOM or init order changes).
+- **Fix / workaround:** In `frontend/app.js`, in `initJobConfirmationOverlay` → `handleConfirm`: wrap every cleanup use of `addBtn` in `if (addBtn) { ... }` (the four places: !resp.ok block, handleAuthFailure(attachResp) block, success path including `setTimeout` callback via `addBtnRef`, and catch block). The success path uses a local `addBtnRef = addBtn` before `setTimeout` so the callback safely guards with `if (addBtnRef)`. In-code comment references “61.8 audit” for traceability.
+
+---
+
 ## Mobile performance (54.117): DPR cap and coordinate math – 2026-02
 
 - **Symptom / context:** After capping canvas `devicePixelRatio` at 2 on mobile (Section 54.117.1), taps or pointer events register in the wrong place on 3x devices; hit-testing is offset.

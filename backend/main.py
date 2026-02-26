@@ -10,7 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -59,6 +59,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -969,6 +970,52 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+
+FINGERPRINTED_CACHE_CONTROL = "public, max-age=31536000, immutable"
+STATIC_CACHE_CONTROL = "public, max-age=86400"
+HTML_CACHE_CONTROL = "no-cache"
+NO_CACHE_PATHS = {"/manifest.webmanifest", "/service-worker.js"}
+STATIC_CACHEABLE_PATHS = {
+    "/app.js",
+    "/toolbar.js",
+    "/styles.css",
+    "/pwa.js",
+    "/index.html",
+    "/offline.html",
+    "/favicon.ico",
+    "/favicon-32x32.png",
+    "/login-logo.png",
+}
+
+
+def _is_static_cacheable_path(path: str) -> bool:
+    if path in STATIC_CACHEABLE_PATHS:
+        return True
+    return path.startswith("/assets/") or path.startswith("/icons/") or path.startswith("/modules/")
+
+
+@app.middleware("http")
+async def apply_static_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/api/"):
+        return response
+    if path == "/" or path.endswith(".html"):
+        response.headers.setdefault("Cache-Control", HTML_CACHE_CONTROL)
+        return response
+    if path in NO_CACHE_PATHS:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+    if not _is_static_cacheable_path(path):
+        return response
+    if request.query_params.get("v"):
+        response.headers.setdefault("Cache-Control", FINGERPRINTED_CACHE_CONTROL)
+        return response
+    response.headers.setdefault("Cache-Control", STATIC_CACHE_CONTROL)
+    return response
 
 
 @app.get("/api/health")

@@ -615,6 +615,21 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.126.4** **E2E desktop header-occlusion regression checks.** In `e2e/run.js`, extend desktop toolbar open/reopen assertions with header overlap (`headerBottom - toolbarTop`, clamped at `>= 0`) plus top-safe anchor delta checks, and fail when overlap is detected.
 - [ ] **54.126.5** **Manual QA + Railway safety sign-off.** Validate desktop (fresh load into canvas, diagram toolbar collapse/expand, global header collapse/expand, 1280x720 and 1920x1080) and mobile safe-top smoke; confirm no Railway env/build/config changes.
 
+**54.127 Mobile-first load-speed hardening (desktop-safe, Railway-safe)**
+
+- [x] **54.127.1** **Split/lazy-load frontend modules.** Break `frontend/app.js` into lazy-loaded feature modules so first-load JS parses less code up front; keep desktop and mobile behavior unchanged.
+- [x] **54.127.2** **Defer non-critical init work.** In `frontend/app.js`, defer non-critical view initializers (`initProductsView`, `initUserPermissionsView`, `initTechnicianBonusView`) to idle time and keep lazy guards in `switchView(...)`.
+- [x] **54.127.3** **Defer + dedupe panel product loading.** In `frontend/app.js`, remove eager startup product fetch, load products on canvas/panel demand, and dedupe with shared in-flight promise + dirty/force refresh control.
+- [x] **54.127.4** **True lazy-load product thumbnails.** In `frontend/app.js`, switch panel thumb hydration to IntersectionObserver + `img.loading='lazy'` + `img.decoding='async'` so offscreen thumbs do not load at panel open.
+- [x] **54.127.5** **Remove mobile double-fetch thumb path.** In `frontend/app.js`, stop preloading/second-fetch thumbnail flow so panel thumbs hydrate once on intersection with a single request path.
+- [x] **54.127.6** **Optimize/thumbnailed Marley assets.** Add pre-optimized thumbnail asset variants (or equivalent pipeline) for panel thumbnails while preserving full-quality canvas assets.
+- [x] **54.127.7** **Enable static compression.** In `backend/main.py`, add gzip middleware (`GZipMiddleware`) for static/API responses in Railway-safe FastAPI path.
+- [x] **54.127.8** **Fingerprint + immutable cache strategy for static assets.** Add versioned static URLs in `frontend/index.html`/`frontend/service-worker.js` and backend cache headers (`Cache-Control: public, max-age=31536000, immutable` for fingerprinted static requests).
+- [x] **54.127.9** **Defer Supabase SDK load.** Remove eager Supabase CDN script from `frontend/index.html`; in `frontend/app.js` load SDK on demand during `initAuth()` after `/api/config` confirms Supabase values.
+- [x] **54.127.10** **Performance regression + Railway safety sign-off.** Run automated regression + manual mobile/desktop QA and document deploy safety before marking complete.
+- [x] **54.127.11** **F1: Unhandled rejection when switching to Products view.** In `frontend/app.js` `switchView()` for `viewId === 'view-products'`, attach `.catch()` to `renderProductLibrary()` so module load failures are handled (e.g. `void renderProductLibrary().catch((e) => console.warn('renderProductLibrary failed', e));`). See docs/audits/2026-02-27-section-54-127-load-speed-audit.md.
+- [x] **54.127.12** **F2: Panel and facepile thumb 404 fallback.** In `frontend/app.js` `renderProducts()`: (1) set `thumb.dataset.fallbackSrc = fallbackThumbSrc` for each grid thumb; (2) in panel grid IntersectionObserver callback and else branch where `imgEl.src` is set, add `img.onerror` that sets `img.src` to fallback (from dataset); (3) in facepile block, add `img.onerror` that sets `img.src = fallbackThumbSrc`. See audit doc.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
