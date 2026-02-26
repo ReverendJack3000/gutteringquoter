@@ -1788,6 +1788,11 @@ body.a11y-force-motion .toggle-icon::after {
   display: flex;
 }
 
+/* Ensure [hidden] is not overridden by display: flex (Quick Quote entry hides when blueprint exists; 62.9/62.11) */
+#quickQuoterEntry[hidden] {
+  display: none !important;
+}
+
 .canvas-placeholder .placeholder-card,
 .quick-quoter-entry .placeholder-card {
   pointer-events: auto;

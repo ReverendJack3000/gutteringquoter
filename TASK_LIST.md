@@ -100,7 +100,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
 | 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 62 | 62.15, 62.16, 62.17 | (62.15) Quick Quoter desktop parity follow-up verification; manual QA/sign-off pending. (62.16) Mobile Quick Quote entry: blue button, 44px height, same width as camera; done. (62.17) Desktop Quick Quote entry: same blue button treatment as mobile; CSS under body[data-viewport-mode="desktop"]. |
 | 63 | 63.9, 63.16, **63.17** | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). **(63.17) Material Rules section order: Measured-Length first, Quick Quoter second (HTML reorder only).** |
 ---
 

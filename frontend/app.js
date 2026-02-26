@@ -4957,6 +4957,7 @@ function initColorPalette() {
         after: state.blueprintImage,
       });
       state.blueprintImage = blueprintImageBefore;
+      updatePlaceholderVisibility();
     }
     
     draw();
