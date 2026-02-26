@@ -898,7 +898,7 @@ function syncMobileOrientationPolicy(reason) {
   void applyMobileOrientationTarget(target, reason);
 }
 
-/** 54.80: Diagram toolbar API (collapseIfExpanded). Set by initDiagramToolbarDragWithApp. */
+/** 54.80: Diagram toolbar API (collapseIfExpanded + resize sync). Set by initDiagramToolbarDragWithApp. */
 let diagramToolbarApi = null;
 
 /** Last successful quote response for edit mode: { materials, materials_subtotal, labour_hours, labour_rate, labour_subtotal, total } */
@@ -1907,8 +1907,8 @@ function syncMobileQuoteLineSummaries() {
             wrap.innerHTML = `<input type="number" class="quote-header-metres-input" value="${escapeHtml(displayVal)}" min="0" step="0.5" placeholder="Metres?" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span>`;
             const headerMetresInput = wrap.querySelector('.quote-header-metres-input');
             if (headerMetresInput) {
+              // Avoid duplicate quote API calls from change+blur for the same edit.
               headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
-              headerMetresInput.addEventListener('blur', () => calculateAndDisplayQuote());
             }
           }
         } else if (row.dataset.labourRow === 'true') {
@@ -4799,8 +4799,8 @@ async function calculateAndDisplayQuote() {
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
       if (headerMetresInput) {
+        // Avoid duplicate quote API calls from change+blur for the same edit.
         headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
-        headerMetresInput.addEventListener('blur', () => calculateAndDisplayQuote());
       }
       // When profile is incomplete, skip child gutter rows (they're default/placeholder values from backend)
       // Only render brackets/screws if they exist, but gutters should be empty until header length is entered
@@ -4857,8 +4857,8 @@ async function calculateAndDisplayQuote() {
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
       if (headerMetresInput) {
+        // Avoid duplicate quote API calls from change+blur for the same edit.
         headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
-        headerMetresInput.addEventListener('blur', () => calculateAndDisplayQuote());
       }
       // Children: downpipes first (skip when incomplete, like gutter), then clips; screws rendered after all sizes when downpipe-only
       effectiveGroup.children.forEach((line) => {
@@ -9991,7 +9991,7 @@ function initZoomControls() {
 }
 
 function initExport() {
-  document.getElementById('exportBtn').addEventListener('click', () => {
+  document.getElementById('exportBtn')?.addEventListener('click', () => {
     const { canvas, ctx, blueprintImage, elements, scale, offsetX, offsetY } = state;
     if (!canvas || !ctx) return;
     if (!blueprintImage && elements.length === 0) {
@@ -13111,11 +13111,12 @@ function applyViewportMode(mode, options = {}) {
 
   if (modeChanged) {
     const shouldExpandPanelByDefault = normalizedMode === 'desktop';
-    if (normalizedMode === 'desktop' && panelThumbLazyIo) {
+    if (panelThumbLazyIo) {
       panelThumbLazyIo.disconnect();
       panelThumbLazyIo = null;
-      applyProductFilters();
     }
+    // Rebuild thumbnail label/badge DOM so mobile-only rendering tracks the active viewport.
+    applyProductFilters();
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
     syncQuoteModalViewportState();
     syncMobileLabourRowSummary();
@@ -13146,6 +13147,7 @@ function handleViewportResize() {
     const nextMode = detectViewportMode();
     if (nextMode !== layoutState.viewportMode) {
       applyViewportMode(nextMode, { announce: true });
+      return;
     }
   }, 120);
 }
@@ -13341,6 +13343,20 @@ function renderProducts(products) {
     thumb.className = 'product-thumb';
     thumb.draggable = true;
     const displayName = displayNameOverrides[p.id] || p.name;
+    const rawProfile = String(p.profile || '').trim().toLowerCase();
+    const profileKey =
+      rawProfile === 'storm_cloud' || rawProfile === 'stormcloud'
+        ? 'storm'
+        : rawProfile === 'classic'
+          ? 'classic'
+          : 'other';
+    let visibleLabel = displayName;
+    if (profileKey === 'storm') {
+      visibleLabel = displayName.replace(/\bstorm\s+cloud\b/ig, ' ').replace(/\s+/g, ' ').trim();
+    } else if (profileKey === 'classic') {
+      visibleLabel = displayName.replace(/\bclassic\b/ig, ' ').replace(/\s+/g, ' ').trim();
+    }
+    if (!visibleLabel) visibleLabel = displayName;
     thumb.setAttribute('aria-label', `Product ${displayName}, drag onto canvas or click to add at center`);
     thumb.dataset.productId = p.id;
     const rawDiagramUrl = p.diagramUrl || p.diagram_url || '';
@@ -13352,7 +13368,14 @@ function renderProducts(products) {
     img.alt = displayName;
     img.src = thumbImgSrc;
     thumb.appendChild(img);
-    thumb.appendChild(document.createElement('span')).textContent = displayName;
+    if (profileKey !== 'other') {
+      const badge = document.createElement('span');
+      badge.className = 'product-thumb-profile-badge';
+      badge.textContent = profileKey === 'storm' ? 'Storm' : 'Classic';
+      badge.setAttribute('aria-hidden', 'true');
+      thumb.prepend(badge);
+    }
+    thumb.appendChild(document.createElement('span')).textContent = visibleLabel;
     // Mobile-only (54.120.1): Lazy-load filled SVG thumb when thumb enters view; store src for Intersection Observer
     if (isMobile && /\.svg($|\?)/i.test(thumbImgSrc)) {
       thumb.dataset.thumbImgSrc = thumbImgSrc;

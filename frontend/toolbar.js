@@ -77,7 +77,9 @@ function placeDiagramToolbarAtTopCenter(toolbar, wrap, getViewportMode) {
   const maxLeft = Math.max(pad, wrapRect.width - tw - pad);
   const maxTop = wrapRect.height - th - pad;
   const minTop = Math.min(topPad, maxTop);
-  const left = clampNumber((wrapRect.width - tw) / 2, pad, maxLeft);
+  const centerLeft = (wrapRect.width - tw) / 2;
+  const hasHorizontalPadRoom = tw <= (wrapRect.width - (pad * 2));
+  const left = hasHorizontalPadRoom ? clampNumber(centerLeft, pad, maxLeft) : centerLeft;
   const top = clampNumber(topPad, minTop, maxTop);
   applyDiagramToolbarPosition(toolbar, left, top, 'horizontal');
   localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(left)));
@@ -164,7 +166,12 @@ function applyMobileToolbarEdgeSnap(toolbar, wrap, snap, getViewportMode) {
     top = (wrapRect.height - th) / 2;
   }
 
-  left = clampNumber(left, pad, maxLeft);
+  const hasHorizontalPadRoom = tw <= (wrapRect.width - (pad * 2));
+  if (edge === 'top' || edge === 'bottom') {
+    left = hasHorizontalPadRoom ? clampNumber(left, pad, maxLeft) : left;
+  } else {
+    left = clampNumber(left, pad, maxLeft);
+  }
   top = clampNumber(top, minTop, maxTop);
   applyDiagramToolbarPosition(toolbar, left, top, orientation);
   localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(left)));
@@ -279,6 +286,7 @@ export function initDiagramToolbarDrag(options = {}) {
   let collapsedExpandDragCandidate = null;
   let expandRecenterTimerIds = [];
   let expandRecenterTransitionHandler = null;
+  let resizeRecenterTimerIds = [];
 
   function clearExpandRecenterTimers() {
     if (!expandRecenterTimerIds.length) return;
@@ -297,6 +305,14 @@ export function initDiagramToolbarDrag(options = {}) {
   function clearExpandRecentering() {
     clearExpandRecenterTimers();
     clearExpandRecenterTransitionHook();
+  }
+
+  function clearResizeRecentering() {
+    if (!resizeRecenterTimerIds.length) return;
+    for (const timerId of resizeRecenterTimerIds) {
+      window.clearTimeout(timerId);
+    }
+    resizeRecenterTimerIds = [];
   }
 
   function recenterAfterExpandTransitionIfNeeded() {
@@ -536,7 +552,7 @@ export function initDiagramToolbarDrag(options = {}) {
         updateDockedSide(toolbar, wrap);
         if (!collapsed) {
           /* Expanded width/height animate in; recenter a few times across the transition so open position remains top-center. */
-          const recenterDelaysMs = [120, 220, 320, 360];
+          const recenterDelaysMs = [120, 220, 320, 360, 380];
           expandRecenterTimerIds = recenterDelaysMs.map((delayMs) => window.setTimeout(() => {
             recenterAfterExpandTransitionIfNeeded();
           }, delayMs));
@@ -547,8 +563,10 @@ export function initDiagramToolbarDrag(options = {}) {
             const isToolbarTarget = target === toolbar;
             const isToolsWrapTarget = target.classList.contains('diagram-toolbar-tools-wrap');
             if (!isToolbarTarget && !isToolsWrapTarget) return;
-            const watchedProps = new Set(['max-width', 'width', 'padding', 'gap']);
-            if (!watchedProps.has(event.propertyName)) return;
+            if (getViewportMode() !== 'mobile') {
+              const watchedProps = new Set(['max-width', 'width', 'padding', 'gap']);
+              if (!watchedProps.has(event.propertyName)) return;
+            }
             clearExpandRecenterTransitionHook();
             recenterAfterExpandTransitionIfNeeded();
           };
@@ -605,15 +623,31 @@ export function initDiagramToolbarDrag(options = {}) {
 
   const syncToolbarAfterResize = () => {
     const currentWrap = getDiagramToolbarWrap();
-    clampDiagramToolbarToWrap(toolbar, currentWrap, getViewportMode);
-    updateOrientationFromPosition();
+    const isMobile = getViewportMode() === 'mobile';
+    const isCollapsed = toolbar.classList.contains('diagram-floating-toolbar--collapsed');
+    if (isMobile && !isCollapsed) {
+      clearResizeRecentering();
+      clampDiagramToolbarToWrap(toolbar, currentWrap, getViewportMode);
+      updateOrientationFromPosition();
+    } else {
+      clearResizeRecentering();
+      clampDiagramToolbarToWrap(toolbar, currentWrap, getViewportMode);
+      updateOrientationFromPosition();
+    }
     updateDockedSide(toolbar, currentWrap);
     syncDragHandleAccessibility();
   };
   let resizeObserverRafId = null;
-  const ro = new ResizeObserver(() => {
+  const ro = new ResizeObserver((entries = []) => {
     if (dragPointerId != null) return;
-    if (getViewportMode() !== 'mobile' || typeof requestAnimationFrame !== 'function') {
+    const isMobile = getViewportMode() === 'mobile';
+    if (!isMobile) {
+      const hasWrapResize = entries.some((entry) => entry && entry.target === wrap);
+      if (!hasWrapResize) return;
+      syncToolbarAfterResize();
+      return;
+    }
+    if (typeof requestAnimationFrame !== 'function') {
       syncToolbarAfterResize();
       return;
     }
@@ -625,6 +659,26 @@ export function initDiagramToolbarDrag(options = {}) {
     });
   });
   ro.observe(wrap);
+  // Keep top-center alignment stable when toolbar width/height changes (especially on mobile).
+  ro.observe(toolbar);
+
+  let windowResizeRafId = null;
+  const onWindowResize = () => {
+    if (getViewportMode() !== 'mobile') return;
+    if (dragPointerId != null) return;
+    if (typeof requestAnimationFrame !== 'function') {
+      syncToolbarAfterResize();
+      return;
+    }
+    if (windowResizeRafId != null) return;
+    windowResizeRafId = requestAnimationFrame(() => {
+      windowResizeRafId = null;
+      if (dragPointerId != null) return;
+      syncToolbarAfterResize();
+    });
+  };
+  window.addEventListener('resize', onWindowResize, { passive: true });
+  window.addEventListener('orientationchange', onWindowResize, { passive: true });
 
   diagramToolbarDragCleanup = () => {
     document.removeEventListener('pointermove', onPointerMove, { capture: true });
@@ -635,11 +689,21 @@ export function initDiagramToolbarDrag(options = {}) {
       resizeObserverRafId = null;
     }
     clearExpandRecentering();
+    clearResizeRecentering();
+    if (windowResizeRafId != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(windowResizeRafId);
+      windowResizeRafId = null;
+    }
+    window.removeEventListener('resize', onWindowResize);
+    window.removeEventListener('orientationchange', onWindowResize);
     ro.disconnect();
     dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
     if (collapseBtn) collapseBtn.removeEventListener('click', onCollapseClick);
   };
 
-  return { collapseIfExpanded };
+  return {
+    collapseIfExpanded,
+    syncAfterViewportResize: syncToolbarAfterResize,
+  };
 }
