@@ -241,13 +241,16 @@ export function initDiagramToolbarDrag(options = {}) {
   const toolbar = document.getElementById('diagramFloatingToolbar');
   const dragHandle = document.getElementById('diagramToolbarDragHandle');
   const wrap = getDiagramToolbarWrap();
-  if (!toolbar || !dragHandle || !wrap) return { collapseIfExpanded: function () {} };
+  if (!toolbar || !wrap) return { collapseIfExpanded: function () {} };
 
   diagramToolbarDragCleanupIfNeeded();
-  dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
-  dragHandle.title = 'Drag to move toolbar';
-  dragHandle.style.display = 'block';
+  if (dragHandle) {
+    dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
+    dragHandle.title = 'Drag to move toolbar';
+    dragHandle.style.display = 'block';
+  }
   function syncDragHandleAccessibility() {
+    if (!dragHandle) return;
     if (getViewportMode() === 'mobile') {
       dragHandle.setAttribute('aria-hidden', 'true');
       dragHandle.setAttribute('tabindex', '-1');
@@ -283,7 +286,8 @@ export function initDiagramToolbarDrag(options = {}) {
   let didDragThisSession = false;
   let lastDragEndAt = 0;
   let suppressNextExpandTap = false;
-  let collapsedExpandDragCandidate = null;
+  let suppressToolbarClickUntil = 0;
+  let toolbarDragCandidate = null;
   let expandRecenterTimerIds = [];
   let expandRecenterTransitionHandler = null;
   let resizeRecenterTimerIds = [];
@@ -381,20 +385,23 @@ export function initDiagramToolbarDrag(options = {}) {
     return now - lastDragEndAt <= DIAGRAM_TOOLBAR_COLLAPSE_TAP_SUPPRESS_MS;
   }
 
-  function startCollapsedExpandDragCandidate(e) {
+  function startToolbarDragCandidate(e) {
+    if (dragPointerId != null) return;
     if (e.button !== 0 && e.pointerType !== 'touch') return;
-    collapsedExpandDragCandidate = {
+    toolbarDragCandidate = {
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       toolbarStartLeft: parseFloat(toolbar.style.left) || 0,
       toolbarStartTop: parseFloat(toolbar.style.top) || 0,
     };
+    didDragThisSession = false;
   }
 
-  function promoteCollapsedExpandCandidateToDrag(e, candidate) {
+  function promoteToolbarDragCandidateToDrag(e, candidate) {
     e.preventDefault();
     e.stopPropagation();
+    toolbarDragCandidate = null;
     dragPointerId = candidate.pointerId;
     didDragThisSession = true;
     dragStartX = candidate.startX;
@@ -402,9 +409,7 @@ export function initDiagramToolbarDrag(options = {}) {
     toolbarStartLeft = candidate.toolbarStartLeft;
     toolbarStartTop = candidate.toolbarStartTop;
     toolbar.style.transition = 'none';
-    dragHandle.style.cursor = 'grabbing';
     if (collapseBtn && toolbar.classList.contains('diagram-floating-toolbar--collapsed')) collapseBtn.style.cursor = 'grabbing';
-    dragHandle.classList.add('diagram-toolbar-drag-handle--dragging');
     if (getViewportMode() === 'mobile' && typeof navigator !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate(10); } catch (_) {}
     }
@@ -413,39 +418,14 @@ export function initDiagramToolbarDrag(options = {}) {
     } catch (_) {}
   }
 
-  function onPointerDown(e) {
-    if (e.button !== 0 && e.pointerType !== 'touch') return;
-    collapsedExpandDragCandidate = null;
-    /* When collapsed, tap on + must fire click to expand; only preventDefault if we're not on the expand button. */
-    const isTapOnExpandBtn = collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target)) && toolbar.classList.contains('diagram-floating-toolbar--collapsed');
-    if (!isTapOnExpandBtn) {
-      e.preventDefault();
-    }
-    e.stopPropagation();
-    dragPointerId = e.pointerId;
-    didDragThisSession = false;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    toolbarStartLeft = parseFloat(toolbar.style.left) || 0;
-    toolbarStartTop = parseFloat(toolbar.style.top) || 0;
-    toolbar.style.transition = 'none';
-    dragHandle.style.cursor = 'grabbing';
-    if (collapseBtn && toolbar.classList.contains('diagram-floating-toolbar--collapsed')) collapseBtn.style.cursor = 'grabbing';
-    try {
-      toolbar.setPointerCapture(e.pointerId);
-    } catch (_) {}
-  }
-
   /* Movement threshold (px²): above this counts as drag so tap-to-expand still fires. 5px was too low (mobile wobble). */
   const DRAG_THRESHOLD_PX_SQ = 100; // ~10px
   function onPointerMove(e) {
-    if (dragPointerId == null && collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
-      const dx = e.clientX - collapsedExpandDragCandidate.startX;
-      const dy = e.clientY - collapsedExpandDragCandidate.startY;
+    if (dragPointerId == null && toolbarDragCandidate && e.pointerId === toolbarDragCandidate.pointerId) {
+      const dx = e.clientX - toolbarDragCandidate.startX;
+      const dy = e.clientY - toolbarDragCandidate.startY;
       if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) {
-        const candidate = collapsedExpandDragCandidate;
-        collapsedExpandDragCandidate = null;
-        promoteCollapsedExpandCandidateToDrag(e, candidate);
+        promoteToolbarDragCandidateToDrag(e, toolbarDragCandidate);
       } else {
         return;
       }
@@ -454,15 +434,6 @@ export function initDiagramToolbarDrag(options = {}) {
     e.preventDefault();
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX_SQ) {
-      if (!didDragThisSession) {
-        didDragThisSession = true;
-        dragHandle.classList.add('diagram-toolbar-drag-handle--dragging');
-        if (getViewportMode() === 'mobile' && typeof navigator !== 'undefined' && navigator.vibrate) {
-          try { navigator.vibrate(10); } catch (_) {}
-        }
-      }
-    }
     const wrapRect = wrap.getBoundingClientRect();
     const toolRect = toolbar.getBoundingClientRect();
     const tw = toolRect.width;
@@ -479,19 +450,16 @@ export function initDiagramToolbarDrag(options = {}) {
   }
 
   function onPointerUp(e) {
-    if (dragPointerId == null && collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
-      collapsedExpandDragCandidate = null;
+    if (dragPointerId == null && toolbarDragCandidate && e.pointerId === toolbarDragCandidate.pointerId) {
+      toolbarDragCandidate = null;
       return;
     }
     if (e.pointerId !== dragPointerId) return;
     dragPointerId = null;
-    dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
     try {
       toolbar.releasePointerCapture(e.pointerId);
-      dragHandle.releasePointerCapture(e.pointerId);
     } catch (_) {}
     toolbar.style.transition = '';
-    dragHandle.style.cursor = '';
     if (collapseBtn) collapseBtn.style.cursor = '';
     clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
     const dragDelta = { dx: e.clientX - dragStartX, dy: e.clientY - dragStartY };
@@ -499,6 +467,10 @@ export function initDiagramToolbarDrag(options = {}) {
     clampDiagramToolbarToWrap(toolbar, wrap, getViewportMode);
     lastDragEndAt = Date.now();
     suppressNextExpandTap = !!didDragThisSession;
+    if (didDragThisSession) {
+      suppressToolbarClickUntil = Math.max(suppressToolbarClickUntil, lastDragEndAt + DIAGRAM_TOOLBAR_COLLAPSE_TAP_SUPPRESS_MS);
+    }
+    didDragThisSession = false;
     const finalLeft = parseFloat(toolbar.style.left) || 0;
     const finalTop = parseFloat(toolbar.style.top) || 0;
     localStorage.setItem(DIAGRAM_TOOLBAR_STORAGE_KEY_X, String(Math.round(finalLeft)));
@@ -507,18 +479,17 @@ export function initDiagramToolbarDrag(options = {}) {
   }
 
   function onPointerCancel(e) {
-    if (collapsedExpandDragCandidate && e.pointerId === collapsedExpandDragCandidate.pointerId) {
-      collapsedExpandDragCandidate = null;
+    if (toolbarDragCandidate && e.pointerId === toolbarDragCandidate.pointerId) {
+      toolbarDragCandidate = null;
     }
     if (e.pointerId === dragPointerId) {
       dragPointerId = null;
-      dragHandle.classList.remove('diagram-toolbar-drag-handle--dragging');
       try {
         toolbar.releasePointerCapture(e.pointerId);
-        dragHandle.releasePointerCapture(e.pointerId);
       } catch (_) {}
       toolbar.style.transition = '';
-      dragHandle.style.cursor = '';
+      if (collapseBtn) collapseBtn.style.cursor = '';
+      didDragThisSession = false;
       applyDiagramToolbarPosition(toolbar, parseFloat(toolbar.style.left) || 0, parseFloat(toolbar.style.top) || 0, toolbar.getAttribute('data-orientation') || 'horizontal');
       updateDockedSide(toolbar, wrap);
     }
@@ -598,24 +569,18 @@ export function initDiagramToolbarDrag(options = {}) {
   }
 
   const toolbarPointerDownHandler = (e) => {
-    if (e.target === dragHandle || dragHandle.contains(e.target)) {
-      onPointerDown(e);
-      return;
-    }
-    /* When collapsed, the + button is the only draggable area (drag handle is hidden). */
-    const isCollapsed = toolbar.classList.contains('diagram-floating-toolbar--collapsed');
-    if (collapseBtn && (e.target === collapseBtn || collapseBtn.contains(e.target))) {
-      if (isCollapsed) startCollapsedExpandDragCandidate(e);
-      return;
-    }
-    /* 54.77: Do not start toolbar drag when touch starts inside tools-wrap so horizontal scroll works. */
-    if ((e.target instanceof Element) && e.target.closest('.diagram-toolbar-tools-wrap')) return;
-    if ((e.target instanceof Element) && (e.target.closest('button, label, input') || e.target.closest('.toolbar-pill-btn'))) return;
-    onPointerDown(e);
+    startToolbarDragCandidate(e);
   };
 
-  dragHandle.addEventListener('pointerdown', onPointerDown, { capture: true });
+  const toolbarClickSuppressHandler = (e) => {
+    if (Date.now() <= suppressToolbarClickUntil) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
   toolbar.addEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+  toolbar.addEventListener('click', toolbarClickSuppressHandler, { capture: true });
   if (collapseBtn) collapseBtn.addEventListener('click', onCollapseClick);
   document.addEventListener('pointermove', onPointerMove, { capture: true });
   document.addEventListener('pointerup', onPointerUp, { capture: true });
@@ -697,8 +662,8 @@ export function initDiagramToolbarDrag(options = {}) {
     window.removeEventListener('resize', onWindowResize);
     window.removeEventListener('orientationchange', onWindowResize);
     ro.disconnect();
-    dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });
+    toolbar.removeEventListener('click', toolbarClickSuppressHandler, { capture: true });
     if (collapseBtn) collapseBtn.removeEventListener('click', onCollapseClick);
   };
 

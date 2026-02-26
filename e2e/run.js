@@ -1780,22 +1780,14 @@ async function run() {
     const readDesktopToolbarOpenState = () => page.evaluate(() => {
       const toolbar = document.getElementById('diagramFloatingToolbar');
       const wrap = toolbar ? toolbar.closest('.blueprint-wrap') : null;
-      const handle = document.getElementById('diagramToolbarDragHandle');
-      if (!toolbar || !wrap || !handle) return null;
+      if (!toolbar || !wrap) return null;
       const tr = toolbar.getBoundingClientRect();
       const wr = wrap.getBoundingClientRect();
-      const hr = handle.getBoundingClientRect();
-      const hs = window.getComputedStyle(handle);
       return {
         collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
         orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
         centerDelta: Math.abs((tr.left + tr.width / 2) - (wr.left + wr.width / 2)),
         topDelta: Math.abs((tr.top - wr.top) - 12),
-        handleVisible: hs.display !== 'none'
-          && hs.visibility !== 'hidden'
-          && parseFloat(hs.opacity || '1') > 0.05
-          && hr.width >= 20
-          && hr.height >= 20,
       };
     });
     const wasExpanded = await page.evaluate(() => !document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
@@ -1814,10 +1806,7 @@ async function run() {
         `Desktop top-center open regression: expected top-center (centerDelta=${desktopOpenState.centerDelta.toFixed(2)}, topDelta=${desktopOpenState.topDelta.toFixed(2)})`
       );
     }
-    if (!desktopOpenState.handleVisible) {
-      throw new Error('Desktop drag-handle polish regression: expanded handle should be visible and sizeable');
-    }
-    console.log('  ✓ Desktop diagram toolbar opens top-centered with visible drag handle');
+    console.log('  ✓ Desktop diagram toolbar opens top-centered');
     await page.evaluate(() => document.getElementById('diagramToolbarCollapseBtn').click());
     await delay(400);
     const isCollapsed = await page.evaluate(() => document.getElementById('diagramFloatingToolbar').classList.contains('diagram-floating-toolbar--collapsed'));
@@ -1836,25 +1825,41 @@ async function run() {
         `Desktop reopen top-center regression: expected top-center after expand (centerDelta=${desktopReopenState.centerDelta.toFixed(2)}, topDelta=${desktopReopenState.topDelta.toFixed(2)})`
       );
     }
-    if (!desktopReopenState.handleVisible) {
-      throw new Error('Desktop drag-handle polish regression: handle should remain visible after expand');
-    }
     console.log('  ✓ Diagram toolbar collapse/expand (desktop): −/+ swap works');
 
     const desktopToolbarDragProbe = await page.evaluate(() => {
       const toolbar = document.getElementById('diagramFloatingToolbar');
-      const dragHandle = document.getElementById('diagramToolbarDragHandle');
       const wrap = toolbar ? toolbar.closest('.blueprint-wrap') : null;
-      if (!toolbar || !dragHandle || !wrap) return null;
+      if (!toolbar || !wrap) return null;
       if (toolbar.classList.contains('diagram-floating-toolbar--collapsed')) {
         const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
         if (collapseBtn) collapseBtn.click();
       }
-      const handleRect = dragHandle.getBoundingClientRect();
+      const toolbarRect = toolbar.getBoundingClientRect();
       const wrapRect = wrap.getBoundingClientRect();
+      const candidateOffsets = [
+        { x: 6, y: 6 },
+        { x: toolbarRect.width - 6, y: 6 },
+        { x: 6, y: toolbarRect.height - 6 },
+        { x: toolbarRect.width - 6, y: toolbarRect.height - 6 },
+        { x: toolbarRect.width / 2, y: 6 },
+        { x: toolbarRect.width / 2, y: toolbarRect.height - 6 },
+      ];
+      let startX = toolbarRect.left + toolbarRect.width / 2;
+      let startY = toolbarRect.top + 6;
+      for (const offset of candidateOffsets) {
+        const px = toolbarRect.left + offset.x;
+        const py = toolbarRect.top + offset.y;
+        const hit = document.elementFromPoint(px, py);
+        if (!hit || !toolbar.contains(hit)) continue;
+        if (hit.closest('button, label, input, .toolbar-pill-btn, .diagram-toolbar-tools-wrap')) continue;
+        startX = px;
+        startY = py;
+        break;
+      }
       return {
-        startX: handleRect.left + handleRect.width / 2,
-        startY: handleRect.top + handleRect.height / 2,
+        startX,
+        startY,
         targetX: wrapRect.right - 20,
         targetY: wrapRect.top + (wrapRect.height * 0.72),
       };
@@ -4523,12 +4528,9 @@ async function run() {
       const readMobileToolbarOpenState = () => mobilePage.evaluate(() => {
         const toolbar = document.getElementById('diagramFloatingToolbar');
         const wrap = document.getElementById('blueprintWrap');
-        const handle = document.getElementById('diagramToolbarDragHandle');
-        if (!toolbar || !wrap || !handle) return null;
+        if (!toolbar || !wrap) return null;
         const tr = toolbar.getBoundingClientRect();
         const wr = wrap.getBoundingClientRect();
-        const hr = handle.getBoundingClientRect();
-        const hs = window.getComputedStyle(handle);
         const pad = 12;
         const globalToolbarWrap = document.getElementById('globalToolbarWrap');
         const headerBottom = globalToolbarWrap ? globalToolbarWrap.getBoundingClientRect().bottom : wr.top;
@@ -4540,11 +4542,6 @@ async function run() {
           orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
           centerDelta: Math.abs((tr.left + tr.width / 2) - (wr.left + wr.width / 2)),
           topSafeDelta: Math.abs((tr.top - wr.top) - topAnchor),
-          handleVisible: hs.display !== 'none'
-            && hs.visibility !== 'hidden'
-            && parseFloat(hs.opacity || '1') > 0.05
-          && hr.width >= 30
-          && hr.height >= 30,
         };
       });
       const mobileWasCollapsedBeforeOpenCheck = await mobilePage.evaluate(() => {
@@ -4568,10 +4565,7 @@ async function run() {
           `(centerDelta=${mobileOpenState.centerDelta.toFixed(2)}, topSafeDelta=${mobileOpenState.topSafeDelta.toFixed(2)})`
         );
       }
-      if (!mobileOpenState.handleVisible) {
-        throw new Error('Mobile drag-handle polish regression: expanded handle should be visible and sizeable');
-      }
-      console.log('  ✓ Mobile diagram toolbar opens top-centered at safe top with visible drag handle');
+      console.log('  ✓ Mobile diagram toolbar opens top-centered at safe top');
 
       // Diagram toolbar collapse/expand (mobile): − and + swap in same position
       const mobileToolbar = await mobilePage.$('#diagramFloatingToolbar');
@@ -4603,20 +4597,15 @@ async function run() {
           `(centerDelta=${mobileReopenState.centerDelta.toFixed(2)}, topSafeDelta=${mobileReopenState.topSafeDelta.toFixed(2)})`
         );
       }
-      if (!mobileReopenState.handleVisible) {
-        throw new Error('Mobile drag-handle polish regression: handle should remain visible after expand');
-      }
       console.log('  ✓ Diagram toolbar collapse/expand (mobile): user tap path works, including slight drift');
 
       function getToolbarScreenState(pageRef) {
         return pageRef.evaluate(() => {
           const toolbar = document.getElementById('diagramFloatingToolbar');
-          const handle = document.getElementById('diagramToolbarDragHandle');
           const wrap = document.getElementById('blueprintWrap');
           const globalToolbarWrap = document.getElementById('globalToolbarWrap');
-          if (!toolbar || !handle || !wrap) return null;
+          if (!toolbar || !wrap) return null;
           const tr = toolbar.getBoundingClientRect();
-          const hr = handle.getBoundingClientRect();
           const wr = wrap.getBoundingClientRect();
           const pad = 12;
           const headerBottom = globalToolbarWrap ? globalToolbarWrap.getBoundingClientRect().bottom : wr.top;
@@ -4630,11 +4619,39 @@ async function run() {
           const bottomGap = wr.height - (localTop + tr.height);
           const topSafeGap = Math.abs(localTop - topAnchor);
           const edgeGap = Math.min(leftGap, rightGap, bottomGap, topSafeGap);
+          const clampPoint = (point) => ({
+            x: Math.max(1, Math.min(window.innerWidth - 1, point.x)),
+            y: Math.max(1, Math.min(window.innerHeight - 1, point.y)),
+          });
+          const isInteractiveHit = (el) => !!(
+            el && (
+              el.closest('button, label, input, select, textarea')
+              || el.closest('[role="button"]')
+              || el.closest('.toolbar-pill-btn, .upload-zone, .blueprint-transparency-btn')
+            )
+          );
+          const probeInsetX = Math.max(6, Math.min(24, tr.width * 0.2));
+          const probeInsetY = Math.max(6, Math.min(24, tr.height * 0.2));
+          const candidatePoints = [
+            { x: tr.left + (tr.width / 2), y: tr.top + (tr.height / 2) },
+            { x: tr.left + probeInsetX, y: tr.top + (tr.height / 2) },
+            { x: tr.right - probeInsetX, y: tr.top + (tr.height / 2) },
+            { x: tr.left + (tr.width / 2), y: tr.top + probeInsetY },
+            { x: tr.left + (tr.width / 2), y: tr.bottom - probeInsetY },
+          ];
+          let dragPoint = clampPoint(candidatePoints[0]);
+          for (const rawPoint of candidatePoints) {
+            const point = clampPoint(rawPoint);
+            const hit = document.elementFromPoint(point.x, point.y);
+            if (!hit || !toolbar.contains(hit) || isInteractiveHit(hit)) continue;
+            dragPoint = point;
+            break;
+          }
           return {
             orientation: toolbar.getAttribute('data-orientation') || 'horizontal',
             collapsed: toolbar.classList.contains('diagram-floating-toolbar--collapsed'),
             toolbar: { width: tr.width, height: tr.height },
-            handleCenter: { x: hr.left + hr.width / 2, y: hr.top + hr.height / 2 },
+            dragPoint,
             wrapRect: { left: wr.left, top: wr.top, width: wr.width, height: wr.height },
             gaps: { leftGap, rightGap, bottomGap, topSafeGap, edgeGap },
           };
@@ -4644,11 +4661,11 @@ async function run() {
       // Expanded drag to right edge should snap vertical (without collapse-first workaround).
       const beforeRightDrag = await getToolbarScreenState(mobilePage);
       if (!beforeRightDrag || beforeRightDrag.collapsed) throw new Error('Mobile toolbar state missing before right-edge drag');
-      await mobilePage.mouse.move(beforeRightDrag.handleCenter.x, beforeRightDrag.handleCenter.y);
+      await mobilePage.mouse.move(beforeRightDrag.dragPoint.x, beforeRightDrag.dragPoint.y);
       await mobilePage.mouse.down();
       await mobilePage.mouse.move(
         beforeRightDrag.wrapRect.left + beforeRightDrag.wrapRect.width - 14,
-        beforeRightDrag.handleCenter.y,
+        beforeRightDrag.dragPoint.y,
         { steps: 12 }
       );
       await mobilePage.mouse.up();
@@ -4659,10 +4676,10 @@ async function run() {
 
       // Expanded drag to top edge should snap horizontal.
       async function dragToolbarHandleToTop(startState) {
-        await mobilePage.mouse.move(startState.handleCenter.x, startState.handleCenter.y);
+        await mobilePage.mouse.move(startState.dragPoint.x, startState.dragPoint.y);
         await mobilePage.mouse.down();
         await mobilePage.mouse.move(
-          startState.handleCenter.x,
+          startState.dragPoint.x,
           startState.wrapRect.top + 12,
           { steps: 14 }
         );
@@ -4736,9 +4753,9 @@ async function run() {
       await delay(420);
       const collapsedState = await getToolbarScreenState(mobilePage);
       if (!collapsedState || !collapsedState.collapsed) throw new Error('Mobile toolbar should be collapsed before post-drag tap reliability check');
-      await mobilePage.mouse.move(collapsedState.handleCenter.x, collapsedState.handleCenter.y);
+      await mobilePage.mouse.move(collapsedState.dragPoint.x, collapsedState.dragPoint.y);
       await mobilePage.mouse.down();
-      await mobilePage.mouse.move(collapsedState.handleCenter.x + 80, collapsedState.handleCenter.y + 8, { steps: 8 });
+      await mobilePage.mouse.move(collapsedState.dragPoint.x + 80, collapsedState.dragPoint.y + 8, { steps: 8 });
       await mobilePage.mouse.up();
       await delay(340);
       await pointerTapSelector(mobilePage, '#diagramToolbarCollapseBtn');

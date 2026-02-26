@@ -13350,12 +13350,24 @@ function renderProducts(products) {
         : rawProfile === 'classic'
           ? 'classic'
           : 'other';
+    const sizeKey = getProductSizeMm(p.id);
     let visibleLabel = displayName;
     if (profileKey === 'storm') {
       visibleLabel = displayName.replace(/\bstorm\s+cloud\b/ig, ' ').replace(/\s+/g, ' ').trim();
     } else if (profileKey === 'classic') {
       visibleLabel = displayName.replace(/\bclassic\b/ig, ' ').replace(/\s+/g, ' ').trim();
     }
+    if (!visibleLabel) visibleLabel = displayName;
+    const elbowMatch = String(p.id || '').match(/^EL(\d+)-(?:65|80)$/i);
+    if (elbowMatch) {
+      visibleLabel = elbowMatch[1] + '\u00B0 Elbow';
+    }
+    if (sizeKey) {
+      const sizeRegex = sizeKey === '65' ? /\b65\s*(?:mm|MM)\b/gi : /\b80\s*(?:mm|MM)\b/gi;
+      visibleLabel = visibleLabel.replace(sizeRegex, '').replace(/\s+/g, ' ').trim();
+    }
+    if (!visibleLabel) visibleLabel = displayName;
+    visibleLabel = visibleLabel.replace(/:/g, '').replace(/\s+/g, ' ').trim();
     if (!visibleLabel) visibleLabel = displayName;
     thumb.setAttribute('aria-label', `Product ${displayName}, drag onto canvas or click to add at center`);
     thumb.dataset.productId = p.id;
@@ -13370,10 +13382,21 @@ function renderProducts(products) {
     thumb.appendChild(img);
     if (profileKey !== 'other') {
       const badge = document.createElement('span');
-      badge.className = 'product-thumb-profile-badge';
+      badge.className = profileKey === 'storm'
+        ? 'product-thumb-profile-badge product-thumb-profile-badge--storm'
+        : 'product-thumb-profile-badge product-thumb-profile-badge--classic';
       badge.textContent = profileKey === 'storm' ? 'Storm' : 'Classic';
       badge.setAttribute('aria-hidden', 'true');
       thumb.prepend(badge);
+    }
+    if (sizeKey) {
+      const sizeBadge = document.createElement('span');
+      sizeBadge.className = sizeKey === '65'
+        ? 'product-thumb-size-badge product-thumb-size-badge--65'
+        : 'product-thumb-size-badge product-thumb-size-badge--80';
+      sizeBadge.setAttribute('aria-hidden', 'true');
+      sizeBadge.textContent = sizeKey + ' mm';
+      thumb.prepend(sizeBadge);
     }
     thumb.appendChild(document.createElement('span')).textContent = visibleLabel;
     // Mobile-only (54.120.1): Lazy-load filled SVG thumb when thumb enters view; store src for Intersection Observer

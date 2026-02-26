@@ -177,7 +177,6 @@ body[data-viewport-mode="mobile"] textarea,
 body[data-viewport-mode="mobile"] [tabindex],
 body[data-viewport-mode="mobile"] .product-thumb {
   -webkit-tap-highlight-color: transparent;
-  tap-highlight-color: transparent;
   transition: outline-color 0.12s ease-out, outline-width 0.12s ease-out, outline-offset 0.12s ease-out;
 }
 
@@ -2522,6 +2521,7 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb span {
   text-align: center;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   max-width: 100%;
@@ -2537,10 +2537,43 @@ body[data-viewport-mode="mobile"] .product-grid .product-thumb span {
   line-height: 1;
   padding: 2px 4px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
   z-index: 1;
   pointer-events: none;
+}
+
+.product-grid .product-thumb .product-thumb-profile-badge--storm {
+  background: #FDED3D;
+  color: #000000;
+}
+
+.product-grid .product-thumb .product-thumb-profile-badge--classic {
+  background: #000000;
+  color: #FDED3D;
+}
+
+/* 54.123.6: 65mm/80mm size badge (top-right; mobile + desktop) */
+.product-grid .product-thumb .product-thumb-size-badge {
+  position: absolute;
+  top: 4px;
+  left: auto;
+  right: 4px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.product-grid .product-thumb .product-thumb-size-badge--65 {
+  background: #444;
+  color: #fff;
+}
+
+.product-grid .product-thumb .product-thumb-size-badge--80 {
+  background: #fff;
+  color: #444;
+  border: 1px solid #444;
 }
 
 @media (max-width: 400px) {
@@ -2834,11 +2867,6 @@ body[data-viewport-mode="mobile"] .diagram-floating-toolbar #openInspectorBtn {
   left: 50%;
   transform: translate(-50%, -50%);
 }
-/* Safe zone: extra padding on the handle edge so thumb doesn’t hit tools. */
-.diagram-floating-toolbar.is-docked-left:not(.diagram-floating-toolbar--collapsed) { padding-right: 20px; }
-.diagram-floating-toolbar.is-docked-right:not(.diagram-floating-toolbar--collapsed) { padding-left: 20px; }
-.diagram-floating-toolbar.is-docked-top:not(.diagram-floating-toolbar--collapsed) { padding-bottom: 20px; }
-.diagram-floating-toolbar.is-docked-bottom:not(.diagram-floating-toolbar--collapsed) { padding-top: 20px; }
 body.a11y-high-contrast .diagram-toolbar-drag-handle {
   color: #111;
 }
