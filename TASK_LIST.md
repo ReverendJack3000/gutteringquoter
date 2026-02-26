@@ -59,7 +59,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 - Branch: feature/mobile-perf-54-117
 - Based on: main
 - Status: In Progress
-- Related Tasks: 54.117.1–54.117.4 (54.117.3 deferred)
+- Related Tasks: 54.121.1–54.121.8, 49.34.1–49.34.2
 
 **Uncompleted tasks (by section):**
 
@@ -86,7 +86,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | **50** | **50.10–50.18** | **Labour as product (REP-LAB): remove rate dropdown, inline unit price, delete X, exclude from panel/Add item** |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 19 | 19.12 | SVG elements extremely blurry when colour changed until restored to original |
-| 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4, **54.107.1** | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend; **54.107.1 Team pool button label and formatting (all mobile views, SVG fit).** |
+| 54 | 54.49, 54.52–54.53, 54.56–54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60). |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |
@@ -102,9 +102,11 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
 | 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
-| 54 | 54.117.1–54.117.4 | (Mobile-only) First zero-regression performance: cap canvas DPR at 2, skip updateAccessibilityInspector in draw when inspector closed; optional ResizeObserver debounce; verification. |
+| 54 | 54.119.3 | Mobile upload/toolbar perf hardening follow-up: manual mobile QA + Railway safety sign-off pending (upload same-file relaunch, drag-handle a11y behavior, draw/observer smoothness). |
+| 54 | 54.120.3 | Mobile speed: contain: paint on .blueprint-wrap deferred (would break mobile floating toolbar top-dock; see section-54.md). 54.120.1, 54.120.2, 54.120.4 done. |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
-| 63 | 63.9, 63.16, **63.17** | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). **(63.17) Material Rules section order: Measured-Length first, Quick Quoter second (HTML reorder only).** |
+| 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
+| 63 | 63.9, 63.16 | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). |
 ---
 
 ## Locked decisions

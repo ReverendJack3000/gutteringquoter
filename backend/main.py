@@ -2219,8 +2219,8 @@ def api_servicem8_authorize(user_id: Any = Depends(get_current_user_id)):
     (Browser navigation to this endpoint does not send Bearer token, so we return JSON, not a redirect.)
     
     When SERVICEM8_COMPANY_USER_ID is set, only that user can connect (others get 403).
-    redirect_uri in the authorize URL MUST match the Activation URL set in ServiceM8 Store Connect
-    exactly: https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
+    redirect_uri in the authorize URL is derived by sm8.get_redirect_uri() and MUST match
+    the Activation URL set in ServiceM8 Store Connect exactly.
     """
     if not sm8.can_disconnect_servicem8(str(user_id)):
         raise HTTPException(

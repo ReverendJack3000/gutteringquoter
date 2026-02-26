@@ -180,6 +180,97 @@ async function run() {
     }
     console.log('  ✓ Orientation policy (desktop): target none');
 
+    const productsAvatarMenuBehavior = await page.evaluate(() => {
+      if (typeof window.__quoteAppSetAuthForTests !== 'function' || typeof window.__quoteAppSwitchView !== 'function') {
+        return { hookReady: false };
+      }
+      window.__quoteAppSetAuthForTests({
+        token: 'e2e-products-avatar-token',
+        role: 'admin',
+        email: 'qa-products-avatar@example.com',
+        userId: '00000000-0000-0000-0000-00000000d101',
+      });
+      window.__quoteAppSwitchView('view-products');
+      const dropdown = document.getElementById('profileDropdown');
+      const avatar = document.getElementById('productsUserAvatar');
+      if (!dropdown || !avatar) {
+        return { hookReady: true, menuReady: false };
+      }
+      dropdown.hidden = true;
+      avatar.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const adminState = typeof window.__quoteAppGetAdminUiState === 'function' ? window.__quoteAppGetAdminUiState() : null;
+      const visibleView = document.querySelector('.app-view:not(.hidden)')?.id || null;
+      return {
+        hookReady: true,
+        menuReady: true,
+        dropdownOpen: !dropdown.hidden,
+        hasToken: !!adminState?.hasToken,
+        visibleView,
+      };
+    });
+    if (!productsAvatarMenuBehavior.hookReady) {
+      throw new Error('Products avatar regression: missing auth/view test hooks');
+    }
+    if (!productsAvatarMenuBehavior.menuReady) {
+      throw new Error('Products avatar regression: missing products user avatar or profile dropdown');
+    }
+    if (!productsAvatarMenuBehavior.hasToken || productsAvatarMenuBehavior.visibleView !== 'view-products' || !productsAvatarMenuBehavior.dropdownOpen) {
+      throw new Error(
+        `Products avatar regression: expected menu-open behavior without sign-out ` +
+        `(hasToken=${productsAvatarMenuBehavior.hasToken}, view=${productsAvatarMenuBehavior.visibleView}, dropdownOpen=${productsAvatarMenuBehavior.dropdownOpen})`
+      );
+    }
+    console.log('  ✓ Product Library avatar opens user menu without forcing sign-out');
+
+    const productCardKeyboardBehavior = await page.evaluate(() => {
+      const card = document.getElementById('productCardNew');
+      const modal = document.getElementById('productModal');
+      if (!card || !modal) return { ready: false };
+      modal.setAttribute('hidden', '');
+      card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      const visibleView = document.querySelector('.app-view:not(.hidden)')?.id || null;
+      return {
+        ready: true,
+        modalOpen: !modal.hasAttribute('hidden'),
+        visibleView,
+      };
+    });
+    if (!productCardKeyboardBehavior.ready) {
+      throw new Error('Product card keyboard regression: missing New Product card or product modal');
+    }
+    if (!productCardKeyboardBehavior.modalOpen || productCardKeyboardBehavior.visibleView !== 'view-products') {
+      throw new Error(
+        `Product card keyboard regression: Enter should open product modal in products view ` +
+        `(modalOpen=${productCardKeyboardBehavior.modalOpen}, view=${productCardKeyboardBehavior.visibleView})`
+      );
+    }
+    await page.evaluate(() => {
+      document.getElementById('productModal')?.setAttribute('hidden', '');
+      if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+    });
+    await delay(220);
+    console.log('  ✓ New Product card supports keyboard Enter activation');
+
+    const floatingHandleA11yState = await page.evaluate(() => {
+      const handle = document.getElementById('floatingToolbarDragHandle');
+      if (!handle) return null;
+      return {
+        role: handle.getAttribute('role'),
+        tabIndex: handle.getAttribute('tabindex'),
+        ariaHidden: handle.getAttribute('aria-hidden'),
+      };
+    });
+    if (!floatingHandleA11yState) {
+      throw new Error('Floating toolbar handle regression: handle not found');
+    }
+    if (floatingHandleA11yState.role || floatingHandleA11yState.tabIndex != null || floatingHandleA11yState.ariaHidden !== 'true') {
+      throw new Error(
+        `Floating toolbar handle a11y regression: expected non-focusable visual handle ` +
+        `(role=${floatingHandleA11yState.role}, tabindex=${floatingHandleA11yState.tabIndex}, ariaHidden=${floatingHandleA11yState.ariaHidden})`
+      );
+    }
+    console.log('  ✓ Floating toolbar drag handle is non-keyboard-trappable');
+
     // Material Rules guard regression: desktop admin can access the Material Rules view.
     const desktopMaterialRulesGate = await page.evaluate(() => {
       if (typeof window.__quoteAppSetAuthForTests !== 'function') return { hookReady: false };
@@ -613,9 +704,9 @@ async function run() {
     console.log('  ✓ Desktop Material Rules admin access and view routing');
 
     // Toolbar
-    const uploadZone = await page.$('#uploadZone') || await page.$('#cameraUploadBtn');
+    const uploadBtn = await page.$('#cameraUploadBtn');
     const exportBtn = await page.$('#exportBtn');
-    if (!uploadZone || !exportBtn) throw new Error('Toolbar elements missing');
+    if (!uploadBtn || !exportBtn) throw new Error('Toolbar elements missing');
     console.log('  ✓ Toolbar (upload, export) present');
 
     const desktopQuickQuoterVisibleBeforeUpload = await page.evaluate(() => {
@@ -649,6 +740,23 @@ async function run() {
       throw new Error('Desktop Quick Quoter regression: modal did not close from close button');
     }
     console.log('  ✓ Desktop Quick Quoter modal opens and closes from canvas entry');
+
+    const desktopUploadLabels = await page.evaluate(() => {
+      const cameraBtn = document.getElementById('cameraUploadBtn');
+      const placeholderIcon = document.querySelector('#canvasPlaceholder .placeholder-icon');
+      const placeholderTitle = document.querySelector('#canvasPlaceholder .placeholder-title');
+      const hasPdfLanguage = (text) => typeof text === 'string' && /\bpdf\b/i.test(text);
+      return {
+        cameraTitleOk: hasPdfLanguage(cameraBtn?.getAttribute('title') || ''),
+        cameraAriaOk: hasPdfLanguage(cameraBtn?.getAttribute('aria-label') || ''),
+        placeholderAriaOk: hasPdfLanguage(placeholderIcon?.getAttribute('aria-label') || ''),
+        placeholderTitleOk: hasPdfLanguage(placeholderTitle?.textContent || ''),
+      };
+    });
+    if (!desktopUploadLabels.cameraTitleOk || !desktopUploadLabels.cameraAriaOk || !desktopUploadLabels.placeholderAriaOk || !desktopUploadLabels.placeholderTitleOk) {
+      throw new Error('Upload accessibility copy regression: expected photo/PDF wording on camera controls and placeholder copy');
+    }
+    console.log('  ✓ Upload controls/copy include photo + PDF wording');
 
     // Accessibility settings modal: keyboard focus trap + Escape close
     const a11ySettingsBtn = await page.$('#openAccessibilitySettingsBtn');
@@ -736,6 +844,49 @@ async function run() {
     if (thumbCount === 0) throw new Error('Expected at least one product thumbnail');
     console.log(`  ✓ Product grid has ${thumbCount} items`);
 
+    const desktopCountBeforeQuickQuoterElementsParity = await page.evaluate(
+      () => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0
+    );
+    await clickSelectorViaDom(page, '.product-thumb');
+    await delay(650);
+    const desktopQuickQuoterElementsHideState = await page.evaluate(() => {
+      const entry = document.getElementById('quickQuoterEntry');
+      const count = (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0;
+      if (!entry) return { count, hidden: false };
+      if (entry.hasAttribute('hidden')) return { count, hidden: true };
+      const style = window.getComputedStyle(entry);
+      return { count, hidden: style.display === 'none' || entry.offsetParent === null };
+    });
+    if (desktopQuickQuoterElementsHideState.count !== desktopCountBeforeQuickQuoterElementsParity + 1) {
+      throw new Error(
+        `Desktop Quick Quoter regression: expected one element added before upload, ` +
+        `before=${desktopCountBeforeQuickQuoterElementsParity}, after=${desktopQuickQuoterElementsHideState.count}`
+      );
+    }
+    if (!desktopQuickQuoterElementsHideState.hidden) {
+      throw new Error('Desktop Quick Quoter regression: entry should be hidden when canvas has elements only (no blueprint)');
+    }
+    await clickSelectorViaDomIfPresent(page, '#floatingToolbarDelete');
+    await delay(220);
+    const desktopQuickQuoterElementsShowState = await page.evaluate(() => {
+      const entry = document.getElementById('quickQuoterEntry');
+      const count = (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0;
+      if (!entry) return { count, visible: false };
+      if (entry.hasAttribute('hidden')) return { count, visible: false };
+      const style = window.getComputedStyle(entry);
+      return { count, visible: style.display !== 'none' && entry.offsetParent !== null };
+    });
+    if (desktopQuickQuoterElementsShowState.count !== desktopCountBeforeQuickQuoterElementsParity) {
+      throw new Error(
+        `Desktop Quick Quoter regression: delete should restore element count before upload parity check, ` +
+        `before=${desktopCountBeforeQuickQuoterElementsParity}, after=${desktopQuickQuoterElementsShowState.count}`
+      );
+    }
+    if (!desktopQuickQuoterElementsShowState.visible) {
+      throw new Error('Desktop Quick Quoter regression: entry should be visible again after elements are cleared');
+    }
+    console.log('  ✓ Desktop Quick Quoter entry hides with elements-only canvas and reappears when cleared');
+
     // Upload blueprint fixture image for full canvas/transparency validation.
     const blueprintImagePath = path.resolve(__dirname, '..', 'Columba College Gutters 11.jpeg');
     const fs = require('fs');
@@ -770,8 +921,16 @@ async function run() {
     if (!desktopQuickQuoterHiddenAfterUpload) {
       throw new Error('Desktop Quick Quoter regression: entry should be hidden after blueprint upload');
     }
+    const desktopFileInputReset = await page.evaluate(() => {
+      const input = document.getElementById('fileInput');
+      return !!input && input.value === '';
+    });
+    if (!desktopFileInputReset) {
+      throw new Error('Desktop upload reliability regression: #fileInput value should reset after change handling');
+    }
     console.log('  ✓ Blueprint image loaded (Columba College Gutters 11.jpeg)');
     console.log('  ✓ Desktop Quick Quoter entry is hidden after blueprint upload');
+    console.log('  ✓ Desktop upload input resets for same-file reupload support');
 
     const desktopMobileFitVisibility = await page.evaluate(() => {
       const btn = document.getElementById('mobileFitViewBtn');
@@ -2491,6 +2650,79 @@ async function run() {
       console.log('  ✓ Quote test skipped: no gutter products found in panel fixture');
     }
 
+    const quoteWarningAriaSync = await page.evaluate(() => {
+      const tableBody = document.getElementById('quoteTableBody');
+      const warning = document.getElementById('quoteTotalWarning');
+      const updateFn = window.__quoteAppUpdateQuoteTotalWarning;
+      if (!tableBody || !warning || typeof updateFn !== 'function') {
+        return { ready: false };
+      }
+      const probe = document.createElement('tr');
+      probe.className = 'quote-row-incomplete-measurement';
+      for (let i = 0; i < 6; i += 1) probe.appendChild(document.createElement('td'));
+      tableBody.appendChild(probe);
+      updateFn();
+      const visibleState = {
+        hidden: warning.hidden,
+        ariaHidden: warning.getAttribute('aria-hidden'),
+      };
+      probe.remove();
+      updateFn();
+      const hiddenState = {
+        hidden: warning.hidden,
+        ariaHidden: warning.getAttribute('aria-hidden'),
+      };
+      return { ready: true, visibleState, hiddenState };
+    });
+    if (!quoteWarningAriaSync.ready) {
+      throw new Error('Quote warning aria regression: missing quote table/warning/hook');
+    }
+    if (quoteWarningAriaSync.visibleState.hidden || quoteWarningAriaSync.visibleState.ariaHidden !== 'false') {
+      throw new Error(
+        `Quote warning aria regression: visible warning should expose aria-hidden=false ` +
+        `(hidden=${quoteWarningAriaSync.visibleState.hidden}, ariaHidden=${quoteWarningAriaSync.visibleState.ariaHidden})`
+      );
+    }
+    if (!quoteWarningAriaSync.hiddenState.hidden || quoteWarningAriaSync.hiddenState.ariaHidden !== 'true') {
+      throw new Error(
+        `Quote warning aria regression: hidden warning should expose aria-hidden=true ` +
+        `(hidden=${quoteWarningAriaSync.hiddenState.hidden}, ariaHidden=${quoteWarningAriaSync.hiddenState.ariaHidden})`
+      );
+    }
+    console.log('  ✓ Quote warning keeps aria-hidden in sync with visibility');
+
+    const desktopMetresRestore = await page.evaluate(() => {
+      const tableBody = document.getElementById('quoteTableBody');
+      const syncFn = window.__quoteAppSyncMobileQuoteLineSummaries;
+      if (!tableBody || typeof syncFn !== 'function') return { ready: false };
+      const row = document.createElement('tr');
+      row.dataset.assetId = 'GUT-SC-MAR-3M';
+      row.dataset.quoteMetresRow = 'true';
+      row.dataset.incompleteMeasurement = 'true';
+      row.classList.add('quote-row-incomplete-measurement');
+      for (let i = 0; i < 6; i += 1) row.appendChild(document.createElement('td'));
+      row.cells[0].textContent = 'Gutter: Storm Cloud Marley';
+      row.cells[1].innerHTML = '<div class="quote-mobile-qty-stepper"><button type="button" class="quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--minus" aria-label="Decrease length">−</button><span class="quote-mobile-qty-stepper-value">2.5 m</span><button type="button" class="quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--plus" aria-label="Increase length">+</button></div>';
+      tableBody.appendChild(row);
+      syncFn();
+      const restoredInput = row.querySelector('.quote-qty-metres-input');
+      const qtyInput = row.querySelector('.quote-line-qty-input');
+      const restored = !!restoredInput && !qtyInput;
+      const placeholder = restoredInput?.getAttribute('placeholder') || null;
+      row.remove();
+      return { ready: true, restored, placeholder };
+    });
+    if (!desktopMetresRestore.ready) {
+      throw new Error('Desktop metres restore regression: missing quote table or sync hook');
+    }
+    if (!desktopMetresRestore.restored || desktopMetresRestore.placeholder !== 'Metres?') {
+      throw new Error(
+        `Desktop metres restore regression: expected .quote-qty-metres-input restore with Metres? placeholder ` +
+        `(restored=${desktopMetresRestore.restored}, placeholder=${desktopMetresRestore.placeholder})`
+      );
+    }
+    console.log('  ✓ Desktop cleanup restores incomplete metres rows as metres inputs');
+
     // Mobile tap-add fallback sizing (no blueprint): use 25% of canvas long side on a fresh page.
     const mobileNoBlueprintPage = await context.newPage();
     try {
@@ -2694,6 +2926,64 @@ async function run() {
       }
       console.log('  ✓ Mobile Quick Quoter entry is visible before blueprint upload');
 
+      const mobileElementCountBeforeQuickQuoterElementsParity = await mobilePage.evaluate(
+        () => (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0
+      );
+      const mobilePanelExpandedForQuickQuoterParity = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!mobilePanelExpandedForQuickQuoterParity) {
+        await clickSelectorViaDom(mobilePage, '#panelCollapsed');
+        await delay(320);
+      }
+      const mobilePanelExpandedAfterQuickQuoterParityOpen = await mobilePage.evaluate(() => {
+        const panel = document.getElementById('panel');
+        return !!panel && panel.classList.contains('expanded');
+      });
+      if (!mobilePanelExpandedAfterQuickQuoterParityOpen) {
+        throw new Error('Mobile viewport regression: products panel did not open for Quick Quoter elements-only parity check');
+      }
+      await clickSelectorViaDom(mobilePage, '.product-thumb');
+      await delay(750);
+      const mobileQuickQuoterElementsHideState = await mobilePage.evaluate(() => {
+        const entry = document.getElementById('quickQuoterEntry');
+        const count = (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0;
+        if (!entry) return { count, hidden: false };
+        if (entry.hasAttribute('hidden')) return { count, hidden: true };
+        const style = window.getComputedStyle(entry);
+        return { count, hidden: style.display === 'none' || entry.offsetParent === null };
+      });
+      if (mobileQuickQuoterElementsHideState.count !== mobileElementCountBeforeQuickQuoterElementsParity + 1) {
+        throw new Error(
+          `Mobile viewport regression: expected one element added before upload parity check, ` +
+          `before=${mobileElementCountBeforeQuickQuoterElementsParity}, after=${mobileQuickQuoterElementsHideState.count}`
+        );
+      }
+      if (!mobileQuickQuoterElementsHideState.hidden) {
+        throw new Error('Mobile viewport regression: Quick Quoter entry should hide when canvas has elements only (no blueprint)');
+      }
+      await clickSelectorViaDomIfPresent(mobilePage, '#floatingToolbarDelete');
+      await delay(220);
+      const mobileQuickQuoterElementsShowState = await mobilePage.evaluate(() => {
+        const entry = document.getElementById('quickQuoterEntry');
+        const count = (window.__quoteAppElementCount && window.__quoteAppElementCount()) || 0;
+        if (!entry) return { count, visible: false };
+        if (entry.hasAttribute('hidden')) return { count, visible: false };
+        const style = window.getComputedStyle(entry);
+        return { count, visible: style.display !== 'none' && entry.offsetParent !== null };
+      });
+      if (mobileQuickQuoterElementsShowState.count !== mobileElementCountBeforeQuickQuoterElementsParity) {
+        throw new Error(
+          `Mobile viewport regression: delete should restore element count before upload parity check, ` +
+          `before=${mobileElementCountBeforeQuickQuoterElementsParity}, after=${mobileQuickQuoterElementsShowState.count}`
+        );
+      }
+      if (!mobileQuickQuoterElementsShowState.visible) {
+        throw new Error('Mobile viewport regression: Quick Quoter entry should reappear after clearing elements-only canvas');
+      }
+      console.log('  ✓ Mobile Quick Quoter entry hides with elements-only canvas and reappears when cleared');
+
       // Section 57: mobile fit inset + pan lock behavior
       const mobileFileInput = await mobilePage.$('#fileInput');
       if (!mobileFileInput) throw new Error('Mobile viewport regression: #fileInput missing for blueprint fit checks');
@@ -2724,6 +3014,13 @@ async function run() {
       });
       if (!mobileQuickQuoterHiddenAfterUpload) {
         throw new Error('Mobile viewport regression: Quick Quoter entry should be hidden after blueprint upload');
+      }
+      const mobileFileInputReset = await mobilePage.evaluate(() => {
+        const input = document.getElementById('fileInput');
+        return !!input && input.value === '';
+      });
+      if (!mobileFileInputReset) {
+        throw new Error('Mobile upload reliability regression: #fileInput value should reset after change handling');
       }
       console.log('  ✓ Mobile upload bypasses crop modal and hides Quick Quoter entry');
 
@@ -4131,6 +4428,35 @@ async function run() {
       console.log('  ✓ Mobile orientation policy: returns to landscape after closing quote flow');
       console.log('  ✓ Mobile quote modal: full-screen layout, labour popup editing, hidden controls, and back-close behavior pass');
 
+      const mobileMetresStepperAria = await mobilePage.evaluate(() => {
+        const tableBody = document.getElementById('quoteTableBody');
+        const syncFn = window.__quoteAppSyncMobileQuoteLineSummaries;
+        if (!tableBody || typeof syncFn !== 'function') return { ready: false };
+        const row = document.createElement('tr');
+        row.dataset.assetId = 'GUT-SC-MAR-3M';
+        for (let i = 0; i < 6; i += 1) row.appendChild(document.createElement('td'));
+        row.cells[0].textContent = 'Gutter: Storm Cloud Marley';
+        row.cells[1].innerHTML = '<input type="number" class="quote-qty-metres-input" value="2.5" min="0" step="0.1" aria-label="Length in metres">';
+        tableBody.appendChild(row);
+        syncFn();
+        const minus = row.querySelector('.quote-mobile-qty-stepper-btn--minus');
+        const plus = row.querySelector('.quote-mobile-qty-stepper-btn--plus');
+        const minusLabel = minus?.getAttribute('aria-label') || null;
+        const plusLabel = plus?.getAttribute('aria-label') || null;
+        row.remove();
+        return { ready: true, minusLabel, plusLabel };
+      });
+      if (!mobileMetresStepperAria.ready) {
+        throw new Error('Mobile metres stepper a11y regression: missing quote table or sync hook');
+      }
+      if (mobileMetresStepperAria.minusLabel !== 'Decrease length' || mobileMetresStepperAria.plusLabel !== 'Increase length') {
+        throw new Error(
+          `Mobile metres stepper a11y regression: expected length labels, got ` +
+          `minus="${mobileMetresStepperAria.minusLabel}", plus="${mobileMetresStepperAria.plusLabel}"`
+        );
+      }
+      console.log('  ✓ Mobile metres stepper uses length-specific ARIA labels');
+
       await mobilePage.setViewport({ width: 667, height: 375, isMobile: true, hasTouch: true });
       await delay(600);
       const landscapeCheck = await mobilePage.evaluate(() => {
@@ -4254,7 +4580,7 @@ async function run() {
       }
       console.log('  ✓ Mobile expanded drag-top snaps to horizontal edge and avoids middle resting');
 
-      // Option B: orientation-aware scroll assertion. Vertical = no scroll; horizontal = tools wrap may scroll.
+      // Option B: orientation-aware scroll assertion. Vertical and horizontal should avoid internal scrolling.
       // Allow small overflow from the absolutely positioned side grip (handle on long edge).
       const GRIP_OVERFLOW_TOLERANCE = 36;
       const toolbarScrollState = await mobilePage.evaluate((tolerance) => {
@@ -4280,11 +4606,13 @@ async function run() {
         }
         console.log('  ✓ Mobile toolbar (vertical) has no internal scrollbars');
       } else {
-        // Horizontal: tools wrap is allowed to scroll; toolbar may have small overflow from side grip only.
-        if (toolbarScrollState.toolbarScroll && !toolbarScrollState.withinGripTolerance) {
-          throw new Error(`Mobile toolbar container should not scroll (horizontal); only tools-wrap may scroll (toolbarScroll=${toolbarScrollState.toolbarScroll})`);
+        if ((toolbarScrollState.toolbarScroll && !toolbarScrollState.withinGripTolerance) || toolbarScrollState.toolsScroll) {
+          throw new Error(
+            `Mobile toolbar (horizontal) should not scroll internally ` +
+            `(toolbarScroll=${toolbarScrollState.toolbarScroll}, toolsScroll=${toolbarScrollState.toolsScroll})`
+          );
         }
-        console.log('  ✓ Mobile toolbar (horizontal) scroll expectation OK (tools-wrap may scroll)');
+        console.log('  ✓ Mobile toolbar (horizontal) has no internal scrollbars');
       }
 
       // Post-drag tap reliability: first deliberate tap after suppression window expands collapsed toolbar.

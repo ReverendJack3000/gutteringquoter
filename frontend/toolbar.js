@@ -229,6 +229,16 @@ export function initDiagramToolbarDrag(options = {}) {
   dragHandle.setAttribute('aria-label', 'Drag to move toolbar');
   dragHandle.title = 'Drag to move toolbar';
   dragHandle.style.display = 'block';
+  function syncDragHandleAccessibility() {
+    if (getViewportMode() === 'mobile') {
+      dragHandle.setAttribute('aria-hidden', 'true');
+      dragHandle.setAttribute('tabindex', '-1');
+      return;
+    }
+    dragHandle.removeAttribute('aria-hidden');
+    dragHandle.removeAttribute('tabindex');
+  }
+  syncDragHandleAccessibility();
 
   const collapseBtn = document.getElementById('diagramToolbarCollapseBtn');
   /* Default to expanded (fully visible); on mobile always start expanded so app opens with toolbar visible. */
@@ -521,12 +531,26 @@ export function initDiagramToolbarDrag(options = {}) {
   document.addEventListener('pointerup', onPointerUp, { capture: true });
   document.addEventListener('pointercancel', onPointerCancel, { capture: true });
 
-  const ro = new ResizeObserver(() => {
-    if (dragPointerId != null) return;
+  const syncToolbarAfterResize = () => {
     const currentWrap = getDiagramToolbarWrap();
     clampDiagramToolbarToWrap(toolbar, currentWrap, getViewportMode);
     updateOrientationFromPosition();
     updateDockedSide(toolbar, currentWrap);
+    syncDragHandleAccessibility();
+  };
+  let resizeObserverRafId = null;
+  const ro = new ResizeObserver(() => {
+    if (dragPointerId != null) return;
+    if (getViewportMode() !== 'mobile' || typeof requestAnimationFrame !== 'function') {
+      syncToolbarAfterResize();
+      return;
+    }
+    if (resizeObserverRafId != null) return;
+    resizeObserverRafId = requestAnimationFrame(() => {
+      resizeObserverRafId = null;
+      if (dragPointerId != null) return;
+      syncToolbarAfterResize();
+    });
   });
   ro.observe(wrap);
 
@@ -534,6 +558,10 @@ export function initDiagramToolbarDrag(options = {}) {
     document.removeEventListener('pointermove', onPointerMove, { capture: true });
     document.removeEventListener('pointerup', onPointerUp, { capture: true });
     document.removeEventListener('pointercancel', onPointerCancel, { capture: true });
+    if (resizeObserverRafId != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(resizeObserverRafId);
+      resizeObserverRafId = null;
+    }
     ro.disconnect();
     dragHandle.removeEventListener('pointerdown', onPointerDown, { capture: true });
     toolbar.removeEventListener('pointerdown', toolbarPointerDownHandler, { capture: true });

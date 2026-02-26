@@ -1212,7 +1212,9 @@ function showCropModal(file) {
     cropState.crop = { x: 0, y: 0, w: img.width, h: img.height };
     const sel = document.getElementById('cropAspectRatio');
     if (sel) sel.value = 'free';
-    const uploadTrigger = document.getElementById('uploadZone') || document.getElementById('fileInput');
+    const uploadTrigger = document.getElementById('cameraUploadBtn')
+      || document.querySelector('#canvasPlaceholder .placeholder-icon')
+      || document.getElementById('fileInput');
     openAccessibleModal('cropModal', { triggerEl: uploadTrigger });
     // Defer so modal is laid out (wrap has clientWidth/Height). Prevents full-resolution canvas on mobile when wrap was 0x0.
     requestAnimationFrame(() => drawCropPreview());
@@ -1914,6 +1916,28 @@ function syncMobileQuoteLineSummaries() {
           const hoursInput = qtyCell.querySelector('.quote-labour-hours-input');
           stepper?.remove();
           if (hoursInput) hoursInput.classList.remove('quote-labour-hours-input--hidden-mobile');
+        } else if (row.dataset.quoteMetresRow === 'true') {
+          const stepper = qtyCell.querySelector('.quote-mobile-qty-stepper');
+          const valueSpan = stepper?.querySelector('.quote-mobile-qty-stepper-value');
+          const savedValue = row.dataset.quoteMetresDraftValue;
+          const parsedStepperValue = parseFloat((valueSpan?.textContent || '').replace(/[^0-9.\-]/g, ''));
+          const parsedSavedValue = parseFloat(savedValue);
+          const metresValue = Number.isFinite(parsedSavedValue)
+            ? parsedSavedValue
+            : (Number.isFinite(parsedStepperValue) ? parsedStepperValue : null);
+          qtyCell.innerHTML = '';
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.className = 'quote-qty-metres-input';
+          input.value = metresValue != null ? formatQuoteQtyDisplay(metresValue) : '';
+          input.min = '0';
+          input.step = '0.1';
+          input.placeholder = 'Metres?';
+          input.setAttribute('aria-label', 'Length in metres');
+          input.addEventListener('change', () => commitMetresInput(row, input));
+          input.addEventListener('blur', () => commitMetresInput(row, input));
+          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(row, input); input.blur(); } });
+          qtyCell.appendChild(input);
         } else if (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '') {
           const metresVal = mmToM(parseFloat(row.dataset.lengthMm));
           const m = Number.isFinite(metresVal) ? metresVal : 0;
@@ -2072,8 +2096,11 @@ function syncMobileQuoteLineSummaries() {
     const isLabourRow = row.dataset.labourRow === 'true';
     const isMetresRow = !!(
       row.querySelector('.quote-qty-metres-input') ||
+      row.dataset.quoteMetresRow === 'true' ||
       (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '')
     );
+    if (isMetresRow) row.dataset.quoteMetresRow = 'true';
+    else delete row.dataset.quoteMetresRow;
     const useStepper = isMobile && (isLabourRow || isMetresRow || !isLabourRow);
     if (!useStepper) {
       let qtySummary = qtyCell.querySelector('.quote-mobile-line-qty-summary');
@@ -2094,7 +2121,9 @@ function syncMobileQuoteLineSummaries() {
         const minusBtn = document.createElement('button');
         minusBtn.type = 'button';
         minusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--minus';
-        minusBtn.setAttribute('aria-label', isLabourRow ? 'Decrease hours' : 'Decrease quantity');
+        const decreaseLabel = isLabourRow ? 'Decrease hours' : (isMetresRow ? 'Decrease length' : 'Decrease quantity');
+        const increaseLabel = isLabourRow ? 'Increase hours' : (isMetresRow ? 'Increase length' : 'Increase quantity');
+        minusBtn.setAttribute('aria-label', decreaseLabel);
         minusBtn.textContent = '−';
         const valueSpan = document.createElement('span');
         valueSpan.className = 'quote-mobile-qty-stepper-value';
@@ -2102,7 +2131,7 @@ function syncMobileQuoteLineSummaries() {
         const plusBtn = document.createElement('button');
         plusBtn.type = 'button';
         plusBtn.className = 'quote-mobile-qty-stepper-btn quote-mobile-qty-stepper-btn--plus';
-        plusBtn.setAttribute('aria-label', isLabourRow ? 'Increase hours' : 'Increase quantity');
+        plusBtn.setAttribute('aria-label', increaseLabel);
         plusBtn.textContent = '+';
         stepperWrap.appendChild(minusBtn);
         const step = qtyMeta.step;
@@ -2146,7 +2175,14 @@ function syncMobileQuoteLineSummaries() {
           stepperWrap.appendChild(plusBtn);
         }
         if (isMetresRow) {
-          qtyCell.querySelector('.quote-qty-metres-input')?.remove();
+          const metresInput = qtyCell.querySelector('.quote-qty-metres-input');
+          const metresInputValue = metresInput ? parseFloat(metresInput.value) : NaN;
+          if (Number.isFinite(metresInputValue)) {
+            row.dataset.quoteMetresDraftValue = formatQuoteQtyDisplay(metresInputValue);
+          } else {
+            delete row.dataset.quoteMetresDraftValue;
+          }
+          metresInput?.remove();
           qtyCell.innerHTML = '';
           qtyCell.appendChild(stepperWrap);
           updateStepperValue = () => {
@@ -2154,6 +2190,7 @@ function syncMobileQuoteLineSummaries() {
             const m = meta.value;
             const s = Number(m) === m && m % 1 !== 0 ? m.toFixed(1) : String(m);
             valueSpan.textContent = s + ' m';
+            row.dataset.quoteMetresDraftValue = formatQuoteQtyDisplay(m);
           };
           applyStep = (delta) => {
             const current = getQuoteLineQuantityMeta(row).value;
@@ -3477,6 +3514,7 @@ function updateQuoteTotalWarning() {
   if (!tableBody || !warningSpan || !totalLine) return;
   const hasIncomplete = tableBody.querySelector('tr.quote-row-incomplete-measurement') != null;
   warningSpan.hidden = !hasIncomplete;
+  warningSpan.setAttribute('aria-hidden', hasIncomplete ? 'false' : 'true');
   totalLine.classList.toggle('quote-total-final--incomplete', hasIncomplete);
   updateServiceM8SectionState(hasIncomplete);
 }
@@ -5304,6 +5342,7 @@ function initFloatingToolbar() {
   }
 
   const userProfileWrap = document.getElementById('userProfileWrap');
+  const productsProfileWrap = document.getElementById('productsProfileWrap');
   const profileDropdown = document.getElementById('profileDropdown');
   document.addEventListener('click', (e) => {
     let shouldDraw = false;
@@ -5334,10 +5373,16 @@ function initFloatingToolbar() {
       if (transparencyBtn) transparencyBtn.setAttribute('aria-expanded', 'false');
       shouldDraw = true;
     }
-    if (profileDropdown && !profileDropdown.hidden && userProfileWrap && !userProfileWrap.contains(e.target) && !profileDropdown.contains(e.target)) {
+    const clickedInsideProfileTrigger = !!(
+      (userProfileWrap && userProfileWrap.contains(e.target))
+      || (productsProfileWrap && productsProfileWrap.contains(e.target))
+    );
+    if (profileDropdown && !profileDropdown.hidden && !clickedInsideProfileTrigger && !profileDropdown.contains(e.target)) {
       profileDropdown.hidden = true;
       const userAvatar = document.getElementById('userAvatar');
+      const productsAvatar = document.getElementById('productsUserAvatar');
       if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      if (productsAvatar) productsAvatar.setAttribute('aria-expanded', 'false');
       shouldDraw = true;
     }
     if (shouldDraw) draw();
@@ -6480,7 +6525,7 @@ function updatePlaceholderVisibility() {
   }
   const quickQuoterEntry = document.getElementById('quickQuoterEntry');
   if (quickQuoterEntry) {
-    if (state.blueprintImage) {
+    if (hasContent) {
       quickQuoterEntry.setAttribute('hidden', '');
       closeQuickQuoterModal({ restoreFocus: false });
     } else quickQuoterEntry.removeAttribute('hidden');
@@ -9652,12 +9697,17 @@ async function processFileAsBlueprint(file) {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       state.blueprintImage = img;
       state.blueprintImageSourceUrl = null; // new upload, not from saved project
       state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
       state.viewZoom = 1;
       resetMobileFitPanState();
+      if (typeof img.decode === 'function') {
+        try {
+          await img.decode();
+        } catch (_) { /* fallback: draw without decode */ }
+      }
       URL.revokeObjectURL(url);
       updatePlaceholderVisibility();
       draw(); // Trigger full view re-fit to new blueprint
@@ -9706,7 +9756,6 @@ async function handleBlueprintSourceFile(file) {
 
 function initUpload() {
   const fileInput = document.getElementById('fileInput');
-  const uploadZone = document.getElementById('uploadZone');
   const cameraUploadBtn = document.getElementById('cameraUploadBtn');
   const placeholder = document.getElementById('canvasPlaceholder');
   const toggle = document.getElementById('technicalDrawingToggle');
@@ -9728,43 +9777,47 @@ function initUpload() {
     });
   }
 
-  // Do not add a click handler to uploadZone: the label's for="fileInput" already activates the file input.
-  // A redundant uploadZone.addEventListener('click', () => fileInput.click()) would open the file dialog twice.
+  // Do not add redundant click forwarding here; upload controls already activate #fileInput.
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files[0];
     if (!file) return;
-    clearMessage();
-    const isImage = ACCEPTED_IMAGE_TYPES.includes(file.type);
-    const isPdf = file.type === ACCEPTED_PDF_TYPE;
-    if (!isImage && !isPdf) {
-      showMessage('Please choose an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
-      return;
-    }
-    if (file.size > MAX_FILE_SIZE_BYTES && !isMobileViewportNow()) {
-      showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
-      return;
-    }
-    if (isPdf) {
-      try {
-        if (typeof setLoadingState === 'function') setLoadingState(true, 'Loading. Converting PDF.');
-        showMessage('Converting PDF…', 'info');
-        const pngFile = await convertPdfFirstPageToPng(file);
-        clearMessage();
-        if (typeof setLoadingState === 'function') setLoadingState(false);
-        await handleBlueprintSourceFile(pngFile);
-      } catch (err) {
-        const msg = err?.message || String(err);
-        const userMsg = /password|encrypted|require.*pass/i.test(msg)
-          ? 'This PDF is password-protected. Please remove the password and try again.'
-          : /invalid|corrupt|malformed/i.test(msg)
-            ? 'The PDF appears to be corrupt or invalid.'
-            : 'Could not convert PDF: ' + msg;
-        showMessage(userMsg);
-        if (typeof setLoadingState === 'function') setLoadingState(false);
+    try {
+      clearMessage();
+      const isImage = ACCEPTED_IMAGE_TYPES.includes(file.type);
+      const isPdf = file.type === ACCEPTED_PDF_TYPE;
+      if (!isImage && !isPdf) {
+        showMessage('Please choose an image file (JPEG, PNG, GIF, WebP, HEIC) or PDF.');
+        return;
       }
-    } else {
-      await handleBlueprintSourceFile(file);
+      if (file.size > MAX_FILE_SIZE_BYTES && !isMobileViewportNow()) {
+        showMessage(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`);
+        return;
+      }
+      if (isPdf) {
+        try {
+          if (typeof setLoadingState === 'function') setLoadingState(true, 'Loading. Converting PDF.');
+          showMessage('Converting PDF…', 'info');
+          const pngFile = await convertPdfFirstPageToPng(file);
+          clearMessage();
+          if (typeof setLoadingState === 'function') setLoadingState(false);
+          await handleBlueprintSourceFile(pngFile);
+        } catch (err) {
+          const msg = err?.message || String(err);
+          const userMsg = /password|encrypted|require.*pass/i.test(msg)
+            ? 'This PDF is password-protected. Please remove the password and try again.'
+            : /invalid|corrupt|malformed/i.test(msg)
+              ? 'The PDF appears to be corrupt or invalid.'
+              : 'Could not convert PDF: ' + msg;
+          showMessage(userMsg);
+          if (typeof setLoadingState === 'function') setLoadingState(false);
+        }
+      } else {
+        await handleBlueprintSourceFile(file);
+      }
+    } finally {
+      // Reset so choosing the same file again still fires change in browsers that suppress identical values.
+      fileInput.value = '';
     }
   });
 
@@ -9866,12 +9919,17 @@ function initUpload() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         state.blueprintImage = img;
         state.blueprintImageSourceUrl = null; // updated from server, not from saved project URL
         state.blueprintTransform = { x: 0, y: 0, w: img.width, h: img.height, rotation: 0, zIndex: BLUEPRINT_Z_INDEX, locked: true, opacity: 1 };
         state.viewZoom = 1;
         resetMobileFitPanState();
+        if (typeof img.decode === 'function') {
+          try {
+            await img.decode();
+          } catch (_) { /* fallback: draw without decode */ }
+        }
         URL.revokeObjectURL(url);
         updatePlaceholderVisibility();
         draw();
@@ -10922,6 +10980,7 @@ function initAuth() {
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
   const productsUserAvatar = document.getElementById('productsUserAvatar');
+  const productCardNew = document.getElementById('productCardNew');
   let passkeyAvailable = false;
 
   function setPasswordAutocompleteMode(mode) {
@@ -10972,7 +11031,7 @@ function initAuth() {
     if (authState.token) {
       if (userProfileWrap) userProfileWrap.hidden = false;
       if (productsProfileWrap) productsProfileWrap.hidden = false;
-      if (profileDropdown) profileDropdown.hidden = true;
+      setProfileDropdownExpanded(false);
       updateUserProfile();
       if (authUserSection) authUserSection.hidden = false;
       if (authForm) authForm.hidden = true;
@@ -10980,6 +11039,7 @@ function initAuth() {
     } else {
       if (userProfileWrap) userProfileWrap.hidden = true;
       if (productsProfileWrap) productsProfileWrap.hidden = true;
+      setProfileDropdownExpanded(false);
       if (authUserSection) authUserSection.hidden = true;
       if (authForm) authForm.hidden = false;
       if (authFormHint) authFormHint.hidden = false;
@@ -11001,30 +11061,36 @@ function initAuth() {
     });
   }
 
+  function setProfileDropdownExpanded(expanded) {
+    if (profileDropdown) profileDropdown.hidden = !expanded;
+    if (userAvatar) userAvatar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (productsUserAvatar) productsUserAvatar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (expanded) collapseDiagramToolbarIfExpanded();
+  }
+
+  function toggleProfileDropdown(event) {
+    event?.stopPropagation?.();
+    const isOpen = !!(profileDropdown && !profileDropdown.hidden);
+    setProfileDropdownExpanded(!isOpen);
+  }
+
   bindButtonLikeKeyActivation(userAvatar);
   bindButtonLikeKeyActivation(productsUserAvatar);
+  bindButtonLikeKeyActivation(productCardNew);
 
-  if (userAvatar && profileDropdown) {
-    userAvatar.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const wasOpen = !profileDropdown.hidden;
-      profileDropdown.hidden = wasOpen;
-      userAvatar.setAttribute('aria-expanded', profileDropdown.hidden ? 'false' : 'true');
-      if (!profileDropdown.hidden) collapseDiagramToolbarIfExpanded();
-    });
-  }
+  if (userAvatar && profileDropdown) userAvatar.addEventListener('click', (e) => toggleProfileDropdown(e));
+  if (productsUserAvatar && profileDropdown) productsUserAvatar.addEventListener('click', (e) => toggleProfileDropdown(e));
+
   if (menuItemProducts) {
     menuItemProducts.addEventListener('click', (e) => {
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      setProfileDropdownExpanded(false);
       e.stopPropagation();
       switchView('view-products', { triggerEl: userAvatar || menuItemProducts });
     });
   }
   if (menuItemUserPermissions) {
     menuItemUserPermissions.addEventListener('click', (e) => {
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      setProfileDropdownExpanded(false);
       e.stopPropagation();
       if (!canAccessDesktopAdminUi()) {
         const msg = isDesktopViewport()
@@ -11038,8 +11104,7 @@ function initAuth() {
   }
   if (menuItemMaterialRules) {
     menuItemMaterialRules.addEventListener('click', (e) => {
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      setProfileDropdownExpanded(false);
       e.stopPropagation();
       if (!canAccessDesktopAdminUi()) {
         const msg = isDesktopViewport()
@@ -11053,8 +11118,7 @@ function initAuth() {
   }
   if (menuItemBonusAdmin) {
     menuItemBonusAdmin.addEventListener('click', (e) => {
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      setProfileDropdownExpanded(false);
       e.stopPropagation();
       if (!canAccessDesktopAdminUi()) {
         const msg = isDesktopViewport()
@@ -11068,8 +11132,7 @@ function initAuth() {
   }
   if (menuItemTechnicianBonus) {
     menuItemTechnicianBonus.addEventListener('click', (e) => {
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
+      setProfileDropdownExpanded(false);
       e.stopPropagation();
       openTechnicianBonusView(userAvatar || menuItemTechnicianBonus);
     });
@@ -11079,17 +11142,7 @@ function initAuth() {
       clearAuthState();
       if (authState.supabase) authState.supabase.auth.signOut();
       setAuthUI();
-      if (profileDropdown) profileDropdown.hidden = true;
-      if (userAvatar) userAvatar.setAttribute('aria-expanded', 'false');
-      switchView('view-login');
-      loadPanelProducts();
-    });
-  }
-  if (productsUserAvatar) {
-    productsUserAvatar.addEventListener('click', () => {
-      clearAuthState();
-      if (authState.supabase) authState.supabase.auth.signOut();
-      setAuthUI();
+      setProfileDropdownExpanded(false);
       switchView('view-login');
       loadPanelProducts();
     });
@@ -13058,6 +13111,11 @@ function applyViewportMode(mode, options = {}) {
 
   if (modeChanged) {
     const shouldExpandPanelByDefault = normalizedMode === 'desktop';
+    if (normalizedMode === 'desktop' && panelThumbLazyIo) {
+      panelThumbLazyIo.disconnect();
+      panelThumbLazyIo = null;
+      applyProductFilters();
+    }
     setPanelExpanded(shouldExpandPanelByDefault, { resizeCanvas: options.resizeCanvas !== false });
     syncQuoteModalViewportState();
     syncMobileLabourRowSummary();
@@ -13230,6 +13288,8 @@ function getPanelProducts() {
 
 /** Blob URLs created for panel thumbnails (filled SVG); revoked when panel re-renders. */
 let panelThumbBlobUrls = new Set();
+/** Intersection Observer for lazy-loading filled SVG thumbs on mobile; disconnected when panel re-renders. */
+let panelThumbLazyIo = null;
 
 /**
  * Fetch an SVG and return a blob URL of the same SVG with injected fill so line-art reads as solid in the panel.
@@ -13263,6 +13323,10 @@ function renderProducts(products) {
     try { URL.revokeObjectURL(u); } catch (_) {}
   }
   panelThumbBlobUrls.clear();
+  if (panelThumbLazyIo) {
+    panelThumbLazyIo.disconnect();
+    panelThumbLazyIo = null;
+  }
   grid.innerHTML = '';
   // Display name overrides for manual-length products (remove meter from gutters, use MM for downpipes)
   const displayNameOverrides = {
@@ -13271,6 +13335,7 @@ function renderProducts(products) {
     'DP-65-3M': '65 MM downpipe',
     'DP-80-3M': '80 MM downpipe',
   };
+  const isMobile = layoutState.viewportMode === 'mobile';
   products.forEach((p) => {
     const thumb = document.createElement('div');
     thumb.className = 'product-thumb';
@@ -13288,11 +13353,9 @@ function renderProducts(products) {
     img.src = thumbImgSrc;
     thumb.appendChild(img);
     thumb.appendChild(document.createElement('span')).textContent = displayName;
-    // Mobile-only: Improve panel thumbnail appearance - when source is SVG (diagram used as thumb), show a filled version so line-art reads as solid
-    if (layoutState.viewportMode === 'mobile' && /\.svg($|\?)/i.test(thumbImgSrc)) {
-      createFilledSvgThumbUrl(thumbImgSrc).then((blobUrl) => {
-        if (blobUrl && img.parentNode) img.src = blobUrl;
-      });
+    // Mobile-only (54.120.1): Lazy-load filled SVG thumb when thumb enters view; store src for Intersection Observer
+    if (isMobile && /\.svg($|\?)/i.test(thumbImgSrc)) {
+      thumb.dataset.thumbImgSrc = thumbImgSrc;
     }
     
     // Canvas Porter: Center-Drop - click (not drag) to add at viewport center
@@ -13387,6 +13450,32 @@ function renderProducts(products) {
 
     grid.appendChild(thumb);
   });
+
+  // 54.120.1: Lazy-load filled SVG thumbs on mobile when thumb enters view
+  if (isMobile) {
+    const panelContent = document.getElementById('panelContent');
+    const thumbsToObserve = panelContent ? grid.querySelectorAll('.product-thumb[data-thumb-img-src]') : [];
+    if (panelContent && thumbsToObserve.length > 0) {
+      panelThumbLazyIo = new IntersectionObserver(
+        (entries) => {
+          if (layoutState.viewportMode !== 'mobile') return;
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            const thumb = entry.target;
+            const src = thumb.dataset.thumbImgSrc;
+            const imgEl = thumb.querySelector('img');
+            if (!src || !imgEl) return;
+            panelThumbLazyIo?.unobserve(thumb);
+            createFilledSvgThumbUrl(src).then((blobUrl) => {
+              if (blobUrl && imgEl.parentNode && layoutState.viewportMode === 'mobile') imgEl.src = blobUrl;
+            });
+          });
+        },
+        { root: panelContent, rootMargin: '80px', threshold: 0 }
+      );
+      thumbsToObserve.forEach((t) => panelThumbLazyIo.observe(t));
+    }
+  }
 
   // Mobile: update collapsed Products pill facepile (first 3 product thumbnails)
   const facepile = document.getElementById('panelCollapsedFacepile');
@@ -18000,6 +18089,9 @@ if (typeof window !== 'undefined') {
   };
   window.__quoteAppSyncMobileQuoteLineSummaries = function () {
     syncMobileQuoteLineSummaries();
+  };
+  window.__quoteAppUpdateQuoteTotalWarning = function () {
+    updateQuoteTotalWarning();
   };
   window.__quoteAppGetMobileGestureDiagnostics = function () {
     const activePointerCount = Object.keys(state.activePointers || {}).length;

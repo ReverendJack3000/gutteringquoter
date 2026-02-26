@@ -147,19 +147,23 @@ def can_disconnect_servicem8(current_user_id: str) -> bool:
 def get_redirect_uri() -> str:
     """
     Get OAuth callback URL. MUST match ServiceM8 Activation URL exactly.
-    
-    ServiceM8 Activation URL (Return URL) is set to:
-    https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
-    
-    This URL must match character-for-character in both authorize request and token exchange,
-    or ServiceM8 will reject with invalid_uri error.
+
+    Resolution precedence:
+    1) APP_BASE_URL (explicit override)
+    2) RAILWAY_PUBLIC_DOMAIN (converted to https://{domain})
+    3) Local fallback: http://127.0.0.1:8000
+
+    The resulting callback must match the Return URL configured in ServiceM8 Store Connect
+    character-for-character for both authorize and token exchange requests.
     """
     base = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
     if not base:
-        # Default to Railway production URL (must match ServiceM8 Activation URL)
-        base = "https://quote-app-production-7897.up.railway.app"
+        railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip().strip("/")
+        if railway_domain:
+            base = f"https://{railway_domain}"
+    if not base:
+        base = "http://127.0.0.1:8000"
     redirect_uri = f"{base}/api/servicem8/oauth/callback"
-    # Ensure exact match: https://quote-app-production-7897.up.railway.app/api/servicem8/oauth/callback
     return redirect_uri
 
 
