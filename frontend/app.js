@@ -87,6 +87,8 @@ const state = {
   // 54.62: Mobile tap-first move gating (avoid accidental drags on tap)
   movePrimeStartClientX: 0,
   movePrimeStartClientY: 0,
+  panStartClientX: 0,
+  panStartClientY: 0,
   colorPaletteOpen: false, // toggled by floating toolbar colour button; when true, show #colorPalettePopover below toolbar
   transparencyPopoverOpen: false, // toggled by #blueprintTransparencyBtn; only way to open transparency slider
   badgeLengthEditElementId: null, // when badge length popover is open, the element id being edited
@@ -594,6 +596,7 @@ const MOBILE_MOVE_START_THRESHOLD_PX = 8;
 /** 54.102.3: Double-tap on empty canvas → Fit: time and distance thresholds. */
 const MOBILE_DOUBLE_TAP_WINDOW_MS = 400;
 const MOBILE_DOUBLE_TAP_DISTANCE_PX = 20;
+const MOBILE_PAN_TAP_MAX_MOVE_PX = 12;
 const ZOOM_WHEEL_FACTOR = 0.92;
 const ZOOM_BUTTON_FACTOR = 1.25;
 const VIEW_PAD = 48; // max padding from content edge to viewport when panning (canvas not limitless)
@@ -605,6 +608,13 @@ const ROTATE_HANDLE_PROXIMITY_PX = 20; // larger hit area for rotate handle (eas
 const HANDLE_HOVER_SCALE = 1.2;
 const ROTATE_HANDLE_OFFSET = 40; // vertical stem (tail) above top-center so rotate handle is easy to select
 const ROTATE_STEM_PX = 40; // stem from box top to rotate handle (same length)
+const BLUEPRINT_CORNER_HIT_RADIUS_DESKTOP = 12;
+const BLUEPRINT_CORNER_HIT_RADIUS_MOBILE = 18;
+const BLUEPRINT_ROTATE_HIT_RADIUS_DESKTOP = 14;
+const BLUEPRINT_ROTATE_HIT_RADIUS_MOBILE = 22;
+const BLUEPRINT_ROTATE_STEM_HIT_RADIUS_DESKTOP = 10;
+const BLUEPRINT_ROTATE_STEM_HIT_RADIUS_MOBILE = 16;
+const MIN_BLUEPRINT_RESIZE_DIM = 40;
 const PILL_HALF_LENGTH = 6; // half-length of pill (n/s/e/w handles) in display px
 const PILL_HALF_THICKNESS = 2; // half-thickness of pill for drawing (4px total = thin aesthetic)
 const PILL_HIT_THICKNESS = 15; // hit-test pill as 15px thick for Fitts's Law (forgiving, magnetic feel)
@@ -733,6 +743,19 @@ function resetMobileFitPanState() {
   state.fitPanFeedbackY = 0;
 }
 
+function requestDraw(reason = 'unspecified') {
+  renderLoopState.lastRequestReason = reason;
+  if (renderLoopState.rafId != null) return false;
+  renderLoopState.rafPending = true;
+  renderLoopState.rafId = requestAnimationFrame((ts) => {
+    renderLoopState.rafId = null;
+    renderLoopState.rafPending = false;
+    renderLoopState.lastFrameTs = Number.isFinite(ts) ? ts : Date.now();
+    draw();
+  });
+  return true;
+}
+
 const MIN_PANEL_WIDTH = 280;
 const MAX_PANEL_WIDTH = 600;
 const DEFAULT_PANEL_WIDTH = 320;
@@ -762,6 +785,16 @@ const MOBILE_ADD_SIZE_RATIO = 0.25;
 const MOBILE_ADD_SCALE_EPSILON = 0.0001;
 const CANVAS_PORTER_VISUAL_PADDING = 10; // Safe zone padding in pixels (canvas coordinates)
 const BLUEPRINT_Z_INDEX = -1; // Blueprint is the back layer; elements use zIndex >= 0
+
+const renderLoopState = {
+  rafId: null,
+  rafPending: false,
+  drawCount: 0,
+  lastDrawTs: 0,
+  lastFrameTs: 0,
+  lastRequestReason: '',
+  continuousReason: '',
+};
 
 function normalizeElementLineWeight(lineWeight) {
   const parsed = Number(lineWeight);
@@ -5901,6 +5934,7 @@ function setSelection(ids) {
     else announceCanvas(`${next.length} elements selected.`);
   }
   updateAccessibilityInspector({ skipActiveField: true });
+  requestDraw('selection');
 }
 
 function getElementsInMarquee(start, current, windowMode) {
@@ -7576,9 +7610,50 @@ function applyResizeWith(canvasPos, altKey) {
   invalidateElementRenderCache(el);
 }
 
+function applyBlueprintResizeWith(canvasPos) {
+  const bt = state.blueprintTransform;
+  const handle = state.resizeHandle;
+  const start = state.dragOffset.blueprintResizeStart;
+  if (!bt || !canvasPos || !handle || !start) return;
+  const signs = getBlueprintResizeHandleSigns(handle);
+  if (!signs) return;
+
+  const local = canvasToLocal(canvasPos.x, canvasPos.y, start.cx, start.cy, start.rotation);
+  const anchorLocalX = -signs.sx * (start.w / 2);
+  const anchorLocalY = -signs.sy * (start.h / 2);
+  const pointerDeltaX = (local.x - anchorLocalX) * signs.sx;
+  const pointerDeltaY = (local.y - anchorLocalY) * signs.sy;
+
+  let nextW = Math.max(MIN_BLUEPRINT_RESIZE_DIM, pointerDeltaX);
+  let nextH = Math.max(MIN_BLUEPRINT_RESIZE_DIM, pointerDeltaY);
+  const aspectRatio = Math.max(0.0001, start.w / start.h);
+  if (nextW / nextH > aspectRatio) nextH = nextW / aspectRatio;
+  else nextW = nextH * aspectRatio;
+
+  const activeLocalX = anchorLocalX + signs.sx * nextW;
+  const activeLocalY = anchorLocalY + signs.sy * nextH;
+  const centerLocalX = (anchorLocalX + activeLocalX) / 2;
+  const centerLocalY = (anchorLocalY + activeLocalY) / 2;
+
+  const rad = (start.rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const nextCenterX = start.cx + centerLocalX * cos - centerLocalY * sin;
+  const nextCenterY = start.cy + centerLocalX * sin + centerLocalY * cos;
+
+  bt.w = nextW;
+  bt.h = nextH;
+  bt.x = nextCenterX - nextW / 2;
+  bt.y = nextCenterY - nextH / 2;
+}
+
 function draw() {
   const { canvas, ctx, blueprintImage, elements } = state;
   if (!canvas || !ctx) return;
+  renderLoopState.drawCount += 1;
+  renderLoopState.lastDrawTs = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
 
   const dpr = window.devicePixelRatio || 1;
   const w = state.canvasWidth / dpr;
@@ -8266,7 +8341,21 @@ function draw() {
     && !isAutosaveEligibleCurrentState()
     && !!(autosaveState.draftId || getStoredAutosaveDraftId());
   requestAutosaveCheck({ immediate: autosaveDeleteImmediate });
-  requestAnimationFrame(draw);
+  const fitFeedbackStillAnimating = isMobileFitZoomLevel()
+    && (Math.abs(state.fitPanFeedbackX) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON
+      || Math.abs(state.fitPanFeedbackY) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON);
+  const snapPopActive = state.snapPopStartTime != null;
+  const gestureActive = !!state.mode && state.mode !== 'move-primed';
+  if (fitFeedbackStillAnimating || snapPopActive || gestureActive) {
+    const reasons = [];
+    if (fitFeedbackStillAnimating) reasons.push('fit-bounce');
+    if (snapPopActive) reasons.push('snap-pop');
+    if (gestureActive) reasons.push(`mode:${state.mode}`);
+    renderLoopState.continuousReason = reasons.join(',');
+    requestDraw(`continuous:${renderLoopState.continuousReason}`);
+  } else {
+    renderLoopState.continuousReason = '';
+  }
 }
 
 /**
@@ -8503,6 +8592,25 @@ function sendToBack(elementId) {
   draw();
 }
 
+function getBlueprintHandleHitThresholds() {
+  const mobile = layoutState.viewportMode === 'mobile';
+  return {
+    corner: mobile ? BLUEPRINT_CORNER_HIT_RADIUS_MOBILE : BLUEPRINT_CORNER_HIT_RADIUS_DESKTOP,
+    rotate: mobile ? BLUEPRINT_ROTATE_HIT_RADIUS_MOBILE : BLUEPRINT_ROTATE_HIT_RADIUS_DESKTOP,
+    stem: mobile ? BLUEPRINT_ROTATE_STEM_HIT_RADIUS_MOBILE : BLUEPRINT_ROTATE_STEM_HIT_RADIUS_DESKTOP,
+  };
+}
+
+function getBlueprintResizeHandleSigns(handleId) {
+  switch (handleId) {
+    case 'nw': return { sx: -1, sy: -1 };
+    case 'ne': return { sx: 1, sy: -1 };
+    case 'se': return { sx: 1, sy: 1 };
+    case 'sw': return { sx: -1, sy: 1 };
+    default: return null;
+  }
+}
+
 function hitTestBlueprintHandle(clientX, clientY) {
   if (!state.selectedBlueprint || !state.blueprintTransform) return null;
   const bt = state.blueprintTransform;
@@ -8522,16 +8630,22 @@ function hitTestBlueprintHandle(clientX, clientY) {
     { id: 'sw', ...rot(-sw / 2, sh / 2) },
     { id: 'se', ...rot(sw / 2, sh / 2) },
   ];
-  const rotateHandle = rot(sw / 2, -ROTATE_HANDLE_OFFSET);
+  const topCenter = rot(0, -sh / 2);
+  const rotateHandle = rot(0, -(sh / 2 + ROTATE_HANDLE_OFFSET));
   const display = clientToCanvasDisplay(clientX, clientY);
   if (!display) return null;
   const px = display.x;
   const py = display.y;
-  const hs = HANDLE_SIZE;
+  const hitThresholds = getBlueprintHandleHitThresholds();
   for (const h of corners) {
-    if (Math.abs(px - h.x) <= hs && Math.abs(py - h.y) <= hs) return { handle: h.id };
+    if (Math.hypot(px - h.x, py - h.y) <= hitThresholds.corner) return { handle: h.id };
   }
-  if (Math.abs(px - rotateHandle.x) <= 8 && Math.abs(py - rotateHandle.y) <= 8) return { handle: 'rotate' };
+  if (Math.hypot(px - rotateHandle.x, py - rotateHandle.y) <= hitThresholds.rotate) {
+    return { handle: 'rotate' };
+  }
+  if (pointToSegmentDistance(px, py, topCenter.x, topCenter.y, rotateHandle.x, rotateHandle.y) <= hitThresholds.stem) {
+    return { handle: 'rotate' };
+  }
   return null;
 }
 
@@ -8593,8 +8707,14 @@ function initCanvas() {
         const dx = e.clientX - mobileDoubleTapLast.clientX;
         const dy = e.clientY - mobileDoubleTapLast.clientY;
         if (Math.hypot(dx, dy) < MOBILE_DOUBLE_TAP_DISTANCE_PX) {
+          const canvasPosForTap = clientToCanvas(e.clientX, e.clientY);
           const badge = hitTestBadge(e.clientX, e.clientY);
-          if (!badge) {
+          const elementHandle = hitTestHandle(e.clientX, e.clientY);
+          const elementUnderTap = canvasPosForTap ? hitTestElement(canvasPosForTap.x, canvasPosForTap.y) : null;
+          const blueprintHandle = hitTestBlueprintHandle(e.clientX, e.clientY);
+          const blueprintUnderTap = canvasPosForTap ? hitTestBlueprint(canvasPosForTap.x, canvasPosForTap.y) : false;
+          const emptyCanvasTap = !badge && !elementHandle && !elementUnderTap && !blueprintHandle && !blueprintUnderTap;
+          if (emptyCanvasTap) {
             state.viewZoom = 1;
             resetMobileFitPanState();
             draw();
@@ -8675,10 +8795,13 @@ function initCanvas() {
       state.mode = 'blueprint-resize';
       state.resizeHandle = bpHandle.handle;
       const bt = state.blueprintTransform;
-      state.dragOffset.w = bt.w;
-      state.dragOffset.h = bt.h;
-      state.dragOffset.cx = bt.x + bt.w / 2;
-      state.dragOffset.cy = bt.y + bt.h / 2;
+      state.dragOffset.blueprintResizeStart = {
+        w: bt.w,
+        h: bt.h,
+        cx: bt.x + bt.w / 2,
+        cy: bt.y + bt.h / 2,
+        rotation: bt.rotation || 0,
+      };
       return;
     }
     const handleHit = hitTestHandle(e.clientX, e.clientY);
@@ -8840,10 +8963,15 @@ function initCanvas() {
     }
     if (target?.type === 'blueprint') {
       state.hoveredId = null;
-      // Body click on unlocked blueprint: only SELECT, never enter blueprint-move
-      // Handle-only movement: resize/rotate via hitTestBlueprintHandle; background never moves from body drag
       state.selectedBlueprint = true;
       setSelection([]);
+      const bt = state.blueprintTransform;
+      if (bt && !bt.locked) {
+        state.snapshotAtActionStart = cloneStateForUndo();
+        state.mode = 'blueprint-move';
+        state.dragOffset.x = canvasPos.x - bt.x;
+        state.dragOffset.y = canvasPos.y - bt.y;
+      }
       return;
     }
     setSelection([]);
@@ -8854,6 +8982,8 @@ function initCanvas() {
       state.mode = isMobileFitZoomLevel() ? 'pan-resist' : 'pan';
       state.dragOffset.x = e.clientX;
       state.dragOffset.y = e.clientY;
+      state.panStartClientX = e.clientX;
+      state.panStartClientY = e.clientY;
       return;
     }
     state.mode = 'marquee';
@@ -8941,6 +9071,7 @@ function initCanvas() {
     }
     if (state.mode === 'marquee') {
       state.marqueeCurrent = { x: canvasPos.x, y: canvasPos.y };
+      requestDraw('pointermove:marquee');
       return;
     }
     if (state.mode === 'move-primed') {
@@ -9000,18 +9131,7 @@ function initCanvas() {
       bt.x = canvasPos.x - state.dragOffset.x;
       bt.y = canvasPos.y - state.dragOffset.y;
     } else if (state.mode === 'blueprint-resize' && state.blueprintTransform && state.resizeHandle) {
-      const bt = state.blueprintTransform;
-      const cx = state.dragOffset.cx;
-      const cy = state.dragOffset.cy;
-      let w = Math.max(40, Math.abs(canvasPos.x - cx) * 2);
-      let h = Math.max(40, Math.abs(canvasPos.y - cy) * 2);
-      const ar = state.dragOffset.w / state.dragOffset.h;
-      if (w / h > ar) h = w / ar;
-      else w = h * ar;
-      bt.w = w;
-      bt.h = h;
-      bt.x = cx - w / 2;
-      bt.y = cy - h / 2;
+      applyBlueprintResizeWith(canvasPos);
     } else if (state.mode === 'blueprint-rotate' && state.blueprintTransform) {
       const bt = state.blueprintTransform;
       const rect = getCanvasRect();
@@ -9056,10 +9176,17 @@ function initCanvas() {
       }
       updateCanvasTooltip(wasConstrained ? 'Max angle' : state.currentRotationAngle + '°', e.clientX, e.clientY);
     }
+    if (state.mode !== 'resize') requestDraw('pointermove');
   });
 
   canvas.addEventListener('pointerup', (e) => {
-    const wasSimpleTap = layoutState.viewportMode === 'mobile' && (state.mode === null || state.mode === 'move-primed');
+    const panTapDx = e.clientX - state.panStartClientX;
+    const panTapDy = e.clientY - state.panStartClientY;
+    const wasPanTap = layoutState.viewportMode === 'mobile'
+      && (state.mode === 'pan' || state.mode === 'pan-resist')
+      && (panTapDx * panTapDx + panTapDy * panTapDy <= MOBILE_PAN_TAP_MAX_MOVE_PX * MOBILE_PAN_TAP_MAX_MOVE_PX);
+    const wasSimpleTap = layoutState.viewportMode === 'mobile'
+      && (state.mode === null || state.mode === 'move-primed' || wasPanTap);
     if (e.target && e.target.releasePointerCapture && e.pointerId != null) {
       try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
     }
@@ -9147,6 +9274,9 @@ function initCanvas() {
       state.resizeRAFId = null;
     }
     state.pendingResizeCanvasPos = null;
+    state.dragOffset.blueprintResizeStart = null;
+    state.panStartClientX = 0;
+    state.panStartClientY = 0;
     state.marqueeStart = null;
     state.marqueeCurrent = null;
     state.activeGuides = [];
@@ -9160,6 +9290,7 @@ function initCanvas() {
     if (wasSimpleTap) {
       mobileDoubleTapLast = { time: Date.now(), clientX: e.clientX, clientY: e.clientY };
     }
+    requestDraw('pointerup');
   });
 
   canvas.addEventListener('pointerleave', (e) => {
@@ -9187,9 +9318,13 @@ function initCanvas() {
       state.resizeRAFId = null;
     }
     state.pendingResizeCanvasPos = null;
+    state.dragOffset.blueprintResizeStart = null;
+    state.panStartClientX = 0;
+    state.panStartClientY = 0;
     clearMobilePointerGestureState();
     if (state.mode === 'pan') state.mode = null;
     else { state.mode = null; state.resizeHandle = null; }
+    requestDraw('pointerleave');
   });
 
   canvas.addEventListener('pointercancel', (e) => {
@@ -9211,6 +9346,9 @@ function initCanvas() {
     }
     state.pendingResizeCanvasPos = null;
     state.pendingResizeAltKey = false;
+    state.dragOffset.blueprintResizeStart = null;
+    state.panStartClientX = 0;
+    state.panStartClientY = 0;
     state.mode = null;
     state.resizeHandle = null;
     state.marqueeStart = null;
@@ -9220,6 +9358,7 @@ function initCanvas() {
     state.dragMoveIds = [];
     state.dragRelativeOffsets = [];
     clearMobilePointerGestureState();
+    requestDraw('pointercancel');
   });
 
   canvas.addEventListener('wheel', (e) => {
@@ -9252,6 +9391,7 @@ function initCanvas() {
         state.viewPanY += e.deltaY;
       }
     }
+    requestDraw('wheel');
   }, { passive: false });
 
   document.addEventListener('keydown', (e) => {
@@ -9708,6 +9848,7 @@ function initUpload() {
         resetMobileFitPanState();
         URL.revokeObjectURL(url);
         updatePlaceholderVisibility();
+        draw();
       };
       img.onerror = () => showMessage('Failed to display the updated blueprint.');
       img.src = url;
@@ -12536,7 +12677,7 @@ function initGlobalToolbar() {
     const setAriaHidden = () => {
       const mobile = isMobile();
       if (mobileUndoRedoWrap) mobileUndoRedoWrap.setAttribute('aria-hidden', mobile ? 'false' : 'true');
-      if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'true' : 'false');
+      if (mobileFitViewBtn) mobileFitViewBtn.setAttribute('aria-hidden', mobile ? 'false' : 'true');
       if (mobileBonusBtn) mobileBonusBtn.setAttribute('aria-hidden', mobile ? 'false' : 'true');
       updateMobileBonusButtonVisibility();
     };
@@ -17850,6 +17991,21 @@ if (typeof window !== 'undefined') {
       },
     };
   };
+  window.__quoteAppGetRenderLoopDiagnostics = function () {
+    return {
+      rafPending: renderLoopState.rafPending,
+      drawCount: renderLoopState.drawCount,
+      lastDrawTs: renderLoopState.lastDrawTs,
+      lastFrameTs: renderLoopState.lastFrameTs,
+      lastRequestReason: renderLoopState.lastRequestReason,
+      continuousReason: renderLoopState.continuousReason,
+      mode: state.mode,
+      snapPopActive: state.snapPopStartTime != null,
+      fitFeedbackActive: isMobileFitZoomLevel()
+        && (Math.abs(state.fitPanFeedbackX) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON
+          || Math.abs(state.fitPanFeedbackY) > MOBILE_FIT_PAN_BOUNCE_STOP_EPSILON),
+    };
+  };
   window.__quoteAppSetElementRotation = function (id, degrees) {
     const el = state.elements.find((e) => e.id === id);
     if (el) {
@@ -17933,6 +18089,41 @@ if (typeof window !== 'undefined') {
     return { x: screenX, y: screenY };
   };
   window.__quoteAppHasBlueprint = function () { return !!(state.blueprintImage && state.blueprintTransform); };
+  window.__quoteAppGetBlueprintTransform = function () {
+    if (!state.blueprintTransform) return null;
+    const bt = state.blueprintTransform;
+    return {
+      x: bt.x,
+      y: bt.y,
+      w: bt.w,
+      h: bt.h,
+      rotation: bt.rotation || 0,
+      locked: !!bt.locked,
+      zIndex: bt.zIndex != null ? bt.zIndex : BLUEPRINT_Z_INDEX,
+    };
+  };
+  window.__quoteAppSetBlueprintLocked = function (locked) {
+    if (!state.blueprintTransform) return false;
+    state.blueprintTransform.locked = !!locked;
+    requestDraw('hook:set-blueprint-lock');
+    return true;
+  };
+  window.__quoteAppGetBlueprintScreenCenter = function () {
+    if (!state.blueprintTransform) return null;
+    const rect = getCanvasRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const logicalW = state.canvasWidth / dpr;
+    const logicalH = state.canvasHeight / dpr;
+    if (!logicalW || !logicalH) return null;
+    const bt = state.blueprintTransform;
+    const centerDisplayX = state.offsetX + (bt.x + bt.w / 2) * state.scale;
+    const centerDisplayY = state.offsetY + (bt.y + bt.h / 2) * state.scale;
+    return {
+      x: rect.left + centerDisplayX * (rect.width / logicalW),
+      y: rect.top + centerDisplayY * (rect.height / logicalH),
+    };
+  };
   window.__quoteAppGetBlueprintOpacity = function () { return state.blueprintTransform?.opacity ?? 1; };
   window.__quoteAppGetBlueprintScreenRect = function () {
     if (!state.blueprintImage || !state.blueprintTransform) return null;

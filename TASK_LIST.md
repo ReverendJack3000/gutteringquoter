@@ -86,8 +86,6 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.49, 54.52–54.53, 54.56–54.60, 54.79.4, **54.107.1** | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56–54.60); 54.79.4 thumbnail blend; **54.107.1 Team pool button label and formatting (all mobile views, SVG fit).** |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
 | 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
-| 54 | 54.103.1–54.103.4 | (Mobile-only) Selection handles: corners-only (hide side pills), with hit-test parity, E2E/debug parity, and desktop guard. |
-| 54 | 54.104.1–54.104.6 | (Mobile-only) Two-finger selected-element transform smoothing: RAF-coalesced updates, angle continuity, no-jump transition, diagnostics hook, regression + manual QA, Railway-safe. |
 | 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |
 | 54 | 54.69 | Mobile header green → blue: optional manifest theme color update |
 | 54 | 54.81.1–54.81.4 | (Mobile-only) Product tap-to-add reliability + 25%-relative add sizing (blueprint long side; no-blueprint canvas fallback) with desktop guard and regression QA. |
@@ -100,6 +98,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.96.1–54.96.6 | (Mobile-only) Ruler icon opens keypad via badge popover; hide measurement pills (measurement deck) on mobile; E2E/docs/QA with desktop guard and Railway-safe verification. |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
+| 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.15, 62.16, 62.17 | (62.15) Quick Quoter desktop parity follow-up verification; manual QA/sign-off pending. (62.16) Mobile Quick Quote entry: blue button, 44px height, same width as camera; done. (62.17) Desktop Quick Quote entry: same blue button treatment as mobile; CSS under body[data-viewport-mode="desktop"]. |
 | 63 | 63.9, 63.16, **63.17** | (63.9) Mixed-length gutter accessory inference follow-up. (63.16) Material Rules desktop manual QA + Railway production sign-off (migration applied via MCP; re-test GET /api/admin/material-rules/* and reload Material Rules page in production). **(63.17) Material Rules section order: Measured-Length first, Quick Quoter second (HTML reorder only).** |

@@ -1974,19 +1974,29 @@ body[data-viewport-mode="mobile"] .toolbar-actions-secondary {
   flex-wrap: wrap;
   min-width: 0;
 }
+/* Team pool button: structure (shared); min size in :not(.a11y-large-controls) so 48px wins when large controls on */
 body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn {
-  min-height: 44px;
-  min-width: 44px;
-  border: 1px solid #f1c95e;
-  background: linear-gradient(135deg, #fff7dc 0%, #fff0b3 100%);
-  color: #8a5a00;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 0 10px;
   border-radius: 999px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-large-controls) #mobileBonusDashboardBtn {
+  min-height: 44px;
+  min-width: 44px;
   /* 54.107.1: enough width for "team pool" on narrow viewports; icon+label don't clip */
   min-width: max(44px, 100px);
+}
+body[data-viewport-mode="mobile"].a11y-large-controls #mobileBonusDashboardBtn {
+  min-width: max(48px, 100px);
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn {
+  border: 1px solid #e6b84d;
+  background: linear-gradient(180deg, #fff9e6 0%, #ffefc2 100%);
+  color: #6b4e00;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .toolbar-icon {
   flex-shrink: 0;
@@ -1997,10 +2007,73 @@ body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn[hidden] {
   display: none !important;
 }
 body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .mobile-bonus-btn-label {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   flex-shrink: 0;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn .mobile-bonus-btn-label,
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn .toolbar-icon {
+  color: inherit;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn:hover {
+  background: linear-gradient(180deg, #ffefc2 0%, #ffe9a8 100%);
+  border-color: #d4a843;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn:active {
+  background: linear-gradient(180deg, #ffe9a8 0%, #ffe08a 100%);
+  border-color: #c99a3a;
+  transform: scale(0.97);
+}
+body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn:focus-visible {
+  outline: 2px solid #6b4e00;
+  outline-offset: 2px;
+}
+/* Future: show when team pool has updates (JS to remove hidden + add .mobile-bonus-btn--has-updates) */
+body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .mobile-bonus-btn-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c99a3a;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn .mobile-bonus-btn-dot[hidden] {
+  display: none !important;
+}
+body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn {
+  position: relative;
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-viewport-mode="mobile"] #mobileBonusDashboardBtn {
+    transition: background 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+  }
+  body[data-viewport-mode="mobile"]:not(.a11y-high-contrast) #mobileBonusDashboardBtn:active {
+    transform: none;
+  }
+}
+/* Bonus view header: 44px touch target when large controls off; 48px from global when .a11y-large-controls on */
+body[data-viewport-mode="mobile"] .technician-bonus-header-right .btn-text-icon,
+body[data-viewport-mode="mobile"] #btnBonusRefresh {
+  padding: 10px 8px;
+  border-radius: 8px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+body[data-viewport-mode="mobile"]:not(.a11y-large-controls) .technician-bonus-header-right .btn-text-icon,
+body[data-viewport-mode="mobile"]:not(.a11y-large-controls) #btnBonusRefresh {
+  min-height: 44px;
+  min-width: 44px;
+}
+body[data-viewport-mode="mobile"] .technician-bonus-header-right .btn-text-icon:hover,
+body[data-viewport-mode="mobile"] #btnBonusRefresh:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+body[data-viewport-mode="mobile"] .technician-bonus-header-right .btn-text-icon:active,
+body[data-viewport-mode="mobile"] #btnBonusRefresh:active {
+  background: rgba(0, 0, 0, 0.1);
 }
 body[data-viewport-mode="mobile"] .diagrams-bottom-sheet-title {
   padding: 0 var(--mobile-space-lg) var(--mobile-space-md);
@@ -3080,11 +3153,11 @@ body[data-viewport-mode="mobile"] .mobile-redo-btn:disabled {
   cursor: not-allowed;
 }
 
-/* 54.102.2: Fit view in global toolbar – desktop only (hidden on mobile; Fit via diagram toolbar + double-tap empty canvas) */
+/* 54.111: Fit view in global toolbar – mobile only (desktop hidden). */
 .mobile-fit-view-btn {
   display: none;
 }
-body:not([data-viewport-mode="mobile"]) .mobile-fit-view-btn {
+body[data-viewport-mode="mobile"] .mobile-fit-view-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3092,7 +3165,7 @@ body:not([data-viewport-mode="mobile"]) .mobile-fit-view-btn {
   min-height: 44px;
   padding: 10px;
 }
-body[data-viewport-mode="mobile"] .mobile-fit-view-btn {
+body:not([data-viewport-mode="mobile"]) .mobile-fit-view-btn {
   display: none !important;
 }
 

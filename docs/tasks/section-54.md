@@ -426,19 +426,19 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 **54.103 Mobile selection handles: corners only (mobile-only, desktop unchanged, Railway-safe)**  
 *Scope: selected-element resize affordances on canvas. Mobile should hide side pills while keeping corners + rotate; desktop keeps current full handle set.*
 
-- [ ] **54.103.1** **Mobile render: corner-only handles.** In `frontend/app.js` draw path, when `layoutState.viewportMode === 'mobile'`, render only `nw/ne/se/sw` resize handles plus rotate handle; hide side handles (`n/e/s/w`) visually.
-- [ ] **54.103.2** **Mobile hit-testing: disable side-handle interactions.** In `frontend/app.js` handle hit-test path, gate side-handle hit targets off on mobile so hidden handles cannot be activated by touch/cursor.
-- [ ] **54.103.3** **E2E/debug parity for handle map.** Ensure mobile `window.__quoteAppGetSelectionBoxInCanvasCoords()` / `window.__quoteAppGetSelectionBoxInScreenCoords()` handle payload matches visible handles (corners + rotate only), while desktop still includes side handles.
+- [x] **54.103.1** **Mobile render: corner-only handles.** In `frontend/app.js` draw path, when `layoutState.viewportMode === 'mobile'`, render only `nw/ne/se/sw` resize handles plus rotate handle; hide side handles (`n/e/s/w`) visually.
+- [x] **54.103.2** **Mobile hit-testing: disable side-handle interactions.** In `frontend/app.js` handle hit-test path, gate side-handle hit targets off on mobile so hidden handles cannot be activated by touch/cursor.
+- [x] **54.103.3** **E2E/debug parity for handle map.** Ensure mobile `window.__quoteAppGetSelectionBoxInCanvasCoords()` / `window.__quoteAppGetSelectionBoxInScreenCoords()` handle payload matches visible handles (corners + rotate only), while desktop still includes side handles.
 - [ ] **54.103.4** **Regression + QA sign-off.** Verify mobile corner-only behavior and desktop unchanged resize/rotate behavior; keep Railway deploy assumptions unchanged.
 
 **54.104 Mobile two-finger transform smoothing reliability (mobile-only, desktop unchanged, Railway-safe)**  
 *Scope: selected-element two-finger transform (`translate + scale + rotate`) quality improvements in `frontend/app.js`; no backend/API/deploy changes.*
 
-- [ ] **54.104.1** **Frame-coalesced two-finger transform updates (RAF).** Replace raw per-pointermove application with RAF-coalesced updates to reduce jitter and overdraw during active two-finger transform.
-- [ ] **54.104.2** **Rotation continuity across wrap boundary.** Apply shortest-angle delta handling so two-finger rotation remains continuous across ±180° without sudden flips.
-- [ ] **54.104.3** **No-jump one-finger → two-finger transition.** When second finger joins during selected-element one-finger move, initialize transform from current visual position to avoid snap-back/jump.
-- [ ] **54.104.4** **Diagnostics hook for QA verification.** Add a read-only frontend debug hook exposing two-finger transform frame/sample state for manual/E2E diagnostics.
-- [ ] **54.104.5** **Automated regression coverage updates.** Extend `e2e/run.js` to assert mobile side-handle absence and desktop side-handle presence; keep existing desktop resize/rotate assertions intact.
+- [x] **54.104.1** **Frame-coalesced two-finger transform updates (RAF).** Replace raw per-pointermove application with RAF-coalesced updates to reduce jitter and overdraw during active two-finger transform.
+- [x] **54.104.2** **Rotation continuity across wrap boundary.** Apply shortest-angle delta handling so two-finger rotation remains continuous across ±180° without sudden flips.
+- [x] **54.104.3** **No-jump one-finger → two-finger transition.** When second finger joins during selected-element one-finger move, initialize transform from current visual position to avoid snap-back/jump.
+- [x] **54.104.4** **Diagnostics hook for QA verification.** Add a read-only frontend debug hook exposing two-finger transform frame/sample state for manual/E2E diagnostics.
+- [x] **54.104.5** **Automated regression coverage updates.** Extend `e2e/run.js` to assert mobile side-handle absence and desktop side-handle presence; keep existing desktop resize/rotate assertions intact.
 - [ ] **54.104.6** **Manual mobile QA + Railway safety verification.** Real-device check (iOS Safari + Android Chrome): smooth two-finger behavior, no gesture conflicts, no desktop regressions; run `npm test`; confirm no Railway env/build/config changes.
 
 **54.105 Mobile selection element toolbar: top-docked default (canvas-only, keep drag; desktop unchanged; Railway-safe)**  
@@ -487,6 +487,48 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.110.2** **Focus safety on collapse.** In `frontend/app.js` `initGlobalToolbar()` `applyState()`, when collapse hides the current focused control, move focus to a visible target (`#toolbarCollapseBtn`, fallback `#generateQuoteBtn`) with prevent-scroll fallback, so focus never remains on hidden controls.
 - [x] **54.110.3** **E2E regression coverage for collapsed Generate Quote behavior.** In `e2e/run.js`, assert mobile collapsed header keeps `#generateQuoteBtn` visible and `#saveDiagramBtn` hidden, including products-panel auto-collapse path; assert tapping `#generateQuoteBtn` while collapsed opens the quote modal.
 - [ ] **54.110.4** **Manual mobile QA + Railway safety sign-off.** Verify iOS Safari + Android Chrome at 320/360/390 widths (portrait/landscape, 200% zoom): collapsed header shows Projects + collapse + Generate, no horizontal overflow, Generate remains tappable, desktop unchanged; confirm no Railway env/build/config changes.
+
+**54.111 Mobile Fit button parity regression (mobile-first, desktop guard, Railway-safe)**
+
+- [x] **54.111.1** **Fix mobile/desktop visibility parity in CSS.** In `frontend/styles.css`, ensure `#mobileFitViewBtn` is visible on mobile (`body[data-viewport-mode="mobile"]`) and hidden on desktop.
+- [x] **54.111.2** **Fix ARIA visibility parity.** In `frontend/app.js` `initGlobalToolbar()` `setAriaHidden`, set `#mobileFitViewBtn` `aria-hidden="false"` on mobile and `"true"` on desktop.
+- [x] **54.111.3** **Preserve existing behavior + touch target.** Keep current click behavior (`viewZoom=1`, `resetMobileFitPanState()`) and 44px touch target contract unchanged.
+- [x] **54.111.4** **Regression coverage + desktop guard.** Extend `e2e/run.js` assertions: mobile Fit button visible/tappable, desktop hidden; no desktop toolbar regressions.
+
+**54.112 Mobile double-tap Fit should require empty canvas (mobile-only behavior, Railway-safe)**
+
+- [x] **54.112.1** **Tighten double-tap gate to true empty-canvas taps.** In `frontend/app.js`, in mobile double-tap branch require no badge hit, no element/element-handle hit, and no blueprint/body/handle hit before triggering Fit.
+- [x] **54.112.2** **Keep badge double-click behavior intact.** Preserve badge double-click length popover behavior (`dblclick` path) unchanged.
+- [x] **54.112.3** **No desktop behavior changes.** Keep desktop double-click and zoom behavior unchanged.
+- [x] **54.112.4** **Add mobile regression coverage.** In `e2e/run.js`, assert double-tap on selected element does not Fit while double-tap on empty canvas still Fits.
+
+**54.113 Blueprint unlocked move restoration (mobile + desktop shared path, Railway-safe)**
+
+- [x] **54.113.1** **Restore unlocked blueprint body drag move.** In `frontend/app.js` pointerdown target branch, when blueprint body is tapped and unlocked, set `state.mode = 'blueprint-move'` and initialize drag offsets.
+- [x] **54.113.2** **Keep lock guard strict.** Locked blueprint must remain immovable from body drag on mobile and desktop.
+- [x] **54.113.3** **Preserve selection semantics.** Body tap still selects blueprint; resize/rotate continue via blueprint handles.
+- [x] **54.113.4** **Add regression coverage (mobile + desktop).** In `e2e/run.js`, assert unlocked blueprint drag changes transform and locked drag does not.
+
+**54.114 Blueprint handle touch hit-target hardening (mobile-first, desktop-safe, Railway-safe)**
+
+- [x] **54.114.1** **Increase blueprint corner/rotate hit radius.** In `frontend/app.js` `hitTestBlueprintHandle`, enlarge touch-friendly thresholds (mobile-first, safe desktop values).
+- [x] **54.114.2** **Add rotate-stem hit-test support.** Add hit parity along the rotate stem (similar to element rotate affordance) so rotate is easier to grab on touch.
+- [x] **54.114.3** **Avoid body-hit regressions.** Ensure improved handle hit areas do not break blueprint body selection/move behavior.
+- [ ] **54.114.4** **Regression verification across orientations.** Validate touch hit reliability at mobile portrait/landscape and desktop pointer parity.
+
+**54.115 Blueprint resize anchor/rotation-aware behavior (shared mobile + desktop path, Railway-safe)**
+
+- [x] **54.115.1** **Replace center-symmetric blueprint resize math.** In `frontend/app.js`, use handle-anchored resize with opposite corner fixed.
+- [x] **54.115.2** **Respect active corner + rotation.** Ensure `nw/ne/se/sw` semantics stay stable after blueprint rotation.
+- [x] **54.115.3** **Keep aspect lock by default.** Preserve current aspect-locked blueprint resize behavior (unless explicitly changed in a later task).
+- [ ] **54.115.4** **Add regression coverage for rotated blueprint resize.** Extend checks/manual QA to confirm stable anchored behavior on mobile and desktop.
+
+**54.116 Draw scheduling performance hardening (shared mobile + desktop, Railway-safe)**
+
+- [x] **54.116.1** **Remove unconditional draw-loop recursion.** Replace unconditional `requestAnimationFrame(draw)` with conditional scheduling only while gesture/animation is active.
+- [x] **54.116.2** **Introduce dirty-frame request helper.** Add `requestDraw()` to queue a single RAF frame when state changes and avoid redundant scheduling.
+- [x] **54.116.3** **Add render-loop diagnostics hook.** Expose `window.__quoteAppGetRenderLoopDiagnostics()` for QA verification of idle redraw behavior.
+- [ ] **54.116.4** **Regression + battery/perf QA.** Verify idle canvas no longer continuously redraws while interactions/animations remain smooth; desktop/mobile unchanged functionally.
 
 ---
 
