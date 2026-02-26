@@ -4,6 +4,22 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile performance (54.117): DPR cap and coordinate math – 2026-02
+
+- **Symptom / context:** After capping canvas `devicePixelRatio` at 2 on mobile (Section 54.117.1), taps or pointer events register in the wrong place on 3x devices; hit-testing is offset.
+- **Cause:** Canvas size and `ctx.scale()` use the capped DPR, but coordinate conversion (e.g. `clientToCanvasDisplay`) or other logic still uses `window.devicePixelRatio`. Client→canvas math must use the **same** effective DPR used when setting `state.canvasWidth`/`canvasHeight`.
+- **Fix / workaround:** In `resizeCanvas()`, store the DPR actually used (e.g. `state.canvasDpr = dpr`). Everywhere that derives logical size from `state.canvasWidth`/`Height` or maps client coords to canvas—including `clientToCanvasDisplay`, `draw()`, `getAddMaxDimensionWorld`, export/thumbnail paths—must use `state.canvasDpr ?? window.devicePixelRatio ?? 1` (or a shared getter), not raw `window.devicePixelRatio`. See section-54.md 54.117.1 for the audit list.
+
+---
+
+## Mobile performance (54.117): ResizeObserver debounce causes toolbar jank – 2026-02
+
+- **Symptom / context:** Diagram toolbar jumps or sits in the wrong place for a moment after device rotation or virtual keyboard open/close.
+- **Cause:** Time-based debounce (e.g. 50–150ms) on the diagram toolbar’s ResizeObserver delays repositioning while the viewport has already resized, so the toolbar is visibly wrong for the debounce duration.
+- **Fix / workaround:** Do **not** add a timer-based debounce to the ResizeObserver. If coalescing is needed, use at most a single `requestAnimationFrame` (schedule one rAF, run clamp/orientation in that frame). Prefer leaving the ResizeObserver as-is on mobile unless profiling shows it as a real bottleneck. See section-54.md 54.117.3.
+
+---
+
 ## ServiceM8: no "estimated labour" or "quoted hours" field on job – 2026-02
 
 - **Symptom / context:** Section 59 (technician bonus) needs a source for `quoted_labor_minutes` per job. Option C was "sync from ServiceM8 if they expose estimated labour"; the API reference noted this as "to confirm via Try It!".

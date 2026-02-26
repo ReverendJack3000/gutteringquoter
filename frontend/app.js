@@ -17,6 +17,7 @@ const state = {
   offsetY: 0,
   canvasWidth: 0,
   canvasHeight: 0,
+  canvasDpr: undefined, // 54.117: effective DPR used for canvas (capped on mobile); set in resizeCanvas
   viewZoom: 1,   // user zoom multiplier (1 = fit); <1 zoom out, >1 zoom in
   viewPanX: 0,
   viewPanY: 0,
@@ -95,6 +96,11 @@ const state = {
   floatingToolbarUserMoved: false, // 54.20: when true, draw() does not reposition the element toolbar
   keyboardNudgeActiveKey: null, // Arrow key currently held so nudge undo snapshot is captured once per key-hold sequence
 };
+
+/** 54.117: Effective DPR for canvas coordinate/size math. Use this instead of window.devicePixelRatio so capped mobile DPR is consistent. */
+function getEffectiveDpr() {
+  return state.canvasDpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio : 1) ?? 1;
+}
 
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
 const authState = { token: null, email: null, user: null, role: 'viewer', isSuperAdmin: false, supabase: null, recoveryLandingFromHash: false };
@@ -6504,7 +6510,7 @@ function updateCanvasTooltip(content, clientX, clientY) {
 function clientToCanvasDisplay(clientX, clientY) {
   const rect = getCanvasRect();
   if (!rect || !rect.width || !rect.height) return null;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = getEffectiveDpr();
   const logicalW = state.canvasWidth / dpr;
   const logicalH = state.canvasHeight / dpr;
   return {
@@ -6884,7 +6890,7 @@ function getAddMaxDimensionWorld() {
     }
   }
 
-  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+  const dpr = getEffectiveDpr();
   const logicalW = state.canvasWidth > 0 ? state.canvasWidth / dpr : 0;
   const logicalH = state.canvasHeight > 0 ? state.canvasHeight / dpr : 0;
   const canvasWorldLongSide = Math.max(logicalW, logicalH);
@@ -7658,7 +7664,7 @@ function draw() {
     ? performance.now()
     : Date.now();
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = getEffectiveDpr();
   const w = state.canvasWidth / dpr;
   const h = state.canvasHeight / dpr;
   ctx.clearRect(0, 0, w, h);
@@ -8004,7 +8010,7 @@ function draw() {
 
     // Dynamic stroke: keep bounding box at constant 1.5px on screen regardless of zoom
     const rect = getCanvasRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getEffectiveDpr();
     const logicalW = state.canvasWidth / dpr;
     const logicalH = state.canvasHeight / dpr;
     const strokeScale = rect && rect.width && rect.height ? Math.min(logicalW / rect.width, logicalH / rect.height) : 1;
@@ -8339,7 +8345,9 @@ function draw() {
     state.fitPanFeedbackY = 0;
   }
 
-  updateAccessibilityInspector({ skipActiveField: true });
+  if (layoutState.viewportMode !== 'mobile' || accessibilityInspectorState.open) {
+    updateAccessibilityInspector({ skipActiveField: true });
+  }
   const autosaveDeleteImmediate = !!authState.token
     && !isAutosaveEligibleCurrentState()
     && !!(autosaveState.draftId || getStoredAutosaveDraftId());
@@ -8659,7 +8667,11 @@ function resizeCanvas() {
   const canvas = getCanvasElement();
   const wrap = document.getElementById('blueprintWrap');
   if (!canvas || !wrap) return;
-  const dpr = window.devicePixelRatio || 1;
+  let dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  if (typeof layoutState !== 'undefined' && layoutState.viewportMode === 'mobile') {
+    dpr = Math.min(2, dpr);
+  }
+  state.canvasDpr = dpr;
   const w = wrap.clientWidth;
   const h = wrap.clientHeight;
   canvas.width = w * dpr;
@@ -18092,7 +18104,7 @@ if (typeof window !== 'undefined') {
     const canvas = document.getElementById('canvas');
     const rect = getCanvasRect();
     if (!canvas || !rect) return null;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getEffectiveDpr();
     const logicalW = state.canvasWidth / dpr;
     const logicalH = state.canvasHeight / dpr;
     const cx = el.x + el.width / 2;
@@ -18127,7 +18139,7 @@ if (typeof window !== 'undefined') {
     if (!state.blueprintTransform) return null;
     const rect = getCanvasRect();
     if (!rect || !rect.width || !rect.height) return null;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getEffectiveDpr();
     const logicalW = state.canvasWidth / dpr;
     const logicalH = state.canvasHeight / dpr;
     if (!logicalW || !logicalH) return null;
@@ -18144,7 +18156,7 @@ if (typeof window !== 'undefined') {
     if (!state.blueprintImage || !state.blueprintTransform) return null;
     const rect = getCanvasRect();
     if (!rect || !rect.width || !rect.height) return null;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getEffectiveDpr();
     const logicalW = state.canvasWidth / dpr;
     const logicalH = state.canvasHeight / dpr;
     if (!logicalW || !logicalH) return null;
@@ -18395,7 +18407,7 @@ if (typeof window !== 'undefined') {
     if (!box) return null;
     const rect = getCanvasRect();
     if (!rect || !rect.width || !rect.height) return null;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getEffectiveDpr();
     const logicalW = state.canvasWidth / dpr;
     const logicalH = state.canvasHeight / dpr;
     const displayToClientX = (dx) => rect.left + dx * (rect.width / logicalW);
