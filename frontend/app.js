@@ -9121,6 +9121,7 @@ function initCanvas() {
       if (shouldPrimeMobileMove) {
         // 54.62: Mobile tap-first move gating. One finger selects first; drag starts only after threshold in pointermove.
         state.mode = 'move-primed';
+        if (layoutState.viewportMode === 'mobile') { state.fitPanFeedbackX = 0; state.fitPanFeedbackY = 0; }
         state.movePrimeStartClientX = e.clientX;
         state.movePrimeStartClientY = e.clientY;
         state.previewDragX = null;
@@ -9131,6 +9132,7 @@ function initCanvas() {
       }
 
       state.mode = 'move';
+      if (layoutState.viewportMode === 'mobile') { state.fitPanFeedbackX = 0; state.fitPanFeedbackY = 0; }
       if (primary) {
         state.dragOffset.x = canvasPos.x - primary.x;
         state.dragOffset.y = canvasPos.y - primary.y;
@@ -9160,6 +9162,8 @@ function initCanvas() {
       }
       return;
     }
+    // 57.7: On mobile, second finger on empty canvas must not overwrite ongoing one-finger move/move-primed.
+    if (layoutState.viewportMode === 'mobile' && (state.mode === 'move' || state.mode === 'move-primed') && ptrIds.length >= 2) return;
     setSelection([]);
     state.selectedBlueprint = false;
     state.hoveredId = null;
@@ -9276,6 +9280,7 @@ function initCanvas() {
         state.snapshotAtActionStart = cloneStateForUndo();
       }
       state.mode = 'move';
+      if (layoutState.viewportMode === 'mobile') { state.fitPanFeedbackX = 0; state.fitPanFeedbackY = 0; }
       state.dragOffset.x = canvasPos.x - primary.x;
       state.dragOffset.y = canvasPos.y - primary.y;
       state.dragMoveIds = getElementsToMove();

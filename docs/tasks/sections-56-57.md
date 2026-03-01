@@ -18,6 +18,7 @@
 - [x] **57.4** **Fit-level recenter/reset policy.** Implemented: Fit button, new blueprint upload, and min-zoom clamp transitions reset to centered fit (`viewPanX = 0`, `viewPanY = 0`) and clear transient fit-feedback offsets.
 - [x] **57.5** **Automated regression coverage (mobile + desktop guard).** Implemented in `e2e/run.js`: assertions for mobile fit inset (~20px), fit-level pan lock, pan resume after zoom-in, and Fit recenter reset; full E2E suite passes.
 - [ ] **57.6** **Manual QA + deployment safety sign-off.** Validate portrait/landscape mobile behavior, 200% zoom accessibility, and toolbar/panel/canvas interactions; run existing tests and confirm no Procfile/Dockerfile/nixpacks/Railway config changes.
+- [x] **57.7** **Mobile element-drag jump fix.** Prevent pan-resist from hijacking an ongoing one-finger element drag (second-finger or stray touch overwriting mode) and clear residual fitPanFeedback when entering move or move-primed so the view does not jump at drag start. Mobile-only; desktop unchanged. Plan: docs/plans/PLAN_MOBILE_ELEMENT_DRAG_JUMP_FIX.md.
 
 ---
 
