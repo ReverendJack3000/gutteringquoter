@@ -12,6 +12,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile: element goes invisible when resized too large (still selectable) – 2026-03 (54.131.1)
+
+- **Symptom / context:** On mobile, when an element’s size is increased beyond a certain point (e.g. two-finger pinch), the element becomes invisible but remains selectable (bounds hit-test still works).
+- **Cause:** Offscreen canvases for tint/bold use `width * TINT_RESOLUTION_SCALE` (4×). When element dimensions get very large, the derived canvas size exceeds device canvas limits (or total canvas memory on iOS), so creation fails or the draw fails and the element doesn’t render.
+- **Fix / workaround:** Section 54.131.1: (1) In `createTintedCanvas` and `createBoldCanvas`, clamp `tw`/`th` to `MAX_OFFSCREEN_CANVAS_DIM` (2048) so offscreen canvases stay within device limits. (2) Cap applied element dimensions at resize: in `applyMobileElementTransformFromActivePointers` and `applyResizeWith`, use an aspect-preserving cap so the larger of width/height does not exceed `MAX_ELEMENT_DIMENSION_PX` (4096). Apply the cap with a single scale factor to both dimensions so the part is not distorted. See `docs/plans/PLAN_54_131_1_ELEMENT_INVISIBLE_LARGE_SIZE.md`.
+
+---
+
 ## Confirm Job overlay (61.8): defensive null-guard on addBtn in handleConfirm – 2026-02
 
 - **Symptom / context:** QA audit found that in `handleConfirm` (job confirm overlay “Add to Job” handler), `addBtn` was used without a null check in four cleanup paths (!resp.ok, handleAuthFailure(attachResp), success path, catch), while `handleCreateNew` consistently used `if (createNewBtn)` for all cleanup. If `addBtn` were ever null in those paths, the code would throw.

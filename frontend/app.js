@@ -834,6 +834,10 @@ const ELEMENT_MAX_DIMENSION_PX = Math.round(REFERENCE_SIZE_PX / 5); // 80px
 const DROPPED_ELEMENT_MAX_DIMENSION_PX = 150;
 const DROP_GHOST_OPACITY = 0.4;
 const MIN_ELEMENT_DIMENSION_PX = 20;
+/** 54.131.1: Max element dimension (content px); prevents invisible elements and cross-device drift. Applied in mobile two-finger and desktop resize. */
+const MAX_ELEMENT_DIMENSION_PX = 4096;
+/** 54.131.1: Max offscreen canvas dimension for tint/bold; respects mobile canvas memory limits (e.g. iOS). */
+const MAX_OFFSCREEN_CANVAS_DIM = 2048;
 const MIN_ELEMENT_LINE_WEIGHT = 1;
 const MAX_ELEMENT_LINE_WEIGHT = 4;
 const DEFAULT_ELEMENT_LINE_WEIGHT = 1;
@@ -6056,8 +6060,16 @@ function applyMobileElementTransformFromActivePointers(frameTs) {
 
   const currentAngle = Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX);
   const scaleFactor = currentDistance / start.distance;
-  const nextW = Math.max(MIN_ELEMENT_DIMENSION_PX, start.width * scaleFactor);
-  const nextH = Math.max(MIN_ELEMENT_DIMENSION_PX, start.height * scaleFactor);
+  let nextW = start.width * scaleFactor;
+  let nextH = start.height * scaleFactor;
+  const maxDim = Math.max(nextW, nextH);
+  if (maxDim > MAX_ELEMENT_DIMENSION_PX) {
+    const clampScale = MAX_ELEMENT_DIMENSION_PX / maxDim;
+    nextW *= clampScale;
+    nextH *= clampScale;
+  }
+  nextW = Math.max(MIN_ELEMENT_DIMENSION_PX, nextW);
+  nextH = Math.max(MIN_ELEMENT_DIMENSION_PX, nextH);
   const deltaRotationDeg = (shortestAngleDeltaRad(start.angle, currentAngle) * 180) / Math.PI;
   let nextRotation = normalizeAngleDeg(start.rotation + deltaRotationDeg);
   nextRotation = constrainGutterRotation(nextRotation, selected).degrees;
@@ -6782,11 +6794,13 @@ function createTintedCanvas(originalImage, color, width, height, elementId = nul
   if (!color || !originalImage) return null;
   const tw = Math.max(1, Math.round(width * TINT_RESOLUTION_SCALE));
   const th = Math.max(1, Math.round(height * TINT_RESOLUTION_SCALE));
+  const twClamped = Math.max(1, Math.min(tw, MAX_OFFSCREEN_CANVAS_DIM));
+  const thClamped = Math.max(1, Math.min(th, MAX_OFFSCREEN_CANVAS_DIM));
   
   try {
     const canvas = document.createElement('canvas');
-    canvas.width = tw;
-    canvas.height = th;
+    canvas.width = twClamped;
+    canvas.height = thClamped;
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) {
       console.error('[createTintedCanvas] Failed to get 2d context', { elementId, width, height });
@@ -6839,15 +6853,15 @@ function createTintedCanvas(originalImage, color, width, height, elementId = nul
     }
     
     // Step 1: Clear to fully transparent (ensures clean alpha channel)
-    ctx.clearRect(0, 0, tw, th);
+    ctx.clearRect(0, 0, twClamped, thClamped);
     
     // Step 2: Fill entire canvas with the target color
     ctx.fillStyle = color;
-    ctx.fillRect(0, 0, tw, th);
+    ctx.fillRect(0, 0, twClamped, thClamped);
     
     // Step 3: Use destination-in to mask the color with the image's alpha channel (draw at higher res for sharpness)
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(originalImage, 0, 0, tw, th);
+    ctx.drawImage(originalImage, 0, 0, twClamped, thClamped);
     
     // Step 4: Reset composite operation for next draw
     ctx.globalCompositeOperation = 'source-over';
@@ -6886,34 +6900,36 @@ function createBoldCanvas(originalImage, fillColor, width, height, lineWeight, e
   if (!originalImage || !fillColor || normalizedWeight <= DEFAULT_ELEMENT_LINE_WEIGHT) return null;
   const tw = Math.max(1, Math.round(width * BOLD_RESOLUTION_SCALE));
   const th = Math.max(1, Math.round(height * BOLD_RESOLUTION_SCALE));
+  const twClamped = Math.max(1, Math.min(tw, MAX_OFFSCREEN_CANVAS_DIM));
+  const thClamped = Math.max(1, Math.min(th, MAX_OFFSCREEN_CANVAS_DIM));
   try {
     const alphaSourceCanvas = document.createElement('canvas');
-    alphaSourceCanvas.width = tw;
-    alphaSourceCanvas.height = th;
+    alphaSourceCanvas.width = twClamped;
+    alphaSourceCanvas.height = thClamped;
     const alphaSourceCtx = alphaSourceCanvas.getContext('2d', { alpha: true });
     if (!alphaSourceCtx) return null;
     alphaSourceCtx.imageSmoothingEnabled = true;
     alphaSourceCtx.imageSmoothingQuality = 'high';
-    alphaSourceCtx.clearRect(0, 0, tw, th);
-    alphaSourceCtx.drawImage(originalImage, 0, 0, tw, th);
+    alphaSourceCtx.clearRect(0, 0, twClamped, thClamped);
+    alphaSourceCtx.drawImage(originalImage, 0, 0, twClamped, thClamped);
 
     const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = tw;
-    maskCanvas.height = th;
+    maskCanvas.width = twClamped;
+    maskCanvas.height = thClamped;
     const maskCtx = maskCanvas.getContext('2d', { alpha: true });
     if (!maskCtx) return null;
     maskCtx.imageSmoothingEnabled = true;
     maskCtx.imageSmoothingQuality = 'high';
-    maskCtx.clearRect(0, 0, tw, th);
+    maskCtx.clearRect(0, 0, twClamped, thClamped);
 
     const offsets = getLineWeightKernelOffsets(normalizedWeight);
     offsets.forEach((offset) => {
-      maskCtx.drawImage(alphaSourceCanvas, offset.x, offset.y, tw, th);
+      maskCtx.drawImage(alphaSourceCanvas, offset.x, offset.y, twClamped, thClamped);
     });
 
     const canvas = document.createElement('canvas');
-    canvas.width = tw;
-    canvas.height = th;
+    canvas.width = twClamped;
+    canvas.height = thClamped;
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return null;
     if (state.ctx && ctx === state.ctx) {
@@ -6922,11 +6938,11 @@ function createBoldCanvas(originalImage, fillColor, width, height, lineWeight, e
     }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.clearRect(0, 0, tw, th);
+    ctx.clearRect(0, 0, twClamped, thClamped);
     ctx.fillStyle = fillColor;
-    ctx.fillRect(0, 0, tw, th);
+    ctx.fillRect(0, 0, twClamped, thClamped);
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(maskCanvas, 0, 0, tw, th);
+    ctx.drawImage(maskCanvas, 0, 0, twClamped, thClamped);
     ctx.globalCompositeOperation = 'source-over';
     return canvas;
   } catch (error) {
@@ -7766,6 +7782,23 @@ function applyResizeWith(canvasPos, altKey) {
   }
 
   // Re-verify Min Dimensions
+  if (isLinear) {
+    if (newW < MIN_RESIZE_DIM) newW = MIN_RESIZE_DIM;
+    if (newH < MIN_RESIZE_DIM) newH = MIN_RESIZE_DIM;
+  } else {
+    if (newW < MIN_RESIZE_DIM) { newW = MIN_RESIZE_DIM; newH = newW / (prevW / prevH); }
+    if (newH < MIN_RESIZE_DIM) { newH = MIN_RESIZE_DIM; newW = newH * (prevW / prevH); }
+  }
+
+  // 54.131.1: Cap max dimension (aspect-preserving) for cross-device consistency
+  const maxDimResize = Math.max(newW, newH);
+  if (maxDimResize > MAX_ELEMENT_DIMENSION_PX) {
+    const clampScaleResize = MAX_ELEMENT_DIMENSION_PX / maxDimResize;
+    newW *= clampScaleResize;
+    newH *= clampScaleResize;
+  }
+
+  // Re-verify min dimensions after cap (audit F1: cap can push a dimension below MIN_RESIZE_DIM)
   if (isLinear) {
     if (newW < MIN_RESIZE_DIM) newW = MIN_RESIZE_DIM;
     if (newH < MIN_RESIZE_DIM) newH = MIN_RESIZE_DIM;

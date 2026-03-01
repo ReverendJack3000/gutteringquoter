@@ -658,6 +658,12 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.130.3** **Verification.** Manual QA on iOS Safari and Android Chrome (?viewport=mobile): change colour → element stays visible; run `npm test`; confirm no desktop regression; Railway-safe.
 - *Post-audit (AUDIT_2026-03-02): Optional cleanup implemented — decode callback guarded with `state.elements.includes(el)` to avoid redundant invalidate/draw when element removed before decode resolves.*
 
+**54.131 Mobile: element goes invisible when size increased too much (rotation/sizing investigation)**
+
+*Planned: investigate all bugs related to rotation and sizing of elements on mobile (including this one) in a dedicated session.*
+
+- [x] **54.131.1** **Investigate and fix: element invisible when size increased too much on mobile.** On mobile, when an element’s size is increased beyond a certain point, the element becomes invisible (likely still selectable). Investigate together with rotation/sizing bugs on mobile; implement fix and verify desktop unchanged; Railway-safe.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
