@@ -641,6 +641,14 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.128.5** **Clear canvas: reset profile and size filters.** In `frontend/app.js` `clearCanvasToEmpty()` (~7430–7456), at the end (after `updateUndoRedoButtons()`), set `state.profileFilter = ''` and `state.sizeFilter = ''`, sync `#profileFilter` and `#sizeFilter` `.value` to `''`, toggle `#sizeFilter` class `size-filter-default` for empty size, then run ensure + apply filters so the panel grid shows all products when open.
 - [x] **54.128.6** **Verification.** Manual (and optional E2E): add Storm Cloud part (drag and click), add Classic part, add other profile part (filter unchanged), clear canvas (filters reset to All/mm, grid shows all); confirm no desktop/mobile bleed and no change to Product Library view; Railway-safe (frontend-only, no new env/build). E2E suite passed (npm test).
 
+**54.129 Blueprint upload error handling: fix "body disturbed" (read response once) (shared desktop + mobile, Railway-safe)**
+
+*Scope: When blueprint upload or technical-drawing re-process fails, the app currently tries `res.json()` then in catch `res.text()`. The Fetch API allows reading the response body only once; if `res.json()` throws (e.g. server returns HTML or non-JSON), the second read throws "body disturbed" and the user sees "Upload failed: body disturbed" instead of the real error. Fix by reading the body once as text, then parsing for JSON when needed.*
+
+- [x] **54.129.1** **Fix processFileAsBlueprint error handling.** In `frontend/app.js` in `processFileAsBlueprint`, when `!res.ok`: read the body once with `const text = await res.text();` then derive `detail` by `try { const body = JSON.parse(text); detail = body.detail || res.statusText; } catch (_) { detail = text || res.statusText; }` and throw `new Error(...)` as today. Remove the pattern that calls `res.json()` then in catch `res.text()` (lines ~9824–9832).
+- [x] **54.129.2** **Fix technical-drawing toggle error handling.** In the same file, in the technical-drawing toggle `change` handler, when `!res.ok`: use the same single-read pattern (read `res.text()` once, then parse with `JSON.parse(text)` in try/catch to get `detail`). Replace the existing try/catch that uses `res.json()` then `res.text()` (lines ~10045–10053).
+- [x] **54.129.3** **Verification.** Run `npm test`; confirm upload success path unchanged. Manually (or via simulated error): when server returns JSON error (e.g. FastAPI `detail`), user still sees that message; when server returns non-JSON (e.g. HTML 502), user sees response text or statusText, not "body disturbed". Desktop and mobile both use the same code paths; no viewport-specific change.
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)

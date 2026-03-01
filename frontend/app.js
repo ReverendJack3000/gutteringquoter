@@ -9822,12 +9822,13 @@ async function processFileAsBlueprint(file) {
       { method: 'POST', body: formData }
     );
     if (!res.ok) {
+      const text = await res.text();
       let detail = '';
       try {
-        const body = await res.json();
+        const body = JSON.parse(text);
         detail = body.detail || res.statusText;
       } catch (_) {
-        detail = await res.text() || res.statusText;
+        detail = text || res.statusText;
       }
       throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
     }
@@ -10043,12 +10044,13 @@ function initUpload() {
         { method: 'POST', body: formData }
       );
       if (!res.ok) {
+        const text = await res.text();
         let detail = '';
         try {
-          const body = await res.json();
+          const body = JSON.parse(text);
           detail = body.detail || res.statusText;
         } catch (_) {
-          detail = await res.text() || res.statusText;
+          detail = text || res.statusText;
         }
         showMessage('Could not update blueprint: ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
         return;

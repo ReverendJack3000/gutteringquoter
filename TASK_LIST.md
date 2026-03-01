@@ -91,6 +91,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
 | 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
 | 54 | 54.119.3 | Mobile upload/toolbar perf hardening follow-up: manual mobile QA + Railway safety sign-off pending (upload same-file relaunch, drag-handle a11y behavior, draw/observer smoothness). |
+| 54 | 54.129.1–54.129.3 | Blueprint upload error handling: fix "body disturbed" by reading response body once (processFileAsBlueprint + technical-drawing toggle; shared desktop + mobile; Railway-safe). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
 | 63 | 63.16 | Material Rules: manual desktop QA + Railway production sign-off (63.9 baseline locked; migration applied via 63.16.0). |
