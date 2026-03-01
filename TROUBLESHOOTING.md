@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Mobile: element disappears when colour is changed (still selectable) – 2026-03
+
+- **Symptom / context:** On mobile only, after changing an element’s colour (e.g. from the floating toolbar palette), the element is no longer visible but remains selectable (tap on the same area still selects it). Desktop shows the tinted element correctly.
+- **Cause:** On mobile, `createTintedCanvas` can run before the element’s `originalImage` is fully decoded. With an undecoded image, the composite step (`destination-in` + `drawImage(originalImage, ...)`) produces a blank/transparent result, so the tinted canvas draws nothing. Hit-test uses bounds only, so the element stays selectable.
+- **Fix / workaround:** Section 54.130.1: In `getElementRenderImage`, before calling `createTintedCanvas`, if `originalImage` is an `HTMLImageElement` and `!originalImage.complete`, use `originalImage` for the current frame and schedule `originalImage.decode().then(() => { invalidateElementRenderCache(el); draw(); })` so the next draw uses a decoded image for tinting. If the issue persists on specific devices (e.g. certain iOS Safari versions), consider a mobile-only fallback: after creating the tinted canvas, detect a blank result (e.g. pixel readback or heuristic) and use `originalImage` for that element on mobile. Document any such fallback here.
+
+---
+
 ## Confirm Job overlay (61.8): defensive null-guard on addBtn in handleConfirm – 2026-02
 
 - **Symptom / context:** QA audit found that in `handleConfirm` (job confirm overlay “Add to Job” handler), `addBtn` was used without a null check in four cleanup paths (!resp.ok, handleAuthFailure(attachResp), success path, catch), while `handleCreateNew` consistently used `if (createNewBtn)` for all cleanup. If `addBtn` were ever null in those paths, the code would throw.

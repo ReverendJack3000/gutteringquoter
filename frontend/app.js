@@ -5040,6 +5040,7 @@ function invalidateElementRenderCache(el) {
   el.tintedCanvasWidth = null;
   el.tintedCanvasHeight = null;
   el._tintedCanvasFailureKey = undefined;
+  el._tintedDecodeScheduled = false;
   el.boldCanvas = null;
   el.boldCanvasKey = null;
   el._boldCanvasFailureKey = undefined;
@@ -6961,6 +6962,25 @@ function getElementRenderImage(el) {
     const alreadyFailedForThisKey = el._tintedCanvasFailureKey === cacheKey;
     
     if (needRegenerate && !alreadyFailedForThisKey) {
+      // 54.130.1: Ensure image is ready before tinting (fixes mobile element disappearing when colour changed).
+      // On mobile, createTintedCanvas can produce a transparent result if originalImage is not yet decoded.
+      const img = el.originalImage;
+      const isImg = img && typeof img.complete !== 'undefined' && typeof img.decode === 'function';
+      if (isImg && !img.complete) {
+        if (!el._tintedDecodeScheduled) {
+          el._tintedDecodeScheduled = true;
+          img.decode().then(() => {
+            el._tintedDecodeScheduled = false;
+            if (state.elements.includes(el)) {
+              invalidateElementRenderCache(el);
+              draw();
+            }
+          }).catch(() => {
+            el._tintedDecodeScheduled = false;
+          });
+        }
+        return el.originalImage;
+      }
       el.tintedCanvas = createTintedCanvas(el.originalImage, el.color, el.width, el.height, el.id);
       if (!el.tintedCanvas) {
         el._tintedCanvasFailureKey = cacheKey;

@@ -649,6 +649,15 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.129.2** **Fix technical-drawing toggle error handling.** In the same file, in the technical-drawing toggle `change` handler, when `!res.ok`: use the same single-read pattern (read `res.text()` once, then parse with `JSON.parse(text)` in try/catch to get `detail`). Replace the existing try/catch that uses `res.json()` then `res.text()` (lines ~10045–10053).
 - [x] **54.129.3** **Verification.** Run `npm test`; confirm upload success path unchanged. Manually (or via simulated error): when server returns JSON error (e.g. FastAPI `detail`), user still sees that message; when server returns non-JSON (e.g. HTML 502), user sees response text or statusText, not "body disturbed". Desktop and mobile both use the same code paths; no viewport-specific change.
 
+**54.130 Mobile-only: element hides when colour is changed (still selectable)**
+
+*Investigation: docs/plans/INVESTIGATION_2026-03-02_MOBILE_ELEMENT_COLOR_HIDES.md. On mobile, changing an element’s colour makes it disappear visually while remaining selectable (bounds-based hit-test). Desktop shows tinted element correctly. Likely cause: tinted canvas created but renders transparent on mobile (iOS Safari composite/decode behaviour) or drawImage of composite canvas to main canvas fails on mobile.*
+
+- [x] **54.130.1** **Fix: ensure image ready before tinting (mobile).** Before `createTintedCanvas`, ensure `originalImage.complete` and, if available, await `originalImage.decode()`; defer tint creation to next frame or after decode so composite uses decoded image. Mobile-only or shared path that does not regress desktop.
+- [x] **54.130.2** **Optional: mobile fallback if tinted canvas blank.** If needed, add mobile-safe fallback (e.g. detect blank tinted canvas or use originalImage on mobile when tint creation is unreliable). Document in TROUBLESHOOTING.md if browser-specific.
+- [x] **54.130.3** **Verification.** Manual QA on iOS Safari and Android Chrome (?viewport=mobile): change colour → element stays visible; run `npm test`; confirm no desktop regression; Railway-safe.
+- *Post-audit (AUDIT_2026-03-02): Optional cleanup implemented — decode callback guarded with `state.elements.includes(el)` to avoid redundant invalidate/draw when element removed before decode resolves.*
+
 ---
 
 ## 55. Mobile-native accessibility hardening (Apple HIG follow-up)
