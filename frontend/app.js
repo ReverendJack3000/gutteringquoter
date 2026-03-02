@@ -4766,6 +4766,8 @@ async function calculateAndDisplayQuote() {
           overrideQty = null;
         }
       }
+      // 50.20: When we ignored override for merged inferred line, mark row so we don't re-send it (avoid double merge on next recalc)
+      if (isInferredItem && manualOverrides[line.id] != null && overrideQty === null) row.dataset.inferred = 'true';
       const qtyDisplay = overrideQty != null ? String(overrideQty) : ((isInferredItem && hasIncompleteMeasurable) ? '' : String(line.qty));
       let nameClass = '';
       if (u(line.id).startsWith('SCR-')) nameClass = 'quote-product-indent-level-2';
