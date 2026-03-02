@@ -1894,8 +1894,14 @@ function updateMaterialRulesActionButtons() {
   const saveMeasuredBtn = document.getElementById('btnMaterialRulesSaveMeasured');
   const disableAll = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
   if (reloadBtn) reloadBtn.disabled = disableAll;
-  if (saveQuickQuoterBtn) saveQuickQuoterBtn.disabled = disableAll;
-  if (saveMeasuredBtn) saveMeasuredBtn.disabled = disableAll;
+  if (saveQuickQuoterBtn) {
+    saveQuickQuoterBtn.disabled = disableAll;
+    saveQuickQuoterBtn.textContent = materialRulesState.savingQuickQuoter ? 'Saving…' : 'Save Quick Quoter Rules';
+  }
+  if (saveMeasuredBtn) {
+    saveMeasuredBtn.disabled = disableAll;
+    saveMeasuredBtn.textContent = materialRulesState.savingMeasured ? 'Saving…' : 'Save Measured Rules';
+  }
   document.querySelectorAll('.material-rules-add-template-btn').forEach((button) => {
     if (button instanceof HTMLButtonElement) button.disabled = disableAll;
   });
@@ -1920,6 +1926,15 @@ function getMaterialRulesProductLabel(productId) {
   return name ? `${id} — ${name}` : id;
 }
 
+/** Display name only (no product ID prefix); for template dropdowns. */
+function getMaterialRulesProductNameOnly(productId) {
+  const id = String(productId || '').trim();
+  if (!id) return '';
+  const meta = materialRulesState.productMetaById.get(id);
+  const name = String(meta?.name || '').trim();
+  return name || id;
+}
+
 function getMaterialRulesRepairTypeSelectOptionsHtml(selectedId) {
   const selected = String(selectedId || '').trim();
   const ids = Array.from(new Set((materialRulesState.repairTypes || []).map((row) => String(row?.id || '').trim()).filter(Boolean))).sort();
@@ -1933,13 +1948,14 @@ function getMaterialRulesRepairTypeSelectOptionsHtml(selectedId) {
   return parts.join('');
 }
 
-function getMaterialRulesProductSelectOptionsHtml(selectedId) {
+function getMaterialRulesProductSelectOptionsHtml(selectedId, nameOnly = false) {
   const selected = String(selectedId || '').trim();
   const allowedIds = getMaterialRulesAllowedProductIds();
+  const labelFn = nameOnly ? getMaterialRulesProductNameOnly : getMaterialRulesProductLabel;
   const parts = ['<option value="">Select…</option>'];
   allowedIds.forEach((id) => {
     parts.push(
-      `<option value="${escapeHtml(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(getMaterialRulesProductLabel(id))}</option>`
+      `<option value="${escapeHtml(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(labelFn(id))}</option>`
     );
   });
   if (selected && !allowedIds.includes(selected)) {
@@ -2006,7 +2022,7 @@ function renderMaterialRulesMeasuredProductSelects(rules = null) {
   fieldMap.forEach(([elementId, selected]) => {
     const el = document.getElementById(elementId);
     if (!(el instanceof HTMLSelectElement)) return;
-    el.innerHTML = getMaterialRulesProductSelectOptionsHtml(selected);
+    el.innerHTML = getMaterialRulesProductSelectOptionsHtml(selected, true);
   });
 }
 
@@ -2195,12 +2211,9 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
   tr.dataset.legacyFixedLengthMm = isLegacyFixedMm ? String(legacyFixedLengthMm) : '';
   tr.dataset.rowDirty = 'false';
   tr.innerHTML = `
-    <td class="material-rules-reorder-cell">
-      ${getMaterialRulesDragHandleHtml('Drag to reorder part template row')}
-    </td>
     <td>
       <select class="material-rules-template-product-id" aria-label="Template product ID">
-        ${getMaterialRulesProductSelectOptionsHtml(productId)}
+        ${getMaterialRulesProductSelectOptionsHtml(productId, true)}
       </select>
     </td>
     <td><input type="number" class="material-rules-template-qty" min="0" step="0.001" value="${escapeHtml(String(qtyPerUnit))}" aria-label="Template quantity per unit" /></td>
@@ -2214,14 +2227,14 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
     <td>
       <select class="material-rules-template-size" aria-label="Template condition size">
         <option value="" ${conditionSize ? '' : 'selected'}>Any</option>
-        <option value="65" ${conditionSize === '65' ? 'selected' : ''}>65</option>
-        <option value="80" ${conditionSize === '80' ? 'selected' : ''}>80</option>
+        <option value="65" ${conditionSize === '65' ? 'selected' : ''}>65mm</option>
+        <option value="80" ${conditionSize === '80' ? 'selected' : ''}>80mm</option>
       </select>
     </td>
     <td>
       <select class="material-rules-template-length-mode" aria-label="Template length mode">
-        <option value="none" ${lengthMode === 'none' ? 'selected' : ''}>none</option>
-        <option value="missing_measurement" ${lengthMode === 'missing_measurement' ? 'selected' : ''}>missing_measurement</option>
+        <option value="none" ${lengthMode === 'none' ? 'selected' : ''}>No length</option>
+        <option value="missing_measurement" ${lengthMode === 'missing_measurement' ? 'selected' : ''}>Ask for metres</option>
       </select>
       ${isLegacyFixedMm ? '<div class="material-rules-template-legacy-note">Legacy fixed_mm preserved until edited.</div>' : ''}
     </td>
@@ -2274,7 +2287,6 @@ function renderMaterialRulesTemplateSections() {
         <table class="material-rules-table material-rules-table--templates" aria-label="Templates for ${escapeHtml(sectionTitle)}">
           <thead>
             <tr>
-              <th scope="col">Reorder</th>
               <th scope="col">Product ID</th>
               <th scope="col">Qty/Unit</th>
               <th scope="col">Profile</th>
@@ -2294,7 +2306,6 @@ function renderMaterialRulesTemplateSections() {
         tbody,
         repairTypeId: section.repairTypeId,
       }));
-      bindMaterialRulesTableRowReorder(tbody);
     }
     fragment.appendChild(sectionEl);
   });
@@ -2761,7 +2772,6 @@ function initMaterialRulesView() {
       tbody,
       repairTypeId,
     });
-    bindMaterialRulesTableRowReorder(tbody);
   });
 
   bindMaterialRulesTableRowReorder(repairTypesBody);

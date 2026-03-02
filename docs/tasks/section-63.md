@@ -27,6 +27,12 @@
 - [ ] **63.16** **Tests, QA, and Railway deployment safety sign-off:** Add backend tests (`backend/tests/test_material_rules_api.py`, `backend/tests/test_gutter_accessories_configurable.py`) and keep existing suites green. Pending: manual desktop/mobile QA and Railway production smoke/sign-off after applying `docs/material_rules_migration.sql` in Supabase (see 63.16.0).
 - [x] **63.17** **Material Rules section order:** Reorder sections in Material Rules view so Measured-Length Rules is first, Quick Quoter Rules second. HTML-only change in `frontend/index.html` (swap the two `<section class="material-rules-section">` blocks inside `main.material-rules-main`). No JS/CSS/API changes; no desktop vs mobile scoping (same DOM for both). Railway-safe.
 
+- [ ] **63.18** **Material Rules dashboard UX improvements (desktop-only):** Improve clarity, labels, grouping, and feedback. Plan: `docs/plans/MATERIAL_RULES_DASHBOARD_UX_PLAN.md`. No API or backend changes; no mobile viewport changes; Railway-safe.
+  - [x] **63.18.1** Measured-Length form: visual subgroups (Spacing, Screws per item, Product assignments, Clip selection) + optional section copy + help for clip selection mode (HTML + CSS).
+  - [x] **63.18.2** Quick Quoter: clearer column headers (Repair Types) + Part Templates description + Length Mode display labels ("No length" / "Ask for metres") in JS.
+  - [x] **63.18.3** Save button "Saving…" feedback during save (JS).
+  - [ ] **63.18.4** Desktop QA + Railway safety sign-off (manual).
+
 ---
 
 ### Integration anchors (verified)

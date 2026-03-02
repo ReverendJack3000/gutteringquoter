@@ -672,55 +672,68 @@
               <h2 id="materialRulesMeasuredHeading" class="material-rules-section-title">Measured-Length Rules</h2>
               <button type="button" id="btnMaterialRulesSaveMeasured" class="btn">Save Measured Rules</button>
             </div>
-            <p class="material-rules-section-copy">Controls accessory inference used by quote calculation.</p>
+            <p class="material-rules-section-copy">Controls accessory inference used by quote calculation. Used when generating quotes from gutter and downpipe lengths (brackets, clips, screws).</p>
 
             <div class="material-rules-form-grid">
-              <label>Bracket spacing (mm)
-                <input type="number" id="materialRulesBracketSpacingMm" min="1" step="1" inputmode="numeric" />
-              </label>
-              <label>Clip spacing (mm)
-                <input type="number" id="materialRulesClipSpacingMm" min="1" step="1" inputmode="numeric" />
-              </label>
-              <label>Screws / bracket
-                <input type="number" id="materialRulesScrewsPerBracket" min="0" step="1" inputmode="numeric" />
-              </label>
-              <label>Screws / dropper
-                <input type="number" id="materialRulesScrewsPerDropper" min="0" step="1" inputmode="numeric" />
-              </label>
-              <label>Screws / saddle clip
-                <input type="number" id="materialRulesScrewsPerSaddleClip" min="0" step="1" inputmode="numeric" />
-              </label>
-              <label>Screws / adjustable clip
-                <input type="number" id="materialRulesScrewsPerAdjustableClip" min="0" step="1" inputmode="numeric" />
-              </label>
-              <label>Screw product ID
-                <select id="materialRulesScrewProductId" aria-label="Screw product ID"></select>
-              </label>
-              <label>Bracket product (SC)
-                <select id="materialRulesBracketProductIdSc" aria-label="Bracket product SC"></select>
-              </label>
-              <label>Bracket product (CL)
-                <select id="materialRulesBracketProductIdCl" aria-label="Bracket product CL"></select>
-              </label>
-              <label>Saddle clip product (65)
-                <select id="materialRulesSaddleClipProductId65" aria-label="Saddle clip product 65"></select>
-              </label>
-              <label>Saddle clip product (80)
-                <select id="materialRulesSaddleClipProductId80" aria-label="Saddle clip product 80"></select>
-              </label>
-              <label>Adjustable clip product (65)
-                <select id="materialRulesAdjustableClipProductId65" aria-label="Adjustable clip product 65"></select>
-              </label>
-              <label>Adjustable clip product (80)
-                <select id="materialRulesAdjustableClipProductId80" aria-label="Adjustable clip product 80"></select>
-              </label>
-              <label>Clip selection mode
-                <select id="materialRulesClipSelectionMode" aria-label="Clip selection mode">
-                  <option value="auto_by_acl_presence">Auto by ACL presence</option>
-                  <option value="force_saddle">Force saddle clips</option>
-                  <option value="force_adjustable">Force adjustable clips</option>
-                </select>
-              </label>
+              <div class="material-rules-form-group">
+                <h3 class="material-rules-form-group-title">Spacing</h3>
+                <label>Bracket spacing (mm)
+                  <input type="number" id="materialRulesBracketSpacingMm" min="1" step="1" inputmode="numeric" />
+                </label>
+                <label>Clip spacing (mm)
+                  <input type="number" id="materialRulesClipSpacingMm" min="1" step="1" inputmode="numeric" />
+                </label>
+              </div>
+              <div class="material-rules-form-group">
+                <h3 class="material-rules-form-group-title">Screws per item</h3>
+                <label>Screws / bracket
+                  <input type="number" id="materialRulesScrewsPerBracket" min="0" step="1" inputmode="numeric" />
+                </label>
+                <label>Screws / dropper
+                  <input type="number" id="materialRulesScrewsPerDropper" min="0" step="1" inputmode="numeric" />
+                </label>
+                <label>Screws / saddle clip
+                  <input type="number" id="materialRulesScrewsPerSaddleClip" min="0" step="1" inputmode="numeric" />
+                </label>
+                <label>Screws / adjustable clip
+                  <input type="number" id="materialRulesScrewsPerAdjustableClip" min="0" step="1" inputmode="numeric" />
+                </label>
+              </div>
+              <div class="material-rules-form-group">
+                <h3 class="material-rules-form-group-title">Product assignments</h3>
+                <label>Screw product ID
+                  <select id="materialRulesScrewProductId" aria-label="Screw product ID"></select>
+                </label>
+                <label>Bracket product (SC)
+                  <select id="materialRulesBracketProductIdSc" aria-label="Bracket product SC"></select>
+                </label>
+                <label>Bracket product (CL)
+                  <select id="materialRulesBracketProductIdCl" aria-label="Bracket product CL"></select>
+                </label>
+                <label>Saddle clip product (65)
+                  <select id="materialRulesSaddleClipProductId65" aria-label="Saddle clip product 65"></select>
+                </label>
+                <label>Saddle clip product (80)
+                  <select id="materialRulesSaddleClipProductId80" aria-label="Saddle clip product 80"></select>
+                </label>
+                <label>Adjustable clip product (65)
+                  <select id="materialRulesAdjustableClipProductId65" aria-label="Adjustable clip product 65"></select>
+                </label>
+                <label>Adjustable clip product (80)
+                  <select id="materialRulesAdjustableClipProductId80" aria-label="Adjustable clip product 80"></select>
+                </label>
+              </div>
+              <div class="material-rules-form-group">
+                <h3 class="material-rules-form-group-title">Clip selection</h3>
+                <p id="materialRulesClipSelectionHelp" class="material-rules-field-help">Auto chooses by ACL presence; Force saddle or Force adjustable overrides for all downpipe clips.</p>
+                <label>Clip selection mode
+                  <select id="materialRulesClipSelectionMode" aria-label="Clip selection mode" aria-describedby="materialRulesClipSelectionHelp" title="Auto: use saddle vs adjustable based on ACL; Force saddle/adjustable: use that clip type for all.">
+                    <option value="auto_by_acl_presence">Auto by ACL presence</option>
+                    <option value="force_saddle">Force saddle clips</option>
+                    <option value="force_adjustable">Force adjustable clips</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </section>
 
@@ -742,8 +755,8 @@
                     <tr>
                       <th scope="col">Reorder</th>
                       <th scope="col">Label</th>
-                      <th scope="col">Needs Profile</th>
-                      <th scope="col">Needs Size</th>
+                      <th scope="col">Requires profile (SC/CL)</th>
+                      <th scope="col">Requires size (65/80mm)</th>
                       <th scope="col">Active</th>
                     </tr>
                   </thead>
@@ -756,6 +769,7 @@
               <div class="material-rules-subsection-head">
                 <h3>Part Templates</h3>
               </div>
+              <p class="material-rules-subsection-copy">Parts added per repair type when the user confirms Quick Quoter; order and active flag control what appears.</p>
               <div id="materialRulesTemplateGroups" class="material-rules-template-groups" aria-label="Quick Quoter templates sections"></div>
             </div>
           </section>

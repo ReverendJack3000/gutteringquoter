@@ -91,6 +91,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
 | 63 | 63.16 | Material Rules: manual desktop QA + Railway production sign-off (63.9 baseline locked; migration applied via 63.16.0). |
+| 63 | 63.18 | Material Rules dashboard UX improvements (desktop-only): clarity, labels, grouping, feedback; plan in docs/plans/MATERIAL_RULES_DASHBOARD_UX_PLAN.md. |
 ---
 
 ## Locked decisions
