@@ -4739,7 +4739,15 @@ async function calculateAndDisplayQuote() {
       const hasManualOverride = !shouldIgnoreGutterOverride && !shouldIgnoreDownpipeOverride && manualOverrides[line.id] != null;
       if (!isGutterOrDownpipe && !hasManualOverride) row.dataset.inferred = 'true';
       const isInferredItem = u(line.id).startsWith('BRK-') || line.id === 'SCR-SS' || u(line.id).startsWith('SCL-') || u(line.id).startsWith('ACL-');
-      const overrideQty = (shouldIgnoreGutterOverride || shouldIgnoreDownpipeOverride) ? null : manualOverrides[line.id];
+      let overrideQty = (shouldIgnoreGutterOverride || shouldIgnoreDownpipeOverride) ? null : manualOverrides[line.id];
+      // 50.19: For inferred lines, if preserved override differs from backend qty (merged), use backend qty so displayed qty matches line_total
+      if (isInferredItem && overrideQty != null) {
+        const overrideNum = parseFloat(overrideQty);
+        const backendQty = Number(line.qty);
+        if (!Number.isFinite(overrideNum) || !Number.isFinite(backendQty) || overrideNum !== backendQty) {
+          overrideQty = null;
+        }
+      }
       const qtyDisplay = overrideQty != null ? String(overrideQty) : ((isInferredItem && hasIncompleteMeasurable) ? '' : String(line.qty));
       let nameClass = '';
       if (u(line.id).startsWith('SCR-')) nameClass = 'quote-product-indent-level-2';

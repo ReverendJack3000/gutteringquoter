@@ -73,7 +73,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 33 | 33.10 | Autosave recovery: QA matrix + Railway safety verification (33.4–33.9 implemented). |
 | **48** | **48.0.1–48.0.23** | **Pre-deploy: local tests, features, troubleshooting** |
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
-| 50 | 50.9, 50.18 | Quote modal + REP-LAB: smoke-test and Railway deploy check (50.1–50.8, 50.10–50.17 implemented). |
+| 50 | 50.9, 50.18 | Quote modal + REP-LAB: smoke-test and Railway deploy check (50.19 complete: total vs line summary fix). |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 54 | 54.52–54.53, 54.57, 54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56, 54.58, 54.59 done). |
 | 54 | 54.126.5 | Desktop diagram toolbar header-occlusion fix follow-up: manual QA + Railway safety sign-off pending (load/expand no clipping under header; desktop primary, mobile safe-top guard unchanged). |
