@@ -180,6 +180,22 @@ async function run() {
     }
     console.log('  ✓ Orientation policy (desktop): target none');
 
+    // 54.116.4: Idle canvas must not continuously redraw (battery/perf regression)
+    await delay(2000);
+    const idleDiagnostics = await page.evaluate(() => {
+      if (typeof window.__quoteAppGetRenderLoopDiagnostics !== 'function') return null;
+      return window.__quoteAppGetRenderLoopDiagnostics();
+    });
+    if (idleDiagnostics) {
+      if (idleDiagnostics.rafPending) {
+        throw new Error('54.116.4 idle render-loop: rafPending should be false after 2s idle');
+      }
+      if (idleDiagnostics.continuousReason && idleDiagnostics.continuousReason !== '') {
+        throw new Error(`54.116.4 idle render-loop: continuousReason should be empty after idle, got "${idleDiagnostics.continuousReason}"`);
+      }
+      console.log('  ✓ Idle canvas: no continuous redraw (54.116.4)');
+    }
+
     const productsAvatarMenuBehavior = await page.evaluate(() => {
       if (typeof window.__quoteAppSetAuthForTests !== 'function' || typeof window.__quoteAppSwitchView !== 'function') {
         return { hookReady: false };
@@ -932,6 +948,27 @@ async function run() {
     console.log('  ✓ Desktop Quick Quoter entry is hidden after blueprint upload');
     console.log('  ✓ Desktop upload input resets for same-file reupload support');
 
+    // 54.119.3: same-file relaunch – second upload of same file must re-run flow (crop modal opens again on desktop)
+    const fileInputAgain = await page.$('#fileInput');
+    if (fileInputAgain) {
+      await fileInputAgain.uploadFile(blueprintImagePath);
+      await page.evaluate(() => {
+        const input = document.getElementById('fileInput');
+        if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await delay(1500);
+      await clickSelectorViaDomIfPresent(page, '#cropUseFull');
+      await delay(2000);
+      const placeholderHiddenAfterRelaunch = await page.evaluate(() => {
+        const el = document.getElementById('canvasPlaceholder');
+        return !!el && (el.hasAttribute('hidden') || !el.offsetParent);
+      });
+      if (!placeholderHiddenAfterRelaunch) {
+        throw new Error('Desktop same-file relaunch: placeholder should be hidden after second upload');
+      }
+      console.log('  ✓ Desktop same-file relaunch: second upload re-processes blueprint');
+    }
+
     const desktopMobileFitVisibility = await page.evaluate(() => {
       const btn = document.getElementById('mobileFitViewBtn');
       if (!btn) return { exists: false, visible: false, ariaHidden: null };
@@ -1057,6 +1094,58 @@ async function run() {
       );
     }
     console.log('  ✓ Blueprint drag works unlocked and is blocked when locked (desktop)');
+
+    // 54.115.4: Rotated blueprint resize – anchor (opposite corner) should stay fixed in world space
+    const blueprintResizeHooks = await page.evaluate(() => ({
+      setRotation: typeof window.__quoteAppSetBlueprintRotation === 'function',
+      cornerWorld: typeof window.__quoteAppGetBlueprintCornerWorldPosition === 'function',
+      handleClient: typeof window.__quoteAppGetBlueprintHandleClientPositions === 'function',
+      select: typeof window.__quoteAppSelectBlueprint === 'function',
+    }));
+    if (
+      blueprintResizeHooks.setRotation &&
+      blueprintResizeHooks.cornerWorld &&
+      blueprintResizeHooks.handleClient &&
+      blueprintResizeHooks.select
+    ) {
+      await page.evaluate(() => {
+        if (window.__quoteAppSetBlueprintLocked) window.__quoteAppSetBlueprintLocked(false);
+        if (window.__quoteAppSelectBlueprint) window.__quoteAppSelectBlueprint();
+      });
+      await delay(150);
+      await page.evaluate(() => window.__quoteAppSetBlueprintRotation && window.__quoteAppSetBlueprintRotation(45));
+      await delay(200);
+      const anchorBefore = await page.evaluate(() =>
+        window.__quoteAppGetBlueprintCornerWorldPosition ? window.__quoteAppGetBlueprintCornerWorldPosition('nw') : null
+      );
+      const handleSe = await page.evaluate(() => {
+        const pos = window.__quoteAppGetBlueprintHandleClientPositions && window.__quoteAppGetBlueprintHandleClientPositions();
+        return pos ? pos.se : null;
+      });
+      if (anchorBefore && handleSe) {
+        await page.mouse.move(handleSe.x, handleSe.y);
+        await delay(100);
+        await page.mouse.down();
+        await page.mouse.move(handleSe.x + 40, handleSe.y + 40, { steps: 6 });
+        await delay(100);
+        await page.mouse.up();
+        await delay(300);
+        const anchorAfter = await page.evaluate(() =>
+          window.__quoteAppGetBlueprintCornerWorldPosition ? window.__quoteAppGetBlueprintCornerWorldPosition('nw') : null
+        );
+        if (anchorAfter) {
+          const dx = Math.abs(anchorAfter.x - anchorBefore.x);
+          const dy = Math.abs(anchorAfter.y - anchorBefore.y);
+          const tol = 1;
+          if (dx > tol || dy > tol) {
+            throw new Error(
+              `54.115.4 rotated blueprint resize: anchor (NW) moved (dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, tol=${tol})`
+            );
+          }
+          console.log('  ✓ Rotated blueprint resize: anchor (NW) stable after SE handle drag (54.115.4)');
+        }
+      }
+    }
 
     // No error message visible (backend reachable)
     const messageEl = await page.$('#toolbarMessage');
@@ -3174,6 +3263,25 @@ async function run() {
         throw new Error('Mobile upload reliability regression: #fileInput value should reset after change handling');
       }
       console.log('  ✓ Mobile upload bypasses crop modal and hides Quick Quoter entry');
+
+      // 54.119.3: same-file relaunch – second upload of same file must re-run flow (no crop on mobile)
+      const mobileFileInputAgain = await mobilePage.$('#fileInput');
+      if (mobileFileInputAgain) {
+        await mobileFileInputAgain.uploadFile(blueprintImagePath);
+        await mobilePage.evaluate(() => {
+          const input = document.getElementById('fileInput');
+          if (input) input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await delay(2500);
+        const mobilePlaceholderHiddenAfterRelaunch = await mobilePage.evaluate(() => {
+          const el = document.getElementById('canvasPlaceholder');
+          return !!el && (el.hasAttribute('hidden') || !el.offsetParent);
+        });
+        if (!mobilePlaceholderHiddenAfterRelaunch) {
+          throw new Error('Mobile same-file relaunch: placeholder should be hidden after second upload');
+        }
+        console.log('  ✓ Mobile same-file relaunch: second upload re-processes blueprint');
+      }
 
       const mobileFitVisibility = await mobilePage.evaluate(() => {
         const btn = document.getElementById('mobileFitViewBtn');

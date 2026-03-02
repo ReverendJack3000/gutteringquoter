@@ -602,6 +602,7 @@ export function initDiagramToolbarDrag(options = {}) {
     updateDockedSide(toolbar, currentWrap);
     syncDragHandleAccessibility();
   };
+  /* 54.117.3: No time-based debounce. Use at most one rAF for coalescing to avoid toolbar jank after rotation/keyboard. */
   let resizeObserverRafId = null;
   const ro = new ResizeObserver((entries = []) => {
     if (dragPointerId != null) return;
@@ -609,6 +610,16 @@ export function initDiagramToolbarDrag(options = {}) {
     if (!isMobile) {
       const hasWrapResize = entries.some((entry) => entry && entry.target === wrap);
       if (!hasWrapResize) return;
+      syncToolbarAfterResize();
+      return;
+    }
+    /* Mobile: wrap resize (rotation/keyboard) → sync same frame to avoid one-frame jump; toolbar-only → coalesce with one rAF. */
+    const hasWrapResize = entries.some((entry) => entry && entry.target === wrap);
+    if (hasWrapResize) {
+      if (resizeObserverRafId != null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(resizeObserverRafId);
+        resizeObserverRafId = null;
+      }
       syncToolbarAfterResize();
       return;
     }

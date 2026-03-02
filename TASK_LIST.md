@@ -84,12 +84,10 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
 | 54 | 54.98.6 | Mobile quote non-labour line editor popup: real-device manual QA/sign-off pending (iOS Safari + Android Chrome). Implementation + E2E regression coverage complete; desktop unchanged; Railway-safe. |
 | 54 | 54.100.5 | Mobile quote material footer Apply action parity: manual mobile QA + Railway safety verification pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). |
-| 54 | 54.95.7 | Mobile orientation policy follow-up: landscape→portrait canvas zoom drift into header (54.95.1–54.95.6 implemented). |
 | 54 | 54.102.4 | (Mobile-only) Double-tap/zoom-out QA: manual mobile sign-off (54.102.1–54.102.3 implemented). |
 | 54 | 54.96.6 | (Mobile-only) Ruler/keypad + measurement deck: manual mobile QA + deploy safety (54.96.1–54.96.5 implemented). |
 | 54 | 54.101.6 | Canvas element Bold control (line weight 1–4): manual QA + Railway deploy-safety sign-off pending after implementation and automated coverage. |
 | 54 | 54.110.4 | Mobile collapsed global header (Projects + collapse + Generate Quote visible): real-device manual QA + Railway safety sign-off pending (iOS Safari + Android Chrome; 320/360/390 widths, portrait/landscape, 200% zoom). |
-| 54 | 54.114.4, 54.115.4, 54.116.4 | Mobile canvas transform/toolbars follow-up QA: blueprint handle hit reliability across orientations, rotated blueprint resize regression verification, and draw-loop battery/performance validation (mobile-first with shared desktop path guards). |
 | 54 | 54.119.3 | Mobile upload/toolbar perf hardening follow-up: manual mobile QA + Railway safety sign-off pending (upload same-file relaunch, drag-handle a11y behavior, draw/observer smoothness). |
 | 54 | 54.129.1–54.129.3 | Blueprint upload error handling: fix "body disturbed" by reading response body once (processFileAsBlueprint + technical-drawing toggle; shared desktop + mobile; Railway-safe). |
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |

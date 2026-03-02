@@ -6690,6 +6690,7 @@ function clientToCanvasDisplay(clientX, clientY) {
   const dpr = getEffectiveDpr();
   const logicalW = state.canvasWidth / dpr;
   const logicalH = state.canvasHeight / dpr;
+  if (!logicalW || !logicalH) return null; // 54.114.4: avoid false hit when canvas not yet sized (e.g. after orientation)
   return {
     x: (clientX - rect.left) * (logicalW / rect.width),
     y: (clientY - rect.top) * (logicalH / rect.height),
@@ -8836,6 +8837,7 @@ function getBlueprintResizeHandleSigns(handleId) {
   }
 }
 
+/** 54.114.4: Uses live getCanvasRect/state each call (no caching) so hit-test stays correct after orientation/resize. */
 function hitTestBlueprintHandle(clientX, clientY) {
   if (!state.selectedBlueprint || !state.blueprintTransform) return null;
   const bt = state.blueprintTransform;
@@ -9846,6 +9848,9 @@ function initCanvas() {
 
   window.addEventListener('resize', () => {
     resizeCanvas();
+    if (layoutState.viewportMode === 'mobile' && getVisibleViewId() === 'view-canvas') {
+      requestDraw();
+    }
   });
 }
 
@@ -12733,6 +12738,14 @@ function initPanel() {
           if (document.documentElement) document.documentElement.setAttribute('data-viewport-mode', nextMode);
         }
         syncMobileOrientationPolicy('orientationchange');
+        /* 54.95.7: On mobile canvas view, refresh canvas size and fit after layout settles to prevent drift into header. */
+        if (nextMode === 'mobile' && getVisibleViewId() === 'view-canvas') {
+          requestAnimationFrame(() => {
+            applyGlobalToolbarPadding();
+            resizeCanvas();
+            requestDraw();
+          });
+        }
       }, 100);
     }, { passive: true });
     layoutState.resizeListenerBound = true;
@@ -13526,8 +13539,11 @@ function positionBadgeLengthPopoverForElement(el, popover) {
   const pos = getElementDrawPosition(el);
   const badgeX = state.offsetX + (pos.x + el.width / 2) * state.scale;
   const badgeY = state.offsetY + (pos.y + el.height / 2) * state.scale;
-  const viewX = rect.left + badgeX * (rect.width / state.canvasWidth);
-  const viewY = rect.top + badgeY * (rect.height / state.canvasHeight);
+  const dpr = getEffectiveDpr();
+  const logicalW = state.canvasWidth / dpr;
+  const logicalH = state.canvasHeight / dpr;
+  const viewX = rect.left + badgeX * (rect.width / logicalW);
+  const viewY = rect.top + badgeY * (rect.height / logicalH);
 
   const size = getBadgeLengthPopoverSize(popover);
   const pad = 8;
@@ -15090,6 +15106,13 @@ if (typeof window !== 'undefined') {
     requestDraw('hook:set-blueprint-lock');
     return true;
   };
+  /** 54.115.4: E2E only – set blueprint rotation (degrees) for rotated-resize regression tests. */
+  window.__quoteAppSetBlueprintRotation = function (degrees) {
+    if (!state.blueprintTransform) return false;
+    state.blueprintTransform.rotation = Number(degrees) || 0;
+    requestDraw('hook:set-blueprint-rotation');
+    return true;
+  };
   window.__quoteAppGetBlueprintScreenCenter = function () {
     if (!state.blueprintTransform) return null;
     const rect = getCanvasRect();
@@ -15156,6 +15179,50 @@ if (typeof window !== 'undefined') {
     state.selectedIds = [];
     state.selectedId = null;
     return true;
+  };
+  /** 54.115.4: E2E only – world position of blueprint corner (nw|ne|se|sw) for anchor-stability assertion. */
+  window.__quoteAppGetBlueprintCornerWorldPosition = function (corner) {
+    if (!state.blueprintTransform) return null;
+    const bt = state.blueprintTransform;
+    const cx = bt.x + bt.w / 2;
+    const cy = bt.y + bt.h / 2;
+    const rad = ((bt.rotation || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rot = (lx, ly) => ({ x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos });
+    const corners = { nw: rot(-bt.w / 2, -bt.h / 2), ne: rot(bt.w / 2, -bt.h / 2), sw: rot(-bt.w / 2, bt.h / 2), se: rot(bt.w / 2, bt.h / 2) };
+    return corners[corner] || null;
+  };
+  /** 54.115.4: E2E only – client coords of blueprint resize handles so E2E can simulate drag. */
+  window.__quoteAppGetBlueprintHandleClientPositions = function () {
+    if (!state.blueprintTransform || !state.selectedBlueprint) return null;
+    const rect = getCanvasRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    const dpr = getEffectiveDpr();
+    const logicalW = state.canvasWidth / dpr;
+    const logicalH = state.canvasHeight / dpr;
+    if (!logicalW || !logicalH) return null;
+    const bt = state.blueprintTransform;
+    const sx = state.offsetX + bt.x * state.scale;
+    const sy = state.offsetY + bt.y * state.scale;
+    const sw = bt.w * state.scale;
+    const sh = bt.h * state.scale;
+    const cx = sx + sw / 2;
+    const cy = sy + sh / 2;
+    const rad = ((bt.rotation || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rot = (lx, ly) => ({ x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos });
+    const toClient = (displayX, displayY) => ({
+      x: rect.left + displayX * (rect.width / logicalW),
+      y: rect.top + displayY * (rect.height / logicalH),
+    });
+    return {
+      nw: toClient(rot(-sw / 2, -sh / 2).x, rot(-sw / 2, -sh / 2).y),
+      ne: toClient(rot(sw / 2, -sh / 2).x, rot(sw / 2, -sh / 2).y),
+      sw: toClient(rot(-sw / 2, sh / 2).x, rot(-sw / 2, sh / 2).y),
+      se: toClient(rot(sw / 2, sh / 2).x, rot(sw / 2, sh / 2).y),
+    };
   };
   // Color tinting test hooks: verify originalImage preservation and tintedCanvas creation
   window.__quoteAppGetElementColorInfo = function (id) {

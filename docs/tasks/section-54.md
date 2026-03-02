@@ -356,7 +356,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.95.4** **Confirm mobile diagram landscape target and non-diagram portrait target with no desktop regression.**
 - [x] **54.95.5** **Add E2E orientation-policy transition checks.**
 - [x] **54.95.6** **Update README/troubleshooting + deploy-safety verification.**
-- [ ] **54.95.7** **Mobile canvas orientation transition follow-up (landscape → portrait zoom drift).** When rotating from landscape to portrait while on `view-canvas`, prevent viewport drift/zoom into the header area that forces manual zoom-out. Keep fit/framing stable across orientation changes on mobile; desktop unchanged; Railway-safe.
+- [x] **54.95.7** **Mobile canvas orientation transition follow-up (landscape → portrait zoom drift).** When rotating from landscape to portrait while on `view-canvas`, prevent viewport drift/zoom into the header area that forces manual zoom-out. Keep fit/framing stable across orientation changes on mobile; desktop unchanged; Railway-safe.
 
 **54.96 Mobile: ruler keypad reliability + hide measurement pills (mobile-only, desktop unchanged, Railway-safe)**
 
@@ -515,21 +515,21 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.114.1** **Increase blueprint corner/rotate hit radius.** In `frontend/app.js` `hitTestBlueprintHandle`, enlarge touch-friendly thresholds (mobile-first, safe desktop values).
 - [x] **54.114.2** **Add rotate-stem hit-test support.** Add hit parity along the rotate stem (similar to element rotate affordance) so rotate is easier to grab on touch.
 - [x] **54.114.3** **Avoid body-hit regressions.** Ensure improved handle hit areas do not break blueprint body selection/move behavior.
-- [ ] **54.114.4** **Regression verification across orientations.** Validate touch hit reliability at mobile portrait/landscape and desktop pointer parity.
+- [x] **54.114.4** **Regression verification across orientations.** Validate touch hit reliability at mobile portrait/landscape and desktop pointer parity.
 
 **54.115 Blueprint resize anchor/rotation-aware behavior (shared mobile + desktop path, Railway-safe)**
 
 - [x] **54.115.1** **Replace center-symmetric blueprint resize math.** In `frontend/app.js`, use handle-anchored resize with opposite corner fixed.
 - [x] **54.115.2** **Respect active corner + rotation.** Ensure `nw/ne/se/sw` semantics stay stable after blueprint rotation.
 - [x] **54.115.3** **Keep aspect lock by default.** Preserve current aspect-locked blueprint resize behavior (unless explicitly changed in a later task).
-- [ ] **54.115.4** **Add regression coverage for rotated blueprint resize.** Extend checks/manual QA to confirm stable anchored behavior on mobile and desktop.
+- [x] **54.115.4** **Add regression coverage for rotated blueprint resize.** Extend checks/manual QA to confirm stable anchored behavior on mobile and desktop.
 
 **54.116 Draw scheduling performance hardening (shared mobile + desktop, Railway-safe)**
 
 - [x] **54.116.1** **Remove unconditional draw-loop recursion.** Replace unconditional `requestAnimationFrame(draw)` with conditional scheduling only while gesture/animation is active.
 - [x] **54.116.2** **Introduce dirty-frame request helper.** Add `requestDraw()` to queue a single RAF frame when state changes and avoid redundant scheduling.
 - [x] **54.116.3** **Add render-loop diagnostics hook.** Expose `window.__quoteAppGetRenderLoopDiagnostics()` for QA verification of idle redraw behavior.
-- [ ] **54.116.4** **Regression + battery/perf QA.** Verify idle canvas no longer continuously redraws while interactions/animations remain smooth; desktop/mobile unchanged functionally.
+- [x] **54.116.4** **Regression + battery/perf QA.** Verify idle canvas no longer continuously redraws while interactions/animations remain smooth; desktop/mobile unchanged functionally.
 
 **54.117 Mobile performance: first zero-regression optimizations (mobile-only, desktop unchanged, Railway-safe)**
 
