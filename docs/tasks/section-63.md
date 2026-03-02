@@ -32,6 +32,15 @@
   - [x] **63.18.2** Quick Quoter: clearer column headers (Repair Types) + Part Templates description + Length Mode display labels ("No length" / "Ask for metres") in JS.
   - [x] **63.18.3** Save button "Saving…" feedback during save (JS).
   - [ ] **63.18.4** Desktop QA + Railway safety sign-off (manual).
+  - [x] **63.18.5** **Hide Product assignments subgroup from Material Rules view (desktop-only):** Hide the "Product assignments" form group (Screw product ID, Bracket/Clip product dropdowns) via CSS so the block is not visible; DOM and JS unchanged so load/save and E2E remain valid. Plan: `docs/plans/PLAN_HIDE_MATERIAL_RULES_PRODUCT_ASSIGNMENTS.md`. No API or mobile changes; Railway-safe.
+
+- [ ] **63.19** **Profile/Size as material rule – single logical part display (desktop admin; optional quote modal prompt):** Decongest Part Templates view so repair types (e.g. External Corner) display as one logical part; profile/size mapping remains automatic at resolve time; optionally collect profile/size in quote modal. Plan: `docs/plans/PLAN_QUICK_QUOTER_PROFILE_AS_MATERIAL_RULE.md`. No schema or resolve API change for Phase 1; desktop admin and optional shared quote modal.
+  - [x] **63.19.1** Phase 1: Admin Part Templates grouped display – one row per logical part (profile/size as implied); save/load keeps existing payload shape; desktop-only.
+  - [ ] **63.19.2** (Optional) Phase 2: Profile/size prompt in quote modal when opening from Quick Quoter without profile/size set; shared desktop + mobile.
+  - [x] **63.19.2.1** Part Templates (desktop Material Rules only): one row per repair type—summary row with repair type label when section has one group; grouping by product family stem (with colon fallback for display names); empty product_id rows not merged; quote modal unchanged. Plan: `docs/plans/PLAN_QUOTE_MODAL_CONSOLIDATE_MATERIALS_BY_PART.md`. No backend or schema change.
+  - [ ] **63.19.3** Desktop QA + Railway safety sign-off.
+  - [x] **63.19.4** (Optional) Part Templates display grouping: add display_group_id to quick_quoter_part_templates, backfill, API + frontend group by key; remove stem/merge heuristics. Desktop admin only; plan: docs/plans/PLAN_MATERIAL_RULES_DISPLAY_GROUP_ID.md.
+  - [x] **63.19.5** **Part Templates display_group_id data fix (Outlet Replacement and any repair type):** Verify cause by querying production `quick_quoter_part_templates` (e.g. `repair_type_id = 'outlet_replacement'`) for `id`, `product_id`, `display_group_id`. If the 6 rows (2 Joiner + 4 Expansion Outlet) each have a distinct effective group key, fix by re-running `scripts/backfill_display_group_id.py` (from project root with backend/.env; see README/backend) or by one-off SQL assigning shared `display_group_id` per logical part (plan: docs/plans/PLAN_DISPLAY_GROUP_ID_OUTLET_REPLACEMENT_FIX.md). Document when/how to re-run backfill in TROUBLESHOOTING.md. Then complete 63.19.3 (desktop QA + Railway sign-off). **Done:** Production verification showed Joiner (2 rows) and Expansion Outlet (4 rows) already share correct display_group_id; no data fix needed. Backfill documented in TROUBLESHOOTING.md.
 
 ---
 

@@ -92,6 +92,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
 | 63 | 63.16 | Material Rules: manual desktop QA + Railway production sign-off (63.9 baseline locked; migration applied via 63.16.0). |
 | 63 | 63.18 | Material Rules dashboard UX improvements (desktop-only): clarity, labels, grouping, feedback; plan in docs/plans/MATERIAL_RULES_DASHBOARD_UX_PLAN.md. |
+| 63 | 63.19 | Profile/Size as material rule: single logical part display in Part Templates (desktop); optional profile/size in quote modal; plan in docs/plans/PLAN_QUICK_QUOTER_PROFILE_AS_MATERIAL_RULE.md. |
+| 63 | 63.19.3 | Desktop QA + Railway safety sign-off for 63.19 (Part Templates grouped display; 63.19.2.1 done). No backend/schema changes; desktop-only. |
 ---
 
 ## Locked decisions

@@ -4,6 +4,22 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Material Rules Part Templates: CSS.escape(groupId) in group selectors – 2026-03 (63.19.1)
+
+- **What / why:** In the Part Templates grouped display (Phase 1), `groupId` is built from `repair_type_id` and a group index (e.g. `external_corner_replacement-g0`). It is interpolated into attribute selectors like `[data-material-rules-group-id="${groupId}"]` in three places: (1) Remove button handler (find other members and summary row), (2) Expand/Collapse button handler (find member rows to toggle visibility), (3) post-render loop that applies collapsed state. If `repair_type_id` ever contained characters special in CSS selectors (e.g. `"`, `]`, `\`), the selector could be invalid and throw or match nothing.
+- **Fix applied:** All such selectors use `CSS.escape(groupId)` (or a local variable `escapedId = CSS.escape(groupId)`) before interpolation. File: `frontend/modules/admin-products-bonus.js`. In-code comments reference "selector safety" or "repair_type_id has special chars".
+- **If you add new selectors:** Any new code that builds a selector with `data-material-rules-group-id="${groupId}"` must use `CSS.escape(groupId)` (or `CSS.escape` of the value) for consistency and safety.
+
+---
+
+## Material Rules: "Failed to load quick quoter material rules" – 2026-03
+
+- **Symptom / context:** Opening the Material Rules view (desktop admin) shows the error "Failed to load quick quoter material rules". The view may show the status message and the Measured-Length / Quick Quoter sections fail to load.
+- **Cause:** The backend loads Quick Quoter rules by selecting columns including `updated_by` from `quick_quoter_repair_types` and `quick_quoter_part_templates`. If the Material Rules migration has not been applied to your Supabase project, those columns do not exist and the query fails (500).
+- **Fix / workaround:** Run the Material Rules migration in your Supabase project (the one used by `SUPABASE_URL` in `backend/.env`). In Supabase Dashboard → SQL Editor, run the full contents of **`docs/material_rules_migration.sql`**. That creates `public.measured_material_rules` (if missing), seeds the default row, and adds `updated_by` to `quick_quoter_repair_types` and `quick_quoter_part_templates`. Then reload the Material Rules page. For production (Railway), use the same SQL in the production Supabase project. If the error persists, check the backend logs for the actual exception (e.g. missing table or RLS).
+
+---
+
 ## Quote modal: total doubles when incrementing bracket (or inferred) qty with stepper – 2026-03 (50.19 + 50.20)
 
 - **Symptom / context:** After the 50.19 fix, opening the quote modal shows the correct total (e.g. brackets 13 × price). But when the user increments the bracket qty by 1 (e.g. 13→14) using the mobile stepper (or desktop qty input), the total jumps or roughly doubles instead of increasing by one unit price. Or: after a recalc (e.g. changing gutter length), the total jumps/doubles again.
@@ -188,6 +204,18 @@ When we hit an issue that might come up again, add an entry here so the project 
 - **Fix:** (1) Use an **SVG plus icon** for the expand state (in `index.html`: `.diagram-toolbar-collapse-btn-plus`); when collapsed, show only the SVG and hide the minus span so the “+” is always visible and not font-dependent. (2) In `onCollapseClick()` after toggling collapsed, call `clampDiagramToolbarToWrap(toolbar, wrap)` inside `requestAnimationFrame` so the pill stays on-screen. (3) In CSS, when collapsed: `overflow: hidden` on the toolbar, `flex-direction: row` and centre the single button, give the collapse button `position: relative; z-index: 1` so it stays on top, and ensure no scroll (54.47). (4) On mobile, toolbar defaults to expanded (see `initDiagramToolbarDrag`); tap the “−” to minimise, tap the “+” circle to expand. If the “+” still doesn’t appear, check that `.diagram-toolbar-collapse-btn-plus` is `display: block` when `.diagram-floating-toolbar--collapsed` is set.
 
 **Follow-up (mobile "+" blank / toolbar disappears):** SVG plus uses explicit `stroke="#333"` in HTML; mobile collapsed button gets `background: rgba(0,0,0,0.08)`, `color: #333`, and plus SVG gets `opacity: 1`, `visibility: visible`, `stroke-width: 2.5`. Double rAF in `onCollapseClick` before clamp; `clampDiagramToolbarToWrap` returns early when wrap width or height &lt; 20. See TASK_LIST 54.49–54.53 for verification tasks.
+
+---
+
+## Material Rules Part Templates: display_group_id and backfill – 2026-03 (63.19.5)
+
+- **Symptom / context:** In the desktop admin Material Rules view, Part Templates for a repair type (e.g. Outlet Replacement) show one row per template instead of grouped summary rows (e.g. one “Joiner” row and one “Expansion Outlet” row with expand/collapse). Each template appears as its own group.
+- **Cause:** The UI groups rows only by `display_group_id` (or, when null, by row `id`). If templates were added or re-saved after the backfill, or the seed was applied without running the backfill, each row has a different effective group key (e.g. `display_group_id = id` or NULL), so the UI correctly shows one row per group.
+- **Fix / workaround:** Re-run the backfill so rows that should be one logical part share the same `display_group_id`. From **project root**, with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`:
+  ```bash
+  PYTHONPATH=backend backend/.venv/bin/python scripts/backfill_display_group_id.py
+  ```
+  Or: `python scripts/backfill_display_group_id.py` if the backend is on `PYTHONPATH`. The script reads all templates, groups them by (qty, length_mode, product stem) and SC/CL and 65/80 pairs per repair type, then updates `display_group_id` for every row. After running, reload the Material Rules page. **Caution:** Re-running overwrites every row’s `display_group_id`; any custom grouping is replaced by the script’s logic. For a one-off fix of a single repair type only, use Supabase SQL Editor and set shared `display_group_id` per logical part (see `docs/plans/PLAN_DISPLAY_GROUP_ID_OUTLET_REPLACEMENT_FIX.md` Option B).
 
 ---
 
