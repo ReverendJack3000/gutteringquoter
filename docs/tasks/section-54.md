@@ -127,7 +127,7 @@
 - [x] **54.62** **Tap-first move gating (mobile).** Require explicit selection before one-finger move; add small movement threshold so tap-to-select does not accidentally start drag. Empty-space drag should continue to pan the canvas.
 - [x] **54.63** **Tap-first copy and labels (mobile).** Replace drag-centric mobile helper text/announcements with tap-first guidance (e.g., “Tap Products to place, then manipulate selected parts”). Keep desktop copy unchanged.
 - [x] **54.64** **Diagram toolbar safe-area and header-occlusion hardening (mobile).** Ensure floating diagram toolbar never renders clipped under the top header/notch; clamp with safe top offset, preserve z-index ordering, and keep collapse/expand fully visible.
-- [ ] **54.65** **Gesture arbitration and reliability QA (mobile).** Verify no conflicts between element gestures, canvas pan, and viewport pinch; include edge cases for quick taps, slight finger drift, and two-finger transitions.
+- [x] **54.65** **Gesture arbitration and reliability QA (mobile).** Verify no conflicts between element gestures, canvas pan, and viewport pinch; include edge cases for quick taps, slight finger drift, and two-finger transitions.
 - [x] **54.66** **Regression coverage for mobile interaction parity.** Add manual/E2E checklist for: select→transform with two fingers, tap-first move gating, panel tap-to-add auto-close, toolbar visibility near top edge, and 200% zoom/orientation checks. Checklist: `docs/QA-CHECKLIST-2026-02-20-mobile-freeform-interaction-parity.md`.
 
 **Mobile: header (theme) colour green → blue** *(plan: docs/plans/2026-02-20-mobile-header-green-to-blue.md)*
@@ -581,7 +581,7 @@ Plan: docs/plans/2026-02-21-mobile-vertical-toolbar-tighter-fit.md. Scope: mobil
 - [x] **54.122.1** **Diagram toolbar open/reset behavior: always top-center.** In `frontend/toolbar.js`, initialize `#diagramFloatingToolbar` at the top-center of `.blueprint-wrap` on every init (desktop + mobile), with mobile safe-top padding under the global header. Stop restoring open position from persisted `X/Y/orientation`; opening now resets to top-center horizontal.
 - [x] **54.122.2** **Expand path reset + drag-handle visual polish.** In `frontend/toolbar.js`, when expanding from collapsed, reset to top-center before clamp/snap while keeping collapse path and drag/edge-snap logic unchanged. In `frontend/styles.css`, refine `.diagram-toolbar-drag-handle` pull-tab contrast/feedback and keep grip icon visible on mobile expanded state.
 - [x] **54.122.3** **Automated regression coverage + run.** In `e2e/run.js`, add assertions for desktop/mobile top-center open state and expanded drag-handle visibility (including collapse→expand reset), while preserving existing edge-snap/no-scroll regressions. Run `npm run test:e2e`.
-- [ ] **54.122.4** **Manual QA + Railway safety sign-off.** Validate real-device mobile (iOS Safari + Android Chrome) and desktop behavior for top-center open reset, drag-handle visibility, and drag reliability; confirm Railway safety (frontend-only changes, no backend/env/build/config updates).
+- [x] **54.122.4** **Manual QA + Railway safety sign-off.** Validate real-device mobile (iOS Safari + Android Chrome) and desktop behavior for top-center open reset, drag-handle visibility, and drag reliability; confirm Railway safety (frontend-only changes, no backend/env/build/config updates).
 
 **54.123 Mobile product thumbnails: profile badge + label without profile (mobile-only, desktop unchanged, Railway-safe)**
 

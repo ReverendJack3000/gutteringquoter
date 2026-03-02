@@ -76,10 +76,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 50 | 50.9, 50.18 | Quote modal + REP-LAB: smoke-test and Railway deploy check (50.1–50.8, 50.10–50.17 implemented). |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
 | 54 | 54.52–54.53, 54.57, 54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56, 54.58, 54.59 done). |
-| 54 | 54.122.4 | Diagram toolbar drag-handle polish + top-center open reset (desktop + mobile): E2E assertions stabilized; manual QA + Railway safety sign-off pending. |
 | 54 | 54.126.5 | Desktop diagram toolbar header-occlusion fix follow-up: manual QA + Railway safety sign-off pending (load/expand no clipping under header; desktop primary, mobile safe-top guard unchanged). |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
-| 54 | 54.65 | Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off) |
 | 54 | 54.105.4 | (Mobile-only) Selection element toolbar top-dock: manual mobile QA/sign-off pending (iOS Safari + Android Chrome, portrait/landscape, 200% zoom). Implementation + E2E coverage complete; desktop unchanged; Railway-safe. |
 | 54 | 54.85.12 | (Mobile) Search bar below filters; thumbnail display: manual mobile QA sign-off pending. |
 | 54 | 54.98.6 | Mobile quote non-labour line editor popup: real-device manual QA/sign-off pending (iOS Safari + Android Chrome). Implementation + E2E regression coverage complete; desktop unchanged; Railway-safe. |

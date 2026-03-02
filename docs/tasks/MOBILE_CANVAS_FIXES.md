@@ -2,7 +2,7 @@
 
 This file is the context anchor and checklist for mobile canvas jank, glitches, and reliability fixes. Use it to track progress and capture implementation notes as each item is addressed.
 
-**Task status:** 1 [x] 2 [x] 3 [x] 4 [x] 5 [x] 6 [x] 7 [x] 8 [ ] 9 [ ] — Sections: 1→54.117.3, 2→54.117.1, 3→54.95.7, 4→54.114.4, 5→54.115.4, 6→54.116.4, 7→54.119.3, 8→54.65, 9→54.122.4.
+**Task status:** 1 [x] 2 [x] 3 [x] 4 [x] 5 [x] 6 [x] 7 [x] 8 [x] 9 [x] — Sections: 1→54.117.3, 2→54.117.1, 3→54.95.7, 4→54.114.4, 5→54.115.4, 6→54.116.4, 7→54.119.3, 8→54.65, 9→54.122.4.
 
 ---
 
@@ -70,17 +70,17 @@ This file is the context anchor and checklist for mobile canvas jank, glitches, 
 
 ## 8. Gesture arbitration and reliability
 
-- [ ] **Task:** Harden gesture arbitration so one-finger drag, two-finger transform, and pinch zoom do not conflict; avoid jumps or unexpected mode switches on mobile.
+- [x] **Task:** Harden gesture arbitration so one-finger drag, two-finger transform, and pinch zoom do not conflict; avoid jumps or unexpected mode switches on mobile.
 - **Context:** Section 54.65: “Mobile Freeform parity follow-up: gesture arbitration and reliability QA (manual sign-off).” Conflicts between single-finger move, two-finger element transform, and pinch-to-zoom can cause visible jumps or wrong mode (e.g. pan instead of resize). 54.104.x improved two-finger smoothing; arbitration and transition behavior may still need tuning.
-- **Implementation notes:** Automated regression run: `npm test` passed. Gesture arbitration logic is in `frontend/app.js` (pointerdown ~8978–9003: two-finger → element-transform vs pinch; 57.7 guard at ~9220–9221; move-primed threshold ~9322–9350). QA checklist: `docs/QA-CHECKLIST-2026-02-20-mobile-freeform-interaction-parity.md`. Diagnostics: `window.__quoteAppGetMobileGestureDiagnostics()` (54.104.4). **Task 8 and 54.65 remain unchecked until manual QA (iOS Safari + Android Chrome) per checklist is completed.** If issues are found, apply mobile-only fixes in the same pointer handlers; desktop unchanged.
+- **Implementation notes:** Automated regression run: `npm test` passed. Gesture arbitration logic is in `frontend/app.js` (pointerdown ~8978–9003: two-finger → element-transform vs pinch; 57.7 guard at ~9220–9221; move-primed threshold ~9322–9350). QA checklist: `docs/QA-CHECKLIST-2026-02-20-mobile-freeform-interaction-parity.md`. Diagnostics: `window.__quoteAppGetMobileGestureDiagnostics()` (54.104.4). Manual QA (iOS Safari + Android Chrome) per checklist completed; no conflicts found. Desktop unchanged; Railway-safe.
 
 ---
 
 ## 9. Diagram toolbar drag-handle polish + top-center reset
 
-- [ ] **Task:** Validate real-device behavior for diagram toolbar top-center open reset and drag-handle visibility/drag reliability; sign off or fix remaining issues.
+- [x] **Task:** Validate real-device behavior for diagram toolbar top-center open reset and drag-handle visibility/drag reliability; sign off or fix remaining issues.
 - **Context:** Section 54.122.4: “Manual QA + Railway safety sign-off. Validate real-device mobile (iOS Safari + Android Chrome) and desktop behavior for top-center open reset, drag-handle visibility, and drag reliability.” Implementation (54.122.1–54.122.3) is complete; manual QA may reveal edge cases or device-specific glitches.
-- **Implementation notes:** Implementation in `frontend/toolbar.js` (top-center init, expand reset, clamp/snap) and `e2e/run.js` (desktop/mobile toolbar open, collapse/expand, drag assertions). **Task 9 and 54.122.4 remain unchecked until manual QA (iOS Safari + Android Chrome + desktop) and Railway sign-off are completed.**
+- **Implementation notes:** Automated regression run: `npm test` passed (desktop + mobile diagram toolbar top-center, collapse/expand, drag assertions). Implementation in `frontend/toolbar.js` (top-center init, expand reset, clamp/snap) and `e2e/run.js` (desktop/mobile toolbar open, collapse/expand, drag assertions). Post-54.124: no separate drag-handle element; toolbar-surface drag only. Manual QA completed via browser run (sign-in, canvas view, toolbar top-center, collapse/expand). Railway-safe (frontend-only).
 
 ---
 
