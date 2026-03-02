@@ -200,6 +200,35 @@ class TestQuickQuoterResolve(unittest.TestCase):
         self.assertEqual(missing[0]["repair_type_id"], "mixed")
         self.assertEqual(missing[0]["quantity"], 6.0)
 
+    def test_resolve_returns_suggested_labour_minutes_from_default_time(self):
+        supabase = FakeSupabase(
+            {
+                "quick_quoter_repair_types": [
+                    {"id": "rt_a", "active": True, "requires_profile": False, "requires_size_mm": False, "default_time_minutes": 30},
+                    {"id": "rt_b", "active": True, "requires_profile": False, "requires_size_mm": False, "default_time_minutes": 15},
+                    {"id": "rt_c", "active": True, "requires_profile": False, "requires_size_mm": False, "default_time_minutes": None},
+                ],
+                "quick_quoter_part_templates": [
+                    {"id": "1", "repair_type_id": "rt_a", "product_id": "P1", "qty_per_unit": 1, "condition_profile": None, "condition_size_mm": None, "length_mode": "none", "fixed_length_mm": None, "active": True, "sort_order": 10},
+                    {"id": "2", "repair_type_id": "rt_b", "product_id": "P2", "qty_per_unit": 1, "condition_profile": None, "condition_size_mm": None, "length_mode": "none", "fixed_length_mm": None, "active": True, "sort_order": 10},
+                    {"id": "3", "repair_type_id": "rt_c", "product_id": "P3", "qty_per_unit": 1, "condition_profile": None, "condition_size_mm": None, "length_mode": "none", "fixed_length_mm": None, "active": True, "sort_order": 10},
+                ],
+            }
+        )
+        payload = resolve_quick_quoter_selection(
+            supabase,
+            profile=None,
+            size_mm=None,
+            selections=[
+                {"repair_type_id": "rt_a", "quantity": 2},
+                {"repair_type_id": "rt_b", "quantity": 4},
+                {"repair_type_id": "rt_c", "quantity": 1},
+            ],
+        )
+        self.assertEqual(payload["validation_errors"], [])
+        self.assertIn("suggested_labour_minutes", payload)
+        self.assertEqual(payload["suggested_labour_minutes"], 30 * 2 + 15 * 4 + 0)
+
 
 if __name__ == "__main__":
     unittest.main()

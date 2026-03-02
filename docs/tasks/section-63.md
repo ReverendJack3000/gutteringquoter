@@ -46,6 +46,8 @@
   - [x] **63.19.8** **Part Templates profile/size dropdown colours (match parts thumbnails):** Style the Profile and Size dropdowns in Part Templates so background/text match product thumbnails: Storm Cloud yellow bg black text, Classic black bg yellow text, 65mm black bg white text, 80mm white bg black text. Set `data-profile`/`data-size` on selects and sync on change; add CSS for `[data-profile="SC"]`, `[data-profile="CL"]`, `[data-size="65"]`, `[data-size="80"]`. Desktop admin only; plan: `docs/plans/PLAN_MATERIAL_RULES_PROFILE_SIZE_DROPDOWN_COLORS.md`. No backend or API changes.
   - [x] **63.19.9** **Part Templates section titles: label only (remove repair_type_id from heading):** Show only the human-readable repair type label in each Part Templates section heading (e.g. "Expansion Joiner Replacement" instead of "Expansion Joiner Replacement (expansion_joiner_replacement)"). Single JS change in renderMaterialRulesTemplateSections; plan: docs/plans/PLAN_MATERIAL_RULES_SECTION_TITLE_LABEL_ONLY.md. Desktop admin only; no backend or API changes.
 
+- [x] **63.20** **Default time estimates for Quick Quoter rules (Material Rules):** Add default time (minutes) per repair type in Material Rules; store in `quick_quoter_repair_types.default_time_minutes`; resolve API returns `suggested_labour_minutes`; optional quote modal prefill when opening from Quick Quoter. Backend: migration, material_rules list/serialize/normalize/save, quick_quoter resolve; frontend: Repair Types table column + collect/save, optional merge + openQuoteModalForElements prefill. Plan: `docs/plans/PLAN_QUICK_QUOTER_DEFAULT_TIME_ESTIMATES.md`.
+
 ---
 
 ### Integration anchors (verified)

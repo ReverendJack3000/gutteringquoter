@@ -65,6 +65,7 @@ Quick Quoter catalog and conditional part templates (Section 63). Admin Material
 | `sort_order` | integer | UI order |
 | `requires_profile` | boolean | Requires SC/CL selection |
 | `requires_size_mm` | boolean | Requires 65/80 selection |
+| `default_time_minutes` | integer nullable | Optional default labour minutes per repair; used for resolve `suggested_labour_minutes` and optional quote modal labour prefill |
 | `created_at` | timestamptz | Row created timestamp |
 | `updated_at` | timestamptz | Last updated timestamp |
 | `updated_by` | uuid nullable | `auth.users.id` of admin/super-admin editor |

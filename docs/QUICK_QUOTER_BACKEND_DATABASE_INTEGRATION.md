@@ -52,6 +52,7 @@ Proposed columns:
 | `sort_order` | `integer` | NOT NULL DEFAULT `0` | deterministic display order |
 | `requires_profile` | `boolean` | NOT NULL DEFAULT `false` | local/API validation |
 | `requires_size_mm` | `boolean` | NOT NULL DEFAULT `false` | local/API validation |
+| `default_time_minutes` | `integer` | NULL CHECK `>= 0` | optional default labour minutes per repair; used for resolve `suggested_labour_minutes` and quote modal prefill |
 | `created_at` | `timestamptz` | NOT NULL DEFAULT `now()` | audit |
 | `updated_at` | `timestamptz` | NOT NULL DEFAULT `now()` | audit |
 
@@ -183,9 +184,12 @@ Response shape:
       "repair_type_id": "cutting_a_down_pipe"
     }
   ],
+  "suggested_labour_minutes": 60,
   "validation_errors": []
 }
 ```
+
+- `suggested_labour_minutes`: sum of `(default_time_minutes × selection quantity)` for each selected repair type (null/0 on repair type counts as 0). Frontend may use this to prefill labour hours in the quote modal (minutes ÷ 60).
 
 Rules:
 

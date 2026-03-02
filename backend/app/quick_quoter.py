@@ -182,7 +182,7 @@ def resolve_quick_quoter_selection(
     repair_type_ids = sorted(selection_qty_by_repair_type.keys())
     repair_type_rows_resp = (
         supabase.table("quick_quoter_repair_types")
-        .select("id, active, requires_profile, requires_size_mm")
+        .select("id, active, requires_profile, requires_size_mm, default_time_minutes")
         .in_("id", repair_type_ids)
         .execute()
     )
@@ -329,7 +329,15 @@ def resolve_quick_quoter_selection(
             }
         )
 
+    suggested_labour_minutes = 0
+    for repair_type_id, qty in selection_qty_by_repair_type.items():
+        row = repair_type_by_id.get(repair_type_id)
+        if row is not None:
+            default_mins = row.get("default_time_minutes")
+            suggested_labour_minutes += (default_mins if default_mins is not None else 0) * qty
+
     out["elements"] = elements
     out["missing_measurements"] = missing_measurements
+    out["suggested_labour_minutes"] = suggested_labour_minutes
     out["validation_errors"] = []
     return out

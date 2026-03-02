@@ -97,6 +97,7 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 63 | 63.19.7 | Part Templates summary row titles: product name (minus profile/mm) instead of product ID; plan: docs/plans/PLAN_MATERIAL_RULES_SUMMARY_ROW_PRODUCT_NAME.md. |
 | 63 | 63.19.8 | Part Templates profile/size dropdown colours to match parts thumbnails (Storm Cloud/Classic/65mm/80mm); plan: docs/plans/PLAN_MATERIAL_RULES_PROFILE_SIZE_DROPDOWN_COLORS.md. |
 | 63 | 63.19.9 | Part Templates section titles: label only (remove repair_type_id from heading); plan: docs/plans/PLAN_MATERIAL_RULES_SECTION_TITLE_LABEL_ONLY.md. |
+| 63 | 63.20 | Default time estimates for Quick Quoter rules (Material Rules); plan: docs/plans/PLAN_QUICK_QUOTER_DEFAULT_TIME_ESTIMATES.md. |
 ---
 
 ## Locked decisions

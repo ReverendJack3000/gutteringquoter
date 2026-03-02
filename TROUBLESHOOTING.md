@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Quick Quoter default time (63.20): migration required in production – 2025-03
+
+- **Symptom / context:** Material Rules Repair Types may load but the "Default time (min)" column will not persist or resolve may not return `suggested_labour_minutes` if the database is missing the column.
+- **Cause:** Task 63.20 adds `default_time_minutes` to `public.quick_quoter_repair_types`. Production (and any environment used by Railway) must have this migration applied.
+- **Fix / workaround:** Run the migration in the Supabase project that production uses (project ID `rlptjmkejfykisaefkeh`): either execute **`docs/quick_quoter_repair_types_default_time_minutes.sql`** in the SQL Editor, or apply it via Supabase MCP `apply_migration`. This migration was applied via MCP on 2025-03-03 for the Jacks Quote App project; if you deploy to a new project or restore a DB from before that date, run the migration there too.
+
+---
+
 ## Material Rules Part Templates: CSS.escape(groupId) in group selectors – 2026-03 (63.19.1)
 
 - **What / why:** In the Part Templates grouped display (Phase 1), `groupId` is built from `repair_type_id` and a group index (e.g. `external_corner_replacement-g0`). It is interpolated into attribute selectors like `[data-material-rules-group-id="${groupId}"]` in three places: (1) Remove button handler (find other members and summary row), (2) Expand/Collapse button handler (find member rows to toggle visibility), (3) post-render loop that applies collapsed state. If `repair_type_id` ever contained characters special in CSS selectors (e.g. `"`, `]`, `\`), the selector could be invalid and throw or match nothing.

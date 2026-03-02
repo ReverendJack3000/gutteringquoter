@@ -3234,7 +3234,7 @@ function initEmptyQuoteRow(tr) {
 
 }
 
-async function openQuoteModalForElements(elementsForQuote, triggerEl = null) {
+async function openQuoteModalForElements(elementsForQuote, triggerEl = null, suggestedLabourMinutes = null) {
   const tableBody = document.getElementById('quoteTableBody');
   const materialsTotalDisplay = document.getElementById('materialsTotalDisplay');
   const labourTotalDisplay = document.getElementById('labourTotalDisplay');
@@ -3324,6 +3324,17 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null) {
   appendEmptyQuoteRow();
   ensureLabourRowsExist();
   syncLabourRowTechnicianReadOnly();
+
+  if (typeof suggestedLabourMinutes === 'number' && suggestedLabourMinutes > 0) {
+    const firstLabourRow = getLabourRowsOrdered()[0];
+    const firstHoursInput = firstLabourRow?.querySelector('.quote-labour-hours-input');
+    if (firstHoursInput) {
+      const wholeMinutes = Math.ceil(Number(suggestedLabourMinutes));
+      const hours = wholeMinutes / 60;
+      firstHoursInput.value = hours.toFixed(2);
+      firstHoursInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
 
   const elements = getElementsFromQuoteTable();
   if (elements.length > 0) {
@@ -6480,7 +6491,14 @@ function mergeQuickQuoterElementsForQuote(resolvePayload) {
     })
     .filter(Boolean);
 
-  return [...baseElements, ...normalizedResolved, ...normalizedMissing];
+  const elements = [...baseElements, ...normalizedResolved, ...normalizedMissing];
+  const suggestedLabourMinutes =
+    resolvePayload?.suggested_labour_minutes != null &&
+    Number.isFinite(resolvePayload.suggested_labour_minutes) &&
+    resolvePayload.suggested_labour_minutes >= 0
+      ? resolvePayload.suggested_labour_minutes
+      : null;
+  return { elements, suggested_labour_minutes: suggestedLabourMinutes };
 }
 
 function getQuickQuoterDisplayLabel(type) {
@@ -6636,10 +6654,10 @@ function initQuickQuoter() {
       renderQuickQuoterRows();
     }
 
-    const mergedElements = mergeQuickQuoterElementsForQuote(resolveData);
+    const merged = mergeQuickQuoterElementsForQuote(resolveData);
     const quoteTrigger = doneBtn || entryBtn;
     closeQuickQuoterModal({ restoreFocus: false });
-    await openQuoteModalForElements(mergedElements, quoteTrigger);
+    await openQuoteModalForElements(merged.elements, quoteTrigger, merged.suggested_labour_minutes);
   });
   clearBtn?.addEventListener('click', () => {
     resetQuickQuoterState();

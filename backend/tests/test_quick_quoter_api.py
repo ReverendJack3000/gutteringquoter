@@ -42,6 +42,7 @@ class TestQuickQuoterApi(unittest.TestCase):
         resolver_payload = {
             "elements": [{"assetId": "J-SC-MAR", "quantity": 2.0}],
             "missing_measurements": [{"assetId": "DP-80-3M", "quantity": 1.0, "repair_type_id": "cutting_a_down_pipe"}],
+            "suggested_labour_minutes": 60,
             "validation_errors": [],
         }
         with patch.object(backend_main, "get_supabase", return_value=object()), patch.object(

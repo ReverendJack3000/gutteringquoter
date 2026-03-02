@@ -2241,6 +2241,8 @@ function appendMaterialRulesRepairTypeRow(row = {}) {
   const requiresProfile = !!row?.requires_profile;
   const requiresSize = !!row?.requires_size_mm;
   const active = row?.active !== false;
+  const defaultTimeMinutes = row?.default_time_minutes != null && row.default_time_minutes !== '' ? parseInt(String(row.default_time_minutes), 10) : '';
+  const defaultTimeValue = Number.isInteger(defaultTimeMinutes) && defaultTimeMinutes >= 0 ? defaultTimeMinutes : '';
 
   const tr = document.createElement('tr');
   tr.dataset.materialRulesRepairRow = 'true';
@@ -2253,6 +2255,7 @@ function appendMaterialRulesRepairTypeRow(row = {}) {
     <td><input type="checkbox" class="material-rules-repair-requires-profile" ${requiresProfile ? 'checked' : ''} aria-label="Requires profile" /></td>
     <td><input type="checkbox" class="material-rules-repair-requires-size" ${requiresSize ? 'checked' : ''} aria-label="Requires size" /></td>
     <td><input type="checkbox" class="material-rules-repair-active" ${active ? 'checked' : ''} aria-label="Active" /></td>
+    <td><input type="number" class="material-rules-repair-default-time-minutes" min="0" step="1" value="${escapeHtml(String(defaultTimeValue))}" aria-label="Default time minutes" /></td>
   `;
   tbody.appendChild(tr);
 }
@@ -2572,6 +2575,11 @@ function collectMaterialRulesRepairTypesPayload() {
     if (duplicateId) errors.push(`Repair type row ${rowNumber}: Duplicate ID '${id}'.`);
     if (id) seenIds.add(id);
 
+    const defaultTimeInput = row.querySelector('.material-rules-repair-default-time-minutes');
+    const defaultTimeRaw = defaultTimeInput?.value?.trim() ?? '';
+    const defaultTimeMinutes = defaultTimeRaw === '' ? null : parseInt(defaultTimeRaw, 10);
+    const defaultTimeFinal = defaultTimeMinutes === null || !Number.isInteger(defaultTimeMinutes) || defaultTimeMinutes < 0 ? null : defaultTimeMinutes;
+
     if (id && label && !duplicateId) {
       payload.push({
         id,
@@ -2580,6 +2588,7 @@ function collectMaterialRulesRepairTypesPayload() {
         sort_order: sortOrder,
         requires_profile: requiresProfile,
         requires_size_mm: requiresSize,
+        default_time_minutes: defaultTimeFinal,
       });
     }
   });

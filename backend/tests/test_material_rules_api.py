@@ -196,6 +196,7 @@ class TestMaterialRulesApi(unittest.TestCase):
                         "sort_order": 10,
                         "requires_profile": True,
                         "requires_size_mm": False,
+                        "default_time_minutes": 30,
                         "created_at": "2026-01-01T00:00:00Z",
                         "updated_at": "2026-01-01T00:00:00Z",
                         "updated_by": None,
@@ -645,6 +646,60 @@ class TestMaterialRulesApi(unittest.TestCase):
             )
             self.assertEqual(invalid_resp.status_code, 400, invalid_resp.text)
             self.assertIn("invalid_display_group_id", self._validation_codes(invalid_resp.json()))
+
+    def test_repair_types_default_time_minutes_round_trip_and_validation(self):
+        """default_time_minutes: GET returns it; PUT accepts and persists it; 400 when negative."""
+        self._set_role("admin", "00000000-0000-0000-0000-000000000005")
+        supabase = self._build_fake_supabase()
+
+        with patch.object(backend_main, "get_supabase", return_value=supabase):
+            get_resp = self.client.get("/api/admin/material-rules/quick-quoter")
+            self.assertEqual(get_resp.status_code, 200, get_resp.text)
+            repair_types = (get_resp.json() or {}).get("repair_types") or []
+            self.assertGreaterEqual(len(repair_types), 1)
+            joiner = next((r for r in repair_types if r.get("id") == "joiner_replacement"), None)
+            self.assertIsNotNone(joiner)
+            self.assertEqual(joiner.get("default_time_minutes"), 30)
+
+            put_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/repair-types",
+                json={
+                    "repair_types": [
+                        {
+                            "id": "joiner_replacement",
+                            "label": "Joiner Replacement",
+                            "active": True,
+                            "sort_order": 10,
+                            "requires_profile": True,
+                            "requires_size_mm": False,
+                            "default_time_minutes": 45,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(put_resp.status_code, 200, put_resp.text)
+            updated = (put_resp.json() or {}).get("repair_types") or []
+            self.assertEqual(len(updated), 1)
+            self.assertEqual(updated[0].get("default_time_minutes"), 45)
+
+            neg_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/repair-types",
+                json={
+                    "repair_types": [
+                        {
+                            "id": "joiner_replacement",
+                            "label": "Joiner Replacement",
+                            "active": True,
+                            "sort_order": 10,
+                            "requires_profile": True,
+                            "requires_size_mm": False,
+                            "default_time_minutes": -1,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(neg_resp.status_code, 400, neg_resp.text)
+            self.assertIn("invalid_default_time_minutes", self._validation_codes(neg_resp.json()))
 
 
 if __name__ == "__main__":

@@ -186,6 +186,7 @@ def _serialize_quick_quoter_repair_type(row: dict[str, Any]) -> dict[str, Any]:
         "sort_order": int(row.get("sort_order") or 0),
         "requires_profile": bool(row.get("requires_profile")),
         "requires_size_mm": bool(row.get("requires_size_mm")),
+        "default_time_minutes": _to_int(row.get("default_time_minutes")),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "updated_by": _to_optional_updated_by(row.get("updated_by")),
@@ -215,7 +216,7 @@ def _serialize_quick_quoter_template(row: dict[str, Any]) -> dict[str, Any]:
 def _list_quick_quoter_repair_types(supabase: Any) -> list[dict[str, Any]]:
     resp = (
         supabase.table("quick_quoter_repair_types")
-        .select("id, label, active, sort_order, requires_profile, requires_size_mm, created_at, updated_at, updated_by")
+        .select("id, label, active, sort_order, requires_profile, requires_size_mm, default_time_minutes, created_at, updated_at, updated_by")
         .order("sort_order")
         .order("id")
         .execute()
@@ -271,6 +272,7 @@ def _normalize_quick_quoter_repair_types(payload: Any) -> list[dict[str, Any]]:
         sort_order = _to_int(raw.get("sort_order"))
         requires_profile = _to_bool(raw.get("requires_profile"))
         requires_size_mm = _to_bool(raw.get("requires_size_mm"))
+        default_time_minutes = _to_int(raw.get("default_time_minutes"))
 
         if not repair_type_id:
             errors.append(_validation_error("missing_id", "id is required.", "repair_types.id", index))
@@ -306,7 +308,25 @@ def _normalize_quick_quoter_repair_types(payload: Any) -> list[dict[str, Any]]:
                 )
             )
 
-        if repair_type_id and label and active is not None and sort_order is not None and requires_profile is not None and requires_size_mm is not None:
+        if default_time_minutes is not None and default_time_minutes < 0:
+            errors.append(
+                _validation_error(
+                    "invalid_default_time_minutes",
+                    "default_time_minutes must be >= 0 when present.",
+                    "repair_types.default_time_minutes",
+                    index,
+                )
+            )
+
+        if (
+            repair_type_id
+            and label
+            and active is not None
+            and sort_order is not None
+            and requires_profile is not None
+            and requires_size_mm is not None
+            and (default_time_minutes is None or default_time_minutes >= 0)
+        ):
             seen_ids.add(repair_type_id)
             out.append(
                 {
@@ -316,6 +336,7 @@ def _normalize_quick_quoter_repair_types(payload: Any) -> list[dict[str, Any]]:
                     "sort_order": sort_order,
                     "requires_profile": requires_profile,
                     "requires_size_mm": requires_size_mm,
+                    "default_time_minutes": default_time_minutes,
                 }
             )
 
