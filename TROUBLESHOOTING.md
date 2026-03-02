@@ -207,6 +207,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## PWA / Material Rules: frontend changes not visible in production – 2026-03
+
+- **Symptom / context:** After deploying a frontend change (e.g. Material Rules grouping by display_group_id), production still shows the old behaviour. Backend is up to date; API may return the new data; hard refresh doesn’t help.
+- **Cause:** The app is a PWA. The service worker caches shell assets (e.g. `index.html`, `app.js`, `modules/admin-products-bonus.js`) under a versioned URL (`?v=ASSET_VERSION`). If **ASSET_VERSION** (and **STATIC_ASSET_VERSION** in app.js) is not bumped when you change those files, browsers keep using the previously cached JS/CSS/HTML.
+- **Fix / workaround:** Bump the asset version so cached shell URLs change and the browser fetches the new files. Update **both**: (1) `frontend/service-worker.js` → `const ASSET_VERSION = '...'` and (2) `frontend/app.js` → `const STATIC_ASSET_VERSION = '...'` to the same new value (e.g. a new date or feature suffix). Deploy. Then: close all tabs for the app (or use “Unregister” for the site in DevTools → Application → Service Workers), reopen the app so the new service worker installs and caches the new assets. Optional: ask users to do the same if they report stale UI.
+
+---
+
 ## Material Rules Part Templates: display_group_id and backfill – 2026-03 (63.19.5)
 
 - **Symptom / context:** In the desktop admin Material Rules view, Part Templates for a repair type (e.g. Outlet Replacement) show one row per template instead of grouped summary rows (e.g. one “Joiner” row and one “Expansion Outlet” row with expand/collapse). Each template appears as its own group.
