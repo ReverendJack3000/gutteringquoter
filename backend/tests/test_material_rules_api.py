@@ -216,6 +216,7 @@ class TestMaterialRulesApi(unittest.TestCase):
                         "created_at": "2026-01-01T00:00:00Z",
                         "updated_at": "2026-01-01T00:00:00Z",
                         "updated_by": None,
+                        "display_group_id": None,
                     }
                 ],
                 "measured_material_rules": [
@@ -530,6 +531,7 @@ class TestMaterialRulesApi(unittest.TestCase):
             self.assertEqual(len(templates), 1)
             self.assertEqual(templates[0].get("updated_by"), actor_user_id)
             self.assertTrue(templates[0].get("updated_at"))
+            self.assertEqual(templates[0].get("display_group_id"), "11111111-1111-1111-1111-111111111111", "backend defaults display_group_id to template id when omitted")
 
             measured_resp = self.client.put(
                 "/api/admin/material-rules/measured",
@@ -566,6 +568,83 @@ class TestMaterialRulesApi(unittest.TestCase):
         measured_row = supabase.tables["measured_material_rules"][0]
         self.assertEqual(str(measured_row.get("updated_by")), actor_user_id)
         self.assertTrue(measured_row.get("updated_at"))
+
+    def test_display_group_id_round_trip_and_validation(self):
+        """display_group_id: round-trip when set; default to template id when omitted; 400 when invalid UUID."""
+        self._set_role("admin", "00000000-0000-0000-0000-000000000004")
+        supabase = self._build_fake_supabase()
+        shared_group_id = "a0000000-0000-0000-0000-000000000001"
+
+        with patch.object(backend_main, "get_supabase", return_value=supabase):
+            put_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/templates",
+                json={
+                    "templates": [
+                        {
+                            "id": "11111111-1111-1111-1111-111111111111",
+                            "repair_type_id": "joiner_replacement",
+                            "product_id": "GL-MAR",
+                            "qty_per_unit": 0.5,
+                            "condition_profile": None,
+                            "condition_size_mm": None,
+                            "length_mode": "none",
+                            "fixed_length_mm": None,
+                            "active": True,
+                            "sort_order": 10,
+                            "display_group_id": shared_group_id,
+                        },
+                        {
+                            "id": "22222222-2222-2222-2222-222222222222",
+                            "repair_type_id": "joiner_replacement",
+                            "product_id": "GL-MAR",
+                            "qty_per_unit": 0.5,
+                            "condition_profile": "SC",
+                            "condition_size_mm": None,
+                            "length_mode": "none",
+                            "fixed_length_mm": None,
+                            "active": True,
+                            "sort_order": 20,
+                            "display_group_id": shared_group_id,
+                        },
+                    ]
+                },
+            )
+            self.assertEqual(put_resp.status_code, 200, put_resp.text)
+            templates = (put_resp.json() or {}).get("templates") or []
+            self.assertEqual(len(templates), 2)
+            self.assertEqual(templates[0].get("display_group_id"), shared_group_id)
+            self.assertEqual(templates[1].get("display_group_id"), shared_group_id)
+
+            get_resp = self.client.get("/api/admin/material-rules/quick-quoter")
+            self.assertEqual(get_resp.status_code, 200, get_resp.text)
+            get_templates = (get_resp.json() or {}).get("templates") or []
+            self.assertGreaterEqual(len(get_templates), 2)
+            by_id = {t["id"]: t for t in get_templates}
+            self.assertEqual(by_id["11111111-1111-1111-1111-111111111111"].get("display_group_id"), shared_group_id)
+            self.assertEqual(by_id["22222222-2222-2222-2222-222222222222"].get("display_group_id"), shared_group_id)
+
+            invalid_resp = self.client.put(
+                "/api/admin/material-rules/quick-quoter/templates",
+                json={
+                    "templates": [
+                        {
+                            "id": "33333333-3333-3333-3333-333333333333",
+                            "repair_type_id": "joiner_replacement",
+                            "product_id": "GL-MAR",
+                            "qty_per_unit": 1,
+                            "condition_profile": None,
+                            "condition_size_mm": None,
+                            "length_mode": "none",
+                            "fixed_length_mm": None,
+                            "active": True,
+                            "sort_order": 30,
+                            "display_group_id": "not-a-valid-uuid",
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(invalid_resp.status_code, 400, invalid_resp.text)
+            self.assertIn("invalid_display_group_id", self._validation_codes(invalid_resp.json()))
 
 
 if __name__ == "__main__":

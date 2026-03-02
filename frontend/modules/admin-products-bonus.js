@@ -2008,6 +2008,47 @@ function getMaterialRulesTemplateSections() {
   return sections;
 }
 
+/**
+ * Group section rows by display_group_id (from API). Key is row.display_group_id ?? row.id.
+ * Returns array of { summaryLabel, rows } where rows.length >= 1.
+ */
+function getMaterialRulesTemplateGroupsByDisplayGroupId(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const byKey = new Map();
+  rows.forEach((row) => {
+    const key = row.display_group_id != null ? String(row.display_group_id) : (row.id != null ? String(row.id) : null);
+    const k = key || `__single_${row.id || Math.random()}`;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(row);
+  });
+  return Array.from(byKey.values()).map((rowsInGroup) => ({
+    summaryLabel: formatMaterialRulesGroupSummaryLabel(rowsInGroup),
+    rows: rowsInGroup,
+  }));
+}
+
+/**
+ * Format a short label for a group of profile/size variant rows, e.g. "EC (SC/CL)" or "EC-SC-MAR / EC-CL-MAR".
+ */
+function formatMaterialRulesGroupSummaryLabel(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  if (rows.length === 1) return String(rows[0]?.product_id || '').trim() || '—';
+  const profiles = new Set();
+  const sizes = new Set();
+  rows.forEach((r) => {
+    const p = String(r?.condition_profile || '').trim().toUpperCase();
+    if (p) profiles.add(p);
+    const s = r?.condition_size_mm != null ? String(r.condition_size_mm).trim() : '';
+    if (s) sizes.add(s);
+  });
+  const parts = [];
+  if (profiles.size > 0) parts.push(Array.from(profiles).sort().join('/'));
+  if (sizes.size > 0) parts.push(Array.from(sizes).sort().join('/') + 'mm');
+  const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+  const firstProductId = String(rows[0]?.product_id || '').trim();
+  return (firstProductId || '—') + suffix;
+}
+
 function renderMaterialRulesMeasuredProductSelects(rules = null) {
   const safe = rules || materialRulesState.measuredRules || {};
   const fieldMap = [
@@ -2190,6 +2231,7 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
   const existingId = String(row?.id || '').trim();
   const localId = existingId || `new-${++materialRulesLocalTemplateCounter}`;
   const lockedRepairTypeId = String(options?.repairTypeId || row?.repair_type_id || '').trim();
+  const groupId = String(options?.groupId || '').trim();
   const productId = String(row?.product_id || '').trim();
   const qtyPerUnit = Number.isFinite(Number(row?.qty_per_unit)) ? Number(row.qty_per_unit) : 0;
   const conditionProfile = String(row?.condition_profile || '').trim().toUpperCase();
@@ -2206,6 +2248,11 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
   tr.dataset.materialRulesTemplateRow = 'true';
   tr.dataset.templateId = localId;
   tr.dataset.repairTypeId = lockedRepairTypeId;
+  tr.dataset.displayGroupId = (row?.display_group_id != null ? String(row.display_group_id) : '') || '';
+  if (groupId) {
+    tr.classList.add('material-rules-grouped-member');
+    tr.dataset.materialRulesGroupId = groupId;
+  }
   tr.dataset.legacyFixedMm = isLegacyFixedMm ? 'true' : 'false';
   tr.dataset.legacyLengthMode = isLegacyFixedMm ? 'fixed_mm' : '';
   tr.dataset.legacyFixedLengthMm = isLegacyFixedMm ? String(legacyFixedLengthMm) : '';
@@ -2257,9 +2304,62 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
 
   const removeBtn = tr.querySelector('.material-rules-row-remove-btn');
   removeBtn?.addEventListener('click', () => {
+    const groupId = String(tr.dataset.materialRulesGroupId || '').trim();
+    if (groupId) {
+      // CSS.escape so selectors are safe if groupId (from repair_type_id) ever contains special chars
+      const escapedId = CSS.escape(groupId);
+      const otherMembers = Array.from(tbody.querySelectorAll(`tr.material-rules-grouped-member[data-material-rules-group-id="${escapedId}"]`)).filter((r) => r !== tr);
+      if (otherMembers.length === 0) {
+        const summaryRow = tbody.querySelector(`tr[data-material-rules-group-summary="true"][data-material-rules-group-id="${escapedId}"]`);
+        if (summaryRow) summaryRow.remove();
+      }
+    }
     tr.remove();
   });
 
+  tbody.appendChild(tr);
+}
+
+/** Append a grouped summary row (one logical part). No data-material-rules-template-row so collect ignores it. */
+function appendMaterialRulesTemplateGroupSummaryRow(tbody, summaryLabel, groupId, collapsed) {
+  if (!(tbody instanceof HTMLTableSectionElement)) return;
+  const tr = document.createElement('tr');
+  tr.className = 'material-rules-group-summary-row';
+  tr.dataset.materialRulesGroupSummary = 'true';
+  tr.dataset.materialRulesGroupId = groupId;
+  tr.dataset.materialRulesGroupCollapsed = collapsed ? 'true' : 'false';
+  const stateDesc = collapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
+  const ariaLabel = `${String(summaryLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`;
+  tr.setAttribute('aria-label', ariaLabel);
+  const expandLabel = collapsed ? 'Expand' : 'Collapse';
+  tr.innerHTML = `
+    <td colspan="7" class="material-rules-group-summary-cell">
+      <button type="button" class="material-rules-group-expand-btn" aria-label="${escapeHtml(expandLabel)}" aria-expanded="${collapsed ? 'false' : 'true'}">${collapsed ? 'Expand' : 'Collapse'}</button>
+      <span class="material-rules-group-summary-label">${escapeHtml(summaryLabel)}</span>
+    </td>
+  `;
+  const btn = tr.querySelector('.material-rules-group-expand-btn');
+  if (btn) {
+    const updateRowAriaLabel = (isCollapsed) => {
+      const stateDesc = isCollapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
+      tr.setAttribute('aria-label', `${String(summaryLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`);
+    };
+    btn.addEventListener('click', () => {
+      const collapsedNow = tr.dataset.materialRulesGroupCollapsed === 'true';
+      tr.dataset.materialRulesGroupCollapsed = collapsedNow ? 'false' : 'true';
+      btn.textContent = collapsedNow ? 'Collapse' : 'Expand';
+      btn.setAttribute('aria-label', collapsedNow ? 'Collapse' : 'Expand');
+      btn.setAttribute('aria-expanded', collapsedNow ? 'true' : 'false');
+      updateRowAriaLabel(!collapsedNow);
+      const container = tbody.closest('.material-rules-template-section');
+      if (container) {
+        const escapedId = CSS.escape(groupId); // safe selector if repair_type_id has special chars
+        container.querySelectorAll(`tr[data-material-rules-group-id="${escapedId}"].material-rules-grouped-member`).forEach((memberRow) => {
+          memberRow.classList.toggle('material-rules-grouped-member--hidden', !collapsedNow);
+        });
+      }
+    });
+  }
   tbody.appendChild(tr);
 }
 
@@ -2301,16 +2401,48 @@ function renderMaterialRulesTemplateSections() {
       </div>
     `;
     const tbody = sectionEl.querySelector('tbody[data-material-rules-template-section-body="true"]');
-    if (tbody instanceof HTMLTableSectionElement) {
-      section.rows.forEach((row) => appendMaterialRulesTemplateRow(row, {
-        tbody,
-        repairTypeId: section.repairTypeId,
-      }));
+    if (!(tbody instanceof HTMLTableSectionElement)) {
+      fragment.appendChild(sectionEl);
+      return;
     }
+    const templateGroups = getMaterialRulesTemplateGroupsByDisplayGroupId(section.rows);
+    const singleGroupInSection = templateGroups.length === 1;
+    templateGroups.forEach((group) => {
+      const groupId = group.rows[0]?.display_group_id != null
+        ? String(group.rows[0].display_group_id)
+        : (group.rows[0]?.id != null ? String(group.rows[0].id) : `g-${Math.random()}`);
+      if (group.rows.length === 1) {
+        appendMaterialRulesTemplateRow(group.rows[0], { tbody, repairTypeId: section.repairTypeId });
+      } else {
+        // When section has only one group, show repair type label (e.g. "Bracket Replacement") so admin sees one row per type
+        const summaryDisplayLabel = singleGroupInSection && section.label ? section.label : group.summaryLabel;
+        appendMaterialRulesTemplateGroupSummaryRow(tbody, summaryDisplayLabel, groupId, true);
+        group.rows.forEach((row) => {
+          appendMaterialRulesTemplateRow(row, {
+            tbody,
+            repairTypeId: section.repairTypeId,
+            groupId,
+          });
+        });
+      }
+    });
     fragment.appendChild(sectionEl);
   });
 
   groups.appendChild(fragment);
+
+  // Apply collapsed state: hide member rows for groups that are collapsed (summary row has data-material-rules-group-collapsed="true")
+  groups.querySelectorAll('.material-rules-template-section').forEach((section) => {
+    section.querySelectorAll('tr.material-rules-grouped-member').forEach((memberRow) => {
+      const groupId = memberRow.dataset.materialRulesGroupId;
+      if (!groupId) return;
+      // CSS.escape for selector safety if repair_type_id has special chars
+      const summaryRow = section.querySelector(`tr[data-material-rules-group-summary="true"][data-material-rules-group-id="${CSS.escape(groupId)}"]`);
+      if (summaryRow?.dataset.materialRulesGroupCollapsed === 'true') {
+        memberRow.classList.add('material-rules-grouped-member--hidden');
+      }
+    });
+  });
 }
 
 function renderMaterialRulesQuickQuoterTables() {
@@ -2447,6 +2579,9 @@ function collectMaterialRulesTemplatesPayload() {
       errors.push(`Template row ${rowNumber}: Legacy fixed_mm row has invalid fixed length.`);
     }
 
+    const displayGroupIdRaw = String(row.dataset.displayGroupId || '').trim();
+    const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(displayGroupIdRaw);
+
     if (
       repairTypeId
       && productId
@@ -2470,6 +2605,7 @@ function collectMaterialRulesTemplatesPayload() {
         sort_order: sortOrder,
       };
       if (isPersistedId) template.id = localId;
+      if (displayGroupIdRaw && isValidUuid) template.display_group_id = displayGroupIdRaw;
       payload.push(template);
     }
   });

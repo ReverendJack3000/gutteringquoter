@@ -4299,6 +4299,34 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   color: #92400e;
 }
 
+/* Phase 1 grouped display: one row per logical part (profile/size implied); expand to edit underlying rows */
+.material-rules-group-summary-row {
+  background: #f1f5f9;
+}
+.material-rules-group-summary-cell {
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+.material-rules-group-expand-btn {
+  margin-right: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+}
+.material-rules-group-expand-btn:hover {
+  background: #f8fafc;
+}
+.material-rules-group-summary-label {
+  font-weight: 500;
+  color: #374151;
+}
+.material-rules-grouped-member--hidden {
+  display: none;
+}
+
 .material-rules-table th,
 .material-rules-table td {
   border-bottom: 1px solid #f1f5f9;
@@ -4409,6 +4437,10 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 10px 12px;
   align-content: start;
+}
+
+#view-material-rules .material-rules-form-group--product-assignments-hidden {
+  display: none;
 }
 
 .material-rules-form-group-title {

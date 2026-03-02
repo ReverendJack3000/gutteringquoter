@@ -125,6 +125,19 @@ def _to_optional_updated_by(value: Any) -> Optional[str]:
     return text
 
 
+def _to_optional_uuid(value: Any) -> Optional[str]:
+    """Accept UUID string or null; return normalized str or None for display_group_id."""
+    if value is None:
+        return None
+    text = _to_clean_str(value)
+    if not text:
+        return None
+    try:
+        return str(uuid_lib.UUID(text))
+    except (ValueError, TypeError):
+        return None
+
+
 def _is_disallowed_material_rules_product_id(product_id: str) -> bool:
     return _to_clean_str(product_id).upper() in MATERIAL_RULES_DISALLOWED_PRODUCT_IDS_UPPER
 
@@ -195,6 +208,7 @@ def _serialize_quick_quoter_template(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "updated_by": _to_optional_updated_by(row.get("updated_by")),
+        "display_group_id": _to_optional_uuid(row.get("display_group_id")),
     }
 
 
@@ -215,7 +229,7 @@ def _list_quick_quoter_templates(supabase: Any) -> list[dict[str, Any]]:
         .select(
             "id, repair_type_id, product_id, qty_per_unit, condition_profile, "
             "condition_size_mm, length_mode, fixed_length_mm, active, sort_order, "
-            "created_at, updated_at, updated_by"
+            "created_at, updated_at, updated_by, display_group_id"
         )
         .order("repair_type_id")
         .order("sort_order")
@@ -416,6 +430,20 @@ def _normalize_quick_quoter_templates(payload: Any) -> list[dict[str, Any]]:
         if sort_order is None:
             errors.append(_validation_error("invalid_sort_order", "sort_order must be an integer.", "templates.sort_order", index))
 
+        display_group_id_raw = raw.get("display_group_id")
+        display_group_id = _to_optional_uuid(display_group_id_raw)
+        if display_group_id is None and (display_group_id_raw is not None and _to_clean_str(display_group_id_raw)):
+            errors.append(
+                _validation_error(
+                    "invalid_display_group_id",
+                    "display_group_id must be a valid UUID or empty.",
+                    "templates.display_group_id",
+                    index,
+                )
+            )
+        if display_group_id is None and not _to_clean_str(display_group_id_raw or ""):
+            display_group_id = template_id
+
         if (
             template_id
             and template_id not in seen_ids
@@ -430,6 +458,7 @@ def _normalize_quick_quoter_templates(payload: Any) -> list[dict[str, Any]]:
             and sort_order is not None
             and (length_mode != "fixed_mm" or (fixed_length_mm is not None and fixed_length_mm > 0))
             and (length_mode == "fixed_mm" or fixed_length_mm_raw in (None, ""))
+            and display_group_id is not None
         ):
             seen_ids.add(template_id)
             out.append(
@@ -444,6 +473,7 @@ def _normalize_quick_quoter_templates(payload: Any) -> list[dict[str, Any]]:
                     "fixed_length_mm": fixed_length_mm,
                     "active": active,
                     "sort_order": sort_order,
+                    "display_group_id": display_group_id,
                 }
             )
 
