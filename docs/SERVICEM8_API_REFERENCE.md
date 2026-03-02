@@ -32,7 +32,23 @@ Short reference for “what we can pull” from the ServiceM8 API for Section 59
 | `job_description` | Description text; we set when creating a new job. |
 | `billing_address`, `lat`, `lng`, `geo_is_valid`, `category_uuid`, `badges` | Optional fields we copy when creating a new job. |
 
-**For bonus logic:** `status`, `total_invoice_amount` (and whether it's ex/incl GST). **Note:** ServiceM8 does **not** expose a dedicated "estimated labour" or "quoted hours" field on the job; labour is treated as a material in ServiceM8 (same as our REP-LAB line item). We source quoted labour from our own quote persistence (Section 59.3 Option A). See TROUBLESHOOTING.md § "ServiceM8: no estimated labour field".
+**Job response fields (retrieve job):** The following fields are returned when retrieving a job (GET job.json with filter). Types/format may vary (string vs number); normalise in code.
+
+| Field | Use for bonus / commission |
+|-------|----------------------------|
+| `uuid` | Job UUID; stable identifier. |
+| `generated_job_id` | Job number (e.g. "Job #123"). |
+| `status` | e.g. Quote, In Progress, Completed. |
+| `total_invoice_amount` | Invoiced amount (string or number); used for `job_performance.invoiced_revenue_exc_gst` (ex-GST). |
+| **`payment_date`** | **When the job was paid.** Use for period assignment (Section 60.7): jobs paid after 11:59 PM last Sunday of the fortnight roll to the next bonus period. Format e.g. `"2026-02-01 12:00:00"`. |
+| **`created_by_staff_uuid`** | **Staff UUID of the person who created the job in ServiceM8.** Map via staff → email → auth.users.id (technician_id) for seller attribution. Can cross-check or fallback when our app did not create the quote (e.g. job created outside the app). |
+| `completion_date` | When the job was marked complete. |
+| `completion_actioned_by_uuid` | Staff UUID who actioned completion. |
+| `payment_processed_stamp`, `payment_received_stamp` | Payment timestamps; alternative or supplement to `payment_date` for period cut-off. |
+| `quote_date`, `quote_sent_stamp`, `work_order_date` | Quote/work order timestamps. |
+| `job_address`, `job_description`, `company_uuid`, `billing_address`, `lat`, `lng`, `geo_*`, `category_uuid`, `badges`, `date`, `edit_date`, `active`, etc. | Other job metadata; see full response for create/lookup. |
+
+**For bonus logic:** `status`, `total_invoice_amount` (and whether it's ex/incl GST). **payment_date** is available on the job for 60.7 period assignment. **created_by_staff_uuid** is available for seller attribution (map to technician_id; our app also stores `quotes.created_by` at quote time per 59.25). **Note:** ServiceM8 does **not** expose a dedicated "estimated labour" or "quoted hours" field on the job; labour is treated as a material in ServiceM8 (same as our REP-LAB line item). We source quoted labour from our own quote persistence (Section 59.3 Option A). See TROUBLESHOOTING.md § "ServiceM8: no estimated labour field".
 
 ---
 

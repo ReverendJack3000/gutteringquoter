@@ -913,6 +913,7 @@ class CreateNewJobRequest(BaseModel):
     quote_materials: Optional[list[QuoteMaterialLine]] = Field(None, description="Material lines (id, qty) for quote items; exclude labour (REP-LAB)")
     image_base64: Optional[str] = Field(None, description="PNG blueprint image as base64 (no data URL prefix); attached to both original and new job")
     job_notes_above: Optional[str] = Field(None, description="Optional text prepended above job note/description when posting to ServiceM8 (49.35)")
+    co_seller_user_id: Optional[str] = Field(None, description="Section 59.28: optional auth.users.id of co-seller from doing-it-now modal; persisted for job_personnel attribution")
 
 
 class CreateBonusPeriodRequest(BaseModel):
@@ -2442,6 +2443,7 @@ def api_servicem8_add_to_job(
             quote_total=body.quote_total,
             material_cost=body.material_cost,
             items=items,
+            created_by=str(user_id),
         )
     except Exception as e:
         logger.exception("Failed to persist quote for Add to Job: %s", e)
@@ -2679,6 +2681,8 @@ def api_servicem8_create_new_job(
             quote_total=body.quote_total,
             material_cost=body.material_cost,
             items=items,
+            created_by=str(user_id),
+            co_seller_user_id=body.co_seller_user_id,
         )
     except Exception as e:
         logger.exception("Failed to persist quote for Create New Job: %s", e)

@@ -162,6 +162,32 @@ The following are **locked decisions**. Full rationale and implementation notes:
 
 ---
 
+### Commission attribution: store job creator and full tracking (GP commission share)
+
+*Context: To attribute completed jobs to the person who sold/executed them for Gross Profit commission share, we must store the job creator at quote time and ensure all data needed for commission (job uuid, job number, materials, total price, time) is captured and traceable when jobs are completed. Currently public.quotes has no created_by; job_personnel seller/executor is set from ServiceM8 JobActivity + admin only. Do not implement until the investigation and plan are approved.*
+
+- [x] **59.25** **Store job creator (created_by) at quote time.** Add `created_by` (user_id, FK → auth.users.id, nullable for backfill) to `public.quotes`. When Add to Job or Create New Job runs, set `created_by` to the authenticated user before calling `insert_quote_for_job`. Enables reliable attribution of the “seller” (person who quoted/created the job from the app) when the job is later completed and synced into job_performance/job_personnel. Migration + backend only (quotes insert/update); document in BACKEND_DATABASE.md. Railway-safe.
+
+- [x] **59.26** **Use quote created_by when syncing job_personnel (seller pre-population).** When `job_performance_sync` creates or updates job_performance and creates job_personnel from JobActivity, if the linked quote has `created_by` (user_id), ensure a job_personnel row exists for that user with `is_seller = true` (insert if missing; do not overwrite existing admin-edited is_seller/is_executor). If co-seller is persisted (59.28), add a second job_personnel row for the co-seller with `is_seller = true`. Admin may still override. Backend (job_performance_sync) only; document behaviour.
+
+- [ ] **59.27** **Audit: Data required for GP commission attribution (investigation).** Document exactly what the commission plan (Sections 59, 60) requires to attribute completed jobs to who sold/executed: job uuid, job number, every material used, total price, time (quoted and actual), and who sold/executed. Map each to: (a) what we store at quote time (Add to Job / Create New Job) in public.quotes and (b) what we get at completion from ServiceM8 (Jobs, Job Materials, Job Activities, Job Payments per docs/SERVICEM8_API_REFERENCE.md) and what we write to job_performance/job_personnel. Identify gaps (e.g. created_by, co-seller, payment_date for 60.7 period assignment). No code changes; produce a short audit doc or subsection in BACKEND_DATABASE.md; add or refine implementation tasks (e.g. 59.25, 59.26, 59.28, payment_date sync) based on findings.
+
+- [x] **59.28** **Persist co-seller with quote (Create New Job).** Section 61.3 adds a co-seller dropdown in the “Are you doing it now?” pop-up; the selection (coSellerUserId) is currently stored only in the overlay and not sent to the backend or persisted. To attribute seller credit to the co-seller when the job is completed: extend Create New Job request/backend to accept optional co_seller_user_id and persist it (e.g. new column `public.quotes.co_seller_user_id` or equivalent). Sync (59.26) can then create a second job_personnel row with is_seller = true for the co-seller. Confirm with product whether commission plan requires this before implementing. **Backend:** CreateNewJobRequest.co_seller_user_id (optional); insert_quote_for_job(..., co_seller_user_id=). **Frontend:** In `handleCreateNew` (app.js), after building the create-new-job request body and before the fetch: if `coSellerUserId != null && String(coSellerUserId).trim()` then set `body.co_seller_user_id = String(coSellerUserId).trim()`. Co-seller value comes from `showDoingItNowModal()` result (technician only); field omitted for non-technicians or when no co-seller selected.
+
+- [x] **59.29** **Sync and use payment_date for period assignment (60.7).** ServiceM8 job response includes `payment_date` (e.g. `"2026-02-01 12:00:00"`). For 60.7 (cut-off 11:59 PM last Sunday of fortnight; jobs paid after that roll to next period): add `payment_date` (timestamptz, nullable) to `job_performance` and populate it in job_performance_sync from the job payload; use payment_date (in configured timezone) when assigning the job to a bonus_period. If the job object returns payment_date in a different format or timezone, document and normalise. See docs/SERVICEM8_API_REFERENCE.md § Jobs (payment_date).
+
+---
+
+### Bonus dashboard view analytics (super-admin-only report)
+
+- [ ] **59.30** **Bonus dashboard view analytics:** Track how many times and how long each person spends on the bonus dashboard(s) (Bonus Admin and Technician bonus views); only super admin can view the report. Plan: docs/plans/2026-03-bonus-dashboard-view-analytics-plan.md.
+  - [ ] **59.30.1** Backend: add `require_super_admin` in auth.py; new table `bonus_dashboard_view_events` (user_id, dashboard_type, started_at, duration_seconds); migration + BACKEND_DATABASE.md.
+  - [ ] **59.30.2** Backend: POST /api/bonus/analytics/view (authenticated), GET /api/bonus/analytics/summary (super-admin only); implement and document in README.
+  - [ ] **59.30.3** Frontend: record view start on enter to view-bonus-admin / view-technician-bonus; on leave (switchView + visibilitychange/pagehide) POST one event per session; use sendBeacon on pagehide.
+  - [ ] **59.30.4** Frontend: super-admin-only “Bonus dashboard analytics” entry and view; fetch summary and display table (user, dashboard type, view count, total duration); hide when not isSuperAdmin.
+
+---
+
 ### Integration and regression
 
 - [x] **59.19** Quote flow: implement saving to public.quotes when Add to Job (or Create New Job)—include labour_hours (and items/totals as needed)—and set both servicem8_job_id and servicem8_job_uuid (add nullable column to quotes if needed). **Active-quote rule:** add `is_final_quote` and/or persist job status at quote time so we can select “last quote before Scheduled/In Progress” when matching quote_id to job_performance (see Decisions). Ensure existing Add to Job / Create New Job flows remain working and Railway-safe.

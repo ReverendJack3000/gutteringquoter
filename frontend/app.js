@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260303-cache-bump';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260304-cache-bump';
 
-const STATIC_ASSET_VERSION = '20260303-cache-bump';
+const STATIC_ASSET_VERSION = '20260304-cache-bump';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -4068,7 +4068,6 @@ function initJobConfirmationOverlay() {
         }
         throw e;
       }
-      // Stored for future job_personnel/API; create-new-job API unchanged for 61.3
       if (overlay) {
         overlay.dataset.doingItNow = String(doingItNow);
         overlay.dataset.coSellerUserId = coSellerUserId || '';
@@ -4101,6 +4100,10 @@ function initJobConfirmationOverlay() {
       image_base64: imageBase64,
     };
     if (payload.job_notes_above != null) body.job_notes_above = payload.job_notes_above;
+    // Section 59.28: persist co-seller for job_personnel attribution when technician selected one in doing-it-now modal
+    if (coSellerUserId != null && String(coSellerUserId).trim()) {
+      body.co_seller_user_id = String(coSellerUserId).trim();
+    }
     try {
       const resp = await fetch('/api/servicem8/create-new-job', {
         method: 'POST',

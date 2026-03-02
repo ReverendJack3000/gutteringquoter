@@ -3,11 +3,12 @@ Job performance sync (Section 59.6/59.7/59.8): scheduled cron sync from ServiceM
 Lists jobs from ServiceM8 API, resolves active quote per job, upserts into public.job_performance
 with merge-before-upsert to preserve admin-edited fields. 59.7: populates invoiced_revenue_exc_gst
 and materials_cost (our DB pricing with ServiceM8 fallback). 59.8: creates job_personnel baseline
-from JobActivity (filter zero-duration stubs); does not overwrite existing rows.
+from JobActivity (filter zero-duration stubs); does not overwrite existing rows. 59.29: populates
+payment_date from job for 60.7 period assignment.
 Token expiry: get_tokens() refreshes when < 5 min; on 401 we retry once with fresh tokens (59.20).
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -27,6 +28,25 @@ logger = logging.getLogger(__name__)
 
 # ServiceM8 total_invoice_amount is inc GST; we store ex-GST in job_performance.
 GST_DIVISOR = 1.15
+
+
+def _parse_payment_date(job: dict[str, Any]) -> Optional[str]:
+    """
+    Parse payment_date from ServiceM8 job (59.29). Returns ISO string for timestamptz or None.
+    Naive datetimes (no timezone) are treated as UTC for consistent storage.
+    """
+    raw = job.get("payment_date")
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        s = str(raw).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    except (ValueError, TypeError):
+        logger.debug("Could not parse payment_date from job: %r", raw)
+        return None
 
 
 def _compute_materials_cost_from_job_materials(
@@ -254,6 +274,9 @@ def run_sync() -> dict[str, Any]:
                 row["materials_cost"] = _compute_materials_cost_from_job_materials(supabase, job_materials)
             else:
                 row["materials_cost"] = 0
+            # 59.29: payment_date for 60.7 period assignment (cut-off 11:59 PM last Sunday)
+            payment_date_iso = _parse_payment_date(job)
+            row["payment_date"] = payment_date_iso
             # Remove read-only / auto columns so Supabase doesn't complain
             row.pop("created_at", None)
             upsert_resp = supabase.table("job_performance").upsert(
@@ -292,6 +315,32 @@ def run_sync() -> dict[str, Any]:
                             }
                         ).execute()
                         existing_tech_ids.add(technician_id)
+                    # 59.26: seller pre-population from quote created_by and co_seller_user_id
+                    for user_id in (quote_row.get("created_by"), quote_row.get("co_seller_user_id")):
+                        if not user_id:
+                            continue
+                        tech_id_str = str(user_id).strip()
+                        if not tech_id_str or tech_id_str in existing_tech_ids:
+                            continue
+                        try:
+                            supabase.table("job_personnel").insert(
+                                {
+                                    "job_performance_id": job_performance_id,
+                                    "technician_id": tech_id_str,
+                                    "is_seller": True,
+                                    "is_executor": False,
+                                    "onsite_minutes": 0,
+                                    "travel_shopping_minutes": 0,
+                                }
+                            ).execute()
+                            existing_tech_ids.add(tech_id_str)
+                        except Exception as seller_e:
+                            logger.warning(
+                                "job_personnel seller insert failed for technician_id=%s, job_performance_id=%s: %s",
+                                tech_id_str,
+                                job_performance_id,
+                                seller_e,
+                            )
                 except Exception as e:
                     logger.warning(
                         "job_personnel baseline failed for job_performance_id=%s: %s",

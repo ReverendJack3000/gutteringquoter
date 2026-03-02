@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css?v=20260303-cache-bump" />
+  <link rel="stylesheet" href="/styles.css?v=20260304-cache-bump" />
 </head>
 <body>
   <a class="skip-link" href="#workspaceMain">Skip to canvas workspace</a>
@@ -744,34 +744,40 @@
             </div>
             <p class="material-rules-section-copy">Edit repair types and templates. Save applies changes live.</p>
 
-            <div class="material-rules-subsection">
-              <div class="material-rules-subsection-head">
-                <h3>Repair Types</h3>
+            <div class="material-rules-qq-shell">
+              <div class="material-rules-qq-card material-rules-qq-card--repair-types">
+                <div class="material-rules-subsection">
+                  <div class="material-rules-subsection-head">
+                    <h3>Repair Types</h3>
+                  </div>
+                  <p class="material-rules-subsection-copy">Controls which repair options appear in Quick Quoter and which selections require profile/size. Repair Type IDs are locked system keys and cannot be added, removed, or renamed here.</p>
+                  <div class="material-rules-table-wrap">
+                    <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Reorder</th>
+                          <th scope="col">Label</th>
+                          <th scope="col">Requires profile (SC/CL)</th>
+                          <th scope="col">Requires size (65/80mm)</th>
+                          <th scope="col">Active</th>
+                          <th scope="col">Default time (min)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="materialRulesRepairTypesBody"></tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <p class="material-rules-subsection-copy">Repair Type IDs are locked system keys and cannot be added, removed, or renamed here.</p>
-              <div class="material-rules-table-wrap">
-                <table class="material-rules-table material-rules-table--repair-types" aria-label="Quick Quoter repair types table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Reorder</th>
-                      <th scope="col">Label</th>
-                      <th scope="col">Requires profile (SC/CL)</th>
-                      <th scope="col">Requires size (65/80mm)</th>
-                      <th scope="col">Active</th>
-                      <th scope="col">Default time (min)</th>
-                    </tr>
-                  </thead>
-                  <tbody id="materialRulesRepairTypesBody"></tbody>
-                </table>
-              </div>
-            </div>
 
-            <div class="material-rules-subsection">
-              <div class="material-rules-subsection-head">
-                <h3>Part Templates</h3>
+              <div class="material-rules-qq-card material-rules-qq-card--part-templates">
+                <div class="material-rules-subsection">
+                  <div class="material-rules-subsection-head">
+                    <h3>Part Templates</h3>
+                  </div>
+                  <p class="material-rules-subsection-copy">Maps each repair type to materials added on Quick Quoter confirm. Summary rows represent logical parts; expand a row to edit profile/size-specific variants.</p>
+                  <div id="materialRulesTemplateGroups" class="material-rules-template-groups" aria-label="Quick Quoter templates sections"></div>
+                </div>
               </div>
-              <p class="material-rules-subsection-copy">Parts added per repair type when the user confirms Quick Quoter; order and active flag control what appears.</p>
-              <div id="materialRulesTemplateGroups" class="material-rules-template-groups" aria-label="Quick Quoter templates sections"></div>
             </div>
           </section>
         </main>
@@ -1380,7 +1386,7 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=20260303-cache-bump"></script>
-  <script src="/pwa.js?v=20260303-cache-bump"></script>
+  <script type="module" src="/app.js?v=20260304-cache-bump"></script>
+  <script src="/pwa.js?v=20260304-cache-bump"></script>
 </body>
 </html>

@@ -6,6 +6,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 **How to update:** When a task is done, open the **section file** for that task (see tables below), change `[ ]` to `[x]` on the task line. If the uncompleted table below needs a row removed (section fully complete), update this index.
 
+**Local dev – cache bump:** We bump the static asset version (e.g. `?v=` in `index.html`, `STATIC_ASSET_VERSION` in `app.js`, `ASSET_VERSION` in `service-worker.js`) after frontend changes and push the bump so that local always shows the current state of the project when we make changes. See TROUBLESHOOTING.md “Local changes not visible at http://127.0.0.1:8000” and `docs/plans/2026-03-local-changes-not-visible-investigation.md` if changes don’t appear in the browser.
+
 ---
 
 ## Where to look (RAG-style)
@@ -75,6 +77,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 48 | 48.1–48.24 | Railway setup, build config, env vars, deploy, post-deploy |
 | 50 | 50.9, 50.18 | Quote modal + REP-LAB: smoke-test and Railway deploy check (50.19, 50.20 done). |
 | 53 | 53.1, 53.2 | Login screen custom image; ServiceM8 with login (if needed) |
+| **59** | **59.27** | Commission attribution audit: document data required for GP commission (quote vs completion); 59.25, 59.26, 59.28, 59.29 implemented. See docs/tasks/section-59.md. |
+| **59** | **59.30** | Bonus dashboard view analytics: track view count + duration per user for Bonus Admin and Technician bonus; only super admin can view report. Plan: docs/plans/2026-03-bonus-dashboard-view-analytics-plan.md. |
 | 54 | 54.52–54.53, 54.57, 54.60 | (Mobile-only) Diagram toolbar refinements + always thin edge-only (54.56, 54.58, 54.59 done). |
 | 54 | 54.126.5 | Desktop diagram toolbar header-occlusion fix follow-up: manual QA + Railway safety sign-off pending (load/expand no clipping under header; desktop primary, mobile safe-top guard unchanged). |
 | 54 | 54.109.4 | Mobile upload UX follow-up: manual mobile QA + Railway safety sign-off pending (mobile bypasses crop modal across upload/drop/paste/PDF paths; Quick Quoter entry hides when blueprint exists). |
@@ -91,13 +95,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 57 | 57.6 | Mobile canvas fit/pan refinement: manual QA + deploy-safety sign-off pending (57.1–57.5 complete). |
 | 62 | 62.18.3 | Quick Quoter visibility parity follow-up: manual desktop/mobile QA + Railway deployment safety sign-off pending (elements-only hide/show parity implemented and E2E coverage added). |
 | 63 | 63.16 | Material Rules: manual desktop QA + Railway production sign-off (63.9 baseline locked; migration applied via 63.16.0). |
-| 63 | 63.18 | Material Rules dashboard UX improvements (desktop-only): clarity, labels, grouping, feedback; plan in docs/plans/MATERIAL_RULES_DASHBOARD_UX_PLAN.md. |
+| 63 | 63.18 | Material Rules dashboard UX improvements (desktop-only): clarity, labels, grouping, feedback, split-card separation (Repair Types vs Part Templates), grouped summary-row readability refinements, template-row reorder regression hardening (63.18.8), and repair-type card collapse + header estimated time visibility (63.18.9) complete; manual desktop QA + Railway safety sign-off pending (63.18.4). |
 | 63 | 63.19 | Profile/Size as material rule: single logical part display in Part Templates (desktop); optional profile/size in quote modal; plan in docs/plans/PLAN_QUICK_QUOTER_PROFILE_AS_MATERIAL_RULE.md. |
 | 63 | 63.19.3 | Desktop QA + Railway safety sign-off for 63.19 (Part Templates grouped display; 63.19.2.1 done). No backend/schema changes; desktop-only. |
-| 63 | 63.19.7 | Part Templates summary row titles: product name (minus profile/mm) instead of product ID; plan: docs/plans/PLAN_MATERIAL_RULES_SUMMARY_ROW_PRODUCT_NAME.md. |
-| 63 | 63.19.8 | Part Templates profile/size dropdown colours to match parts thumbnails (Storm Cloud/Classic/65mm/80mm); plan: docs/plans/PLAN_MATERIAL_RULES_PROFILE_SIZE_DROPDOWN_COLORS.md. |
-| 63 | 63.19.9 | Part Templates section titles: label only (remove repair_type_id from heading); plan: docs/plans/PLAN_MATERIAL_RULES_SECTION_TITLE_LABEL_ONLY.md. |
-| 63 | 63.20 | Default time estimates for Quick Quoter rules (Material Rules); plan: docs/plans/PLAN_QUICK_QUOTER_DEFAULT_TIME_ESTIMATES.md. |
 ---
 
 ## Locked decisions

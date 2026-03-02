@@ -43,10 +43,15 @@ def insert_quote_for_job(
     quote_total: float,
     material_cost: float,
     items: list[dict[str, Any]],
+    *,
+    created_by: Optional[str] = None,
+    co_seller_user_id: Optional[str] = None,
 ) -> str:
     """
     Insert one row into public.quotes for a completed Add to Job or Create New Job.
-    Table has no user_id; we store job identifiers, labour_hours, total, materials_subtotal, items.
+    Stores job identifiers, labour_hours, total, materials_subtotal, items.
+    Section 59.25: created_by (auth.users.id) for seller attribution when job is completed.
+    Section 59.28: co_seller_user_id optional for Create New Job co-seller.
     Returns the new quote id (uuid string).
     """
     payload = {
@@ -58,6 +63,10 @@ def insert_quote_for_job(
         "items": _material_lines_to_jsonb(items),
         "is_final_quote": False,
     }
+    if created_by is not None:
+        payload["created_by"] = created_by
+    if co_seller_user_id is not None:
+        payload["co_seller_user_id"] = co_seller_user_id
     resp = supabase.table("quotes").insert(payload).execute()
     if not resp.data or len(resp.data) == 0:
         raise RuntimeError("Supabase quotes insert returned no data")
@@ -71,7 +80,8 @@ def insert_quote_for_job(
 def get_active_quote_for_job(supabase: Any, servicem8_job_id: str) -> Optional[dict[str, Any]]:
     """
     Return the active quote for a ServiceM8 job: latest by is_final_quote (true first) then updated_at.
-    Used by job_performance sync (59.6) and future webhook. Returns row with id, labour_hours or None.
+    Used by job_performance sync (59.6) and future webhook. Returns row with id, labour_hours,
+    and optionally created_by, co_seller_user_id (59.25/59.28 for seller attribution).
     """
     if not servicem8_job_id or not str(servicem8_job_id).strip():
         return None
@@ -79,7 +89,7 @@ def get_active_quote_for_job(supabase: Any, servicem8_job_id: str) -> Optional[d
     try:
         resp = (
             supabase.table("quotes")
-            .select("id, labour_hours")
+            .select("id, labour_hours, created_by, co_seller_user_id")
             .eq("servicem8_job_id", job_id)
             .order("is_final_quote", desc=True)
             .order("updated_at", desc=True)

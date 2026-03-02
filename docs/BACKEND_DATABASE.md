@@ -158,6 +158,8 @@ Quote estimates; persisted when Add to Job or Create New Job succeeds (Section 5
 | `created_at` | timestamptz | default now() |
 | `updated_at` | timestamptz | default now() |
 | `is_final_quote` | boolean | NOT NULL default false; set when job → Scheduled/In Progress (e.g. by future webhook or job-status sync). |
+| `created_by` | uuid | Nullable, FK → auth.users(id). Section 59.25: user who created the quote from the app (Add to Job / Create New Job); used for seller attribution when job is completed. Migration: `add_quotes_commission_attribution_columns`. |
+| `co_seller_user_id` | uuid | Nullable, FK → auth.users(id). Section 59.28: optional co-seller when Create New Job included coSellerUserId; sync creates second job_personnel with is_seller=true. Migration: `add_quotes_commission_attribution_columns`. |
 
 **items (JSONB) shape (Section 59.19.1):** When persisting a quote (Add to Job / Create New Job), `items` is set to an array of **material** lines only (exclude labour/REP-LAB). Each element: at least `{ "id": "<product_id>", "qty": <number> }`; optionally `name`, `item_number`, `servicem8_material_uuid`. Used for Missed Materials comparison with ServiceM8 job materials. See “Audit: Material quoting and public.quotes.items”.
 
@@ -185,6 +187,7 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 - **`public.job_performance.status`** — `varchar` with `CHECK (status IN ('draft','verified','processed'))`, default `'draft'`. Sync-created rows are `draft`; after admin review → `verified`; when period closed → `processed`. Only verified/processed rows in period pot. Migration: `add_job_performance_status`.
 - **`public.quotes.is_final_quote`** — `boolean` NOT NULL default `false`. When a job moves to Scheduled/In Progress (e.g. via webhook or sync), backend sets `is_final_quote = true` on the most recently updated quote for that `servicem8_job_id`. That quote is used for `quoted_labor_minutes`. Migration: `add_quotes_is_final_quote`.
 - **`public.company_settings`** — Single-row table for app config (no hardcoded bonus rate). Columns: `id` (integer PK, check id = 1), `bonus_labour_rate` (numeric NOT NULL default 35.00), `updated_at` (timestamptz). Backend reads at calculation time; Admin UI can update. Migration: `add_company_settings_bonus_rate`. **Section 60.1:** Code default is 33 (ex-GST); stored value is ex-GST $ per man-hour; GST applies for display/billing elsewhere.
+- **`public.job_performance.payment_date`** — `timestamptz` nullable. Section 59.29/60.7: when the job was paid (from ServiceM8 job.payment_date); used to assign job to bonus_period by payment date in configured timezone (cut-off 11:59 PM last Sunday of fortnight). Migration: `add_job_performance_payment_date`.
 
 **Job GP calculation (59.9, 60.2):** Base Job GP = `invoiced_revenue_exc_gst` − `materials_cost` − (`standard_parts_runs` × 10). Unscheduled parts run deduction is $10 (Travel Fee) per run. Not subtracted here: `missed_materials_cost`, `callback_cost`, `seller_fault_parts_runs` (period-level or post-split). Computed on read (e.g. `GET /api/bonus/job-performance/{id}` returns row + `job_gp`). Bonus labour rate is read from `public.company_settings` (id=1) or env `BONUS_LABOUR_RATE` (default **33** ex-GST per Section 60.1); not used in this formula but used by period pot / splits (59.10+) where labour cost is applied.
 
@@ -329,6 +332,7 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 | **status** | Admin / our app | draft (sync default) → verified (admin) → processed (when period closed). Only verified/processed in period pot. |
 | **standard_parts_runs**, **is_callback**, **callback_reason**, **callback_cost**, **seller_fault_parts_runs**, **missed_materials_cost** | Admin / our app | Admin enters or corrects in Bonus Admin (Edit job). Sync does not set these. |
 | **is_upsell** (Section 60.6) | Admin / our app (or sync when ServiceM8 badge available) | True = job is a true upsell and counts toward period pot. Admin toggle in Edit job. When syncing from ServiceM8, if the job has the "Site Sale" badge (name "Site Sale", uuid d14c817e-4ba4-43ee-b51c-219867379a2b), set is_upsell true. Default false. |
+| **payment_date** (Section 59.29, 60.7) | API (sync) | From ServiceM8 job.payment_date; used to assign job to bonus_period (cut-off 11:59 PM last Sunday). Naive datetimes parsed as UTC. |
 
 ### job_personnel
 
@@ -337,7 +341,7 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 | **job_performance_id** | Our app | FK to the job; set when creating personnel rows (sync or admin). |
 | **technician_id** | Our app (derived) | Resolved from ServiceM8 staff: match staff email to auth.users.email → auth.users.id. See **"Staff → technician_id mapping"** above. If no match, NULL until admin assigns. |
 | **onsite_minutes**, **travel_shopping_minutes** | Admin / our app | Admin verifies/splits from raw job activity data in Bonus Admin (Edit personnel). Sync may create rows with 0/0; admin fills. |
-| **is_seller**, **is_executor** | Admin / our app | Set by admin in Bonus Admin (Edit personnel). Not derived from API. |
+| **is_seller**, **is_executor** | Admin / our app (sync pre-populates sellers) | Sync (59.26) inserts job_personnel with is_seller=true for quote.created_by and quote.co_seller_user_id when present (insert-only; does not overwrite existing). Admin can override in Bonus Admin (Edit personnel). |
 | **is_spotter** (Section 60.4) | Admin / our app | Set by admin in Bonus Admin (Edit personnel). When true, that technician receives 20% of job GP for that job; remaining 80% reverts to CSG (house). |
 
 ### Staff ↔ technician_id (summary)
@@ -345,6 +349,33 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 - **ServiceM8:** Staff has `uuid`, `email`, `first`, `last` (GET staff.json). No mapping table in first implementation.
 - **Resolution:** Match staff `email` (trimmed, case-insensitive) to `auth.users.email`; use that user's `id` as `job_personnel.technician_id`.
 - **No match:** technician_id NULL; admin can assign later or add app user with same email.
+
+---
+
+## Commission attribution backend (59.25, 59.26, 59.28, 59.29)
+
+**Purpose:** Store who created the quote from the app and use that when jobs are completed so GP commission can be attributed to the seller(s). Sync also stores payment_date for period assignment.
+
+### At quote time (Add to Job / Create New Job)
+
+| Touchpoint | File | Behaviour |
+|------------|------|-----------|
+| **insert_quote_for_job** | `backend/app/quotes.py` | Accepts optional `created_by` (auth.users.id) and `co_seller_user_id` (auth.users.id). Both written to `public.quotes` when provided. |
+| **Add to Job** | `backend/main.py` | Calls `insert_quote_for_job(..., created_by=str(user_id))`. |
+| **Create New Job** | `backend/main.py` | Calls `insert_quote_for_job(..., created_by=str(user_id), co_seller_user_id=body.co_seller_user_id)`. `CreateNewJobRequest` has optional `co_seller_user_id`. **Frontend (app.js):** In `handleCreateNew`, after building the request body and before the fetch: if `coSellerUserId != null && String(coSellerUserId).trim()` then `body.co_seller_user_id = String(coSellerUserId).trim()`. Value comes from `showDoingItNowModal()` (technician only); omitted when no co-seller selected. |
+
+### At sync time (job_performance_sync)
+
+| Touchpoint | File | Behaviour |
+|------------|------|-----------|
+| **get_active_quote_for_job** | `backend/app/quotes.py` | Select now includes `created_by`, `co_seller_user_id` so sync can read them. |
+| **payment_date** | `backend/app/job_performance_sync.py` | `_parse_payment_date(job)` parses ServiceM8 job.payment_date; naive datetimes treated as UTC. Row `payment_date` set before upsert. |
+| **Seller pre-population** | `backend/app/job_performance_sync.py` | After JobActivity baseline, for each of `quote_row.created_by` and `quote_row.co_seller_user_id` (if present and not already in job_personnel), insert a job_personnel row with `is_seller=true`, `is_executor=false`, `onsite_minutes=0`, `travel_shopping_minutes=0`. Insert-only; does not overwrite existing rows. Admin can still override in Bonus Admin. |
+
+### Schema (already applied via Supabase MCP)
+
+- `public.quotes.created_by`, `public.quotes.co_seller_user_id` (migration `add_quotes_commission_attribution_columns`).
+- `public.job_performance.payment_date` (migration `add_job_performance_payment_date`).
 
 ---
 
@@ -444,6 +475,8 @@ Current migrations in **Jacks Quote App** (see Supabase dashboard or `list_migra
 5. **add_quotes_servicem8_job_uuid** (Section 59.19) – Adds nullable `servicem8_job_uuid` (uuid) to `public.quotes` for API lookups and quote–job link.
 6. **add_job_personnel_unique_job_performance_technician** (Section 59.8.4) – Adds UNIQUE(job_performance_id, technician_id) on `public.job_personnel` to prevent duplicates and support insert-only baseline from sync.
 7. **material_rules_migration** (Section 63.11+) – Creates `public.measured_material_rules` singleton table, seeds defaults matching existing accessory logic, and adds `updated_by` to `quick_quoter_repair_types` + `quick_quoter_part_templates`.
+8. **add_quotes_commission_attribution_columns** (Section 59.25, 59.28) – Adds to `public.quotes`: `created_by` (uuid, nullable, FK auth.users) for job creator at quote time; `co_seller_user_id` (uuid, nullable, FK auth.users) for optional co-seller on Create New Job. Applied 2026-03-02 via Supabase MCP.
+9. **add_job_performance_payment_date** (Section 59.29, 60.7) – Adds `payment_date` (timestamptz, nullable) to `public.job_performance`; populated from ServiceM8 job.payment_date in sync for period assignment (cut-off 11:59 PM last Sunday). Applied 2026-03-02 via Supabase MCP.
 
 (Other migrations omitted for brevity; see Supabase dashboard or `list_migrations` MCP for full list.)
 
