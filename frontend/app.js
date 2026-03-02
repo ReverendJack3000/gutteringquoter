@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260304-cache-bump';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260306-cache-bump';
 
-const STATIC_ASSET_VERSION = '20260304-cache-bump';
+const STATIC_ASSET_VERSION = '20260306-cache-bump';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -333,6 +333,38 @@ const quickQuoterState = {
 
 /** View transition history for restoring focus when returning between app views (55.2). */
 const viewTransitionHistory = [];
+
+/** 59.30: Start time (ISO string) keyed by view id for bonus dashboard view analytics. Cleared after reporting. */
+const bonusDashboardViewStart = { 'view-bonus-admin': null, 'view-technician-bonus': null };
+
+const BONUS_DASHBOARD_VIEW_IDS = new Set(['view-bonus-admin', 'view-technician-bonus']);
+function viewIdToDashboardType(viewId) {
+  if (viewId === 'view-bonus-admin') return 'bonus-admin';
+  if (viewId === 'view-technician-bonus') return 'technician-bonus';
+  return null;
+}
+function reportBonusDashboardViewEnd(viewId, options = {}) {
+  const startedAt = bonusDashboardViewStart[viewId];
+  if (!startedAt) return;
+  bonusDashboardViewStart[viewId] = null;
+  const dashboardType = viewIdToDashboardType(viewId);
+  if (!dashboardType || !authState.token) return;
+  const started = new Date(startedAt).getTime();
+  const now = Date.now();
+  const durationSeconds = Math.max(0, (now - started) / 1000);
+  const body = JSON.stringify({
+    dashboard_type: dashboardType,
+    started_at: startedAt,
+    duration_seconds: Math.min(durationSeconds, 86400),
+  });
+  const opts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body,
+    ...(options.keepalive && { keepalive: true }),
+  };
+  fetch('/api/bonus/analytics/view', opts).catch((e) => console.warn('Bonus dashboard analytics view report failed', e));
+}
 
 const ACCESSIBILITY_PREFS_STORAGE_KEY = 'quote_app_accessibility_prefs_v1';
 const accessibilityPrefs = {
@@ -4246,7 +4278,7 @@ function getElementsFromQuoteTable() {
   // Emit gutter elements from header length (bin-pack per profile)
   Object.keys(profileLengthMm).forEach((profile) => {
     const lengthMm = profileLengthMm[profile];
-    const opt = getOptimalGutterCombination(lengthMm);
+    const opt = getOptimalGutterCombination(lengthMm, getGutterStockCostByLength(profile));
     if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
       let first = true;
       Object.entries(opt.counts).forEach(([lengthMmStr, n]) => {
@@ -4264,7 +4296,7 @@ function getElementsFromQuoteTable() {
   // Emit downpipe elements from section header length (bin-pack per size)
   Object.keys(downpipeLengthMm).forEach((size) => {
     const lengthMm = downpipeLengthMm[size];
-    const opt = getOptimalDownpipeCombination(lengthMm);
+    const opt = getOptimalDownpipeCombination(lengthMm, getDownpipeStockCostByLength(size));
     if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
       let first = true;
       Object.entries(opt.counts).forEach(([lengthMmStr, n]) => {
@@ -4340,7 +4372,7 @@ function getElementsFromQuoteTable() {
     // Send length_mm on the first bin-packed element so bracket/screw count uses manual length, not bin-packed stock length.
     if (rowGutterMatch && isManualLengthRow && lengthMm != null && lengthMm > 0) {
       const profile = rowGutterMatch[1].toUpperCase();
-      const opt = getOptimalGutterCombination(lengthMm);
+      const opt = getOptimalGutterCombination(lengthMm, getGutterStockCostByLength(profile));
       if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
         let first = true;
         Object.entries(opt.counts).forEach(([lengthMmStr, n]) => {
@@ -4360,7 +4392,7 @@ function getElementsFromQuoteTable() {
     if (isDownpipeElement(assetId) && isManualLengthRow && lengthMm != null && lengthMm > 0) {
       const size = getDownpipeSizeFromAssetId(assetId);
       if (size) {
-        const opt = getOptimalDownpipeCombination(lengthMm);
+        const opt = getOptimalDownpipeCombination(lengthMm, getDownpipeStockCostByLength(size));
         if (opt && opt.counts && Object.keys(opt.counts).length > 0) {
           let first = true;
           Object.entries(opt.counts).forEach(([lengthMmStr, n]) => {
@@ -7221,13 +7253,61 @@ function minPiecesAndCombination(total, lengths) {
 }
 
 /**
+ * Optional tie-break: estimated material cost for a combination.
+ * costByLength shape: { [lengthMm]: unitCost }.
+ * Returns null when costs are missing/invalid for any used length.
+ */
+function getCombinationCost(counts, costByLength) {
+  if (!costByLength || typeof costByLength !== 'object') return null;
+  let total = 0;
+  for (const [lengthMm, qtyRaw] of Object.entries(counts || {})) {
+    const qty = Number(qtyRaw) || 0;
+    if (qty <= 0) continue;
+    const unitCost = Number(costByLength[lengthMm]);
+    if (!Number.isFinite(unitCost) || unitCost < 0) return null;
+    total += unitCost * qty;
+  }
+  return Number.isFinite(total) ? total : null;
+}
+
+/**
+ * Unit cost map by gutter stock length for a profile (SC|CL).
+ * Uses products cache if available; missing entries are omitted.
+ */
+function getGutterStockCostByLength(profile) {
+  const out = {};
+  GUTTER_STOCK_LENGTHS_MM.forEach((lengthMm) => {
+    const productId = gutterProductIdForLength(profile, lengthMm);
+    const product = state.products.find((p) => p.id === productId);
+    const cost = Number(product?.cost_price);
+    if (Number.isFinite(cost) && cost >= 0) out[lengthMm] = cost;
+  });
+  return out;
+}
+
+/**
+ * Unit cost map by downpipe stock length for a size (65|80).
+ * Uses products cache if available; missing entries are omitted.
+ */
+function getDownpipeStockCostByLength(size) {
+  const out = {};
+  DOWNPIPE_STOCK_LENGTHS_MM.forEach((lengthMm) => {
+    const productId = downpipeProductIdForLength(size, lengthMm);
+    const product = state.products.find((p) => p.id === productId);
+    const cost = Number(product?.cost_price);
+    if (Number.isFinite(cost) && cost >= 0) out[lengthMm] = cost;
+  });
+  return out;
+}
+
+/**
  * Bin-packing for gutter: find combination of stock lengths (1500, 3000, 5000 mm) that:
  * - sums to >= requiredMm (always round up),
  * - minimizes waste (total - requiredMm),
  * - then minimizes number of pieces (fewer joints).
  * @returns {{ waste: number, counts: Record<number, number> } | null}
  */
-function getOptimalGutterCombination(requiredMm) {
+function getOptimalGutterCombination(requiredMm, costByLength = null) {
   if (requiredMm <= 0) return { waste: 0, counts: { 5000: 0, 3000: 0, 1500: 0 } };
   const lengths = GUTTER_STOCK_LENGTHS_MM;
   const maxStock = Math.max(...lengths);
@@ -7236,8 +7316,17 @@ function getOptimalGutterCombination(requiredMm) {
     const r = minPiecesAndCombination(total, lengths);
     if (!r) continue;
     const waste = total - requiredMm;
-    if (!best || waste < best.waste || (waste === best.waste && r.count < best.count)) {
-      best = { waste, count: r.count, counts: r.counts };
+    const comboCost = getCombinationCost(r.counts, costByLength);
+    const isBetterWaste = !best || waste < best.waste;
+    const isBetterPieceCount = best && waste === best.waste && r.count < best.count;
+    const isCheaperAtSameWasteAndPieces = best
+      && waste === best.waste
+      && r.count === best.count
+      && comboCost != null
+      && best.cost != null
+      && comboCost < best.cost;
+    if (isBetterWaste || isBetterPieceCount || isCheaperAtSameWasteAndPieces) {
+      best = { waste, count: r.count, counts: r.counts, cost: comboCost };
     }
   }
   return best ? { waste: best.waste, counts: best.counts } : null;
@@ -7250,7 +7339,7 @@ function getOptimalGutterCombination(requiredMm) {
  * - then minimizes number of pieces.
  * @returns {{ waste: number, counts: Record<number, number> } | null}
  */
-function getOptimalDownpipeCombination(requiredMm) {
+function getOptimalDownpipeCombination(requiredMm, costByLength = null) {
   if (requiredMm <= 0) return { waste: 0, counts: { 3000: 0, 1500: 0 } };
   const lengths = DOWNPIPE_STOCK_LENGTHS_MM;
   const maxStock = Math.max(...lengths);
@@ -7259,8 +7348,17 @@ function getOptimalDownpipeCombination(requiredMm) {
     const r = minPiecesAndCombination(total, lengths);
     if (!r) continue;
     const waste = total - requiredMm;
-    if (!best || waste < best.waste || (waste === best.waste && r.count < best.count)) {
-      best = { waste, count: r.count, counts: r.counts };
+    const comboCost = getCombinationCost(r.counts, costByLength);
+    const isBetterWaste = !best || waste < best.waste;
+    const isBetterPieceCount = best && waste === best.waste && r.count < best.count;
+    const isCheaperAtSameWasteAndPieces = best
+      && waste === best.waste
+      && r.count === best.count
+      && comboCost != null
+      && best.cost != null
+      && comboCost < best.cost;
+    if (isBetterWaste || isBetterPieceCount || isCheaperAtSameWasteAndPieces) {
+      best = { waste, count: r.count, counts: r.counts, cost: comboCost };
     }
   }
   return best ? { waste: best.waste, counts: best.counts } : null;
@@ -7276,9 +7374,12 @@ function getElementsForQuote() {
   const gutterCountsByProfileAndLength = {}; // profile -> { lengthMm -> qty }
   const gutterMeasuredMmByProfileAndLength = {}; // profile -> { lengthMm -> total measured mm } for bracket/screw
   const gutterIncompleteByProfileAndLength = {}; // profile -> { lengthMm -> true } when any run had no length entered
+  const gutterCostByProfile = {}; // profile -> { lengthMm -> cost }
   const downpipeCountsBySizeAndLength = {}; // size -> { lengthMm -> qty }
-  const downpipeMeasuredMmBySizeAndLength = {}; // size -> { lengthMm -> total measured mm } for clips
+  const downpipeRequiredMmBySize = {}; // size -> total required mm across measured + default runs
+  const downpipeHasMeasuredBySize = {}; // size -> true when at least one run has measuredLength
   const downpipeIncompleteBySizeAndLength = {}; // size -> { lengthMm -> true }
+  const downpipeCostBySize = {}; // size -> { lengthMm -> cost }
   const otherMeasurableByAssetId = {}; // assetId -> { length, count } (droppers, etc.)
   const nonMeasurableByAssetId = {};  // assetId -> count
 
@@ -7291,7 +7392,8 @@ function getElementsForQuote() {
     if (gutterMatch) {
       const profile = gutterMatch[1].toUpperCase();
       const requiredMm = hasLength ? el.measuredLength : getStandardLengthMm(el.assetId);
-      const opt = getOptimalGutterCombination(requiredMm);
+      const costByLength = gutterCostByProfile[profile] || (gutterCostByProfile[profile] = getGutterStockCostByLength(profile));
+      const opt = getOptimalGutterCombination(requiredMm, costByLength);
       if (opt) {
         if (!gutterCountsByProfileAndLength[profile]) gutterCountsByProfileAndLength[profile] = {};
         if (!gutterMeasuredMmByProfileAndLength[profile]) gutterMeasuredMmByProfileAndLength[profile] = {};
@@ -7310,16 +7412,17 @@ function getElementsForQuote() {
       const size = getDownpipeSizeFromAssetId(el.assetId);
       if (!size) return;
       const requiredMm = hasLength ? el.measuredLength : getStandardLengthMm(el.assetId);
-      const opt = getOptimalDownpipeCombination(requiredMm);
+      const costByLength = downpipeCostBySize[size] || (downpipeCostBySize[size] = getDownpipeStockCostByLength(size));
+      const opt = getOptimalDownpipeCombination(requiredMm, costByLength);
       if (opt) {
         if (!downpipeCountsBySizeAndLength[size]) downpipeCountsBySizeAndLength[size] = {};
-        if (!downpipeMeasuredMmBySizeAndLength[size]) downpipeMeasuredMmBySizeAndLength[size] = {};
         if (!downpipeIncompleteBySizeAndLength[size]) downpipeIncompleteBySizeAndLength[size] = {};
+        downpipeRequiredMmBySize[size] = (downpipeRequiredMmBySize[size] || 0) + requiredMm;
+        if (hasLength) downpipeHasMeasuredBySize[size] = true;
         Object.entries(opt.counts).forEach(([lengthMm, qty]) => {
           if (qty <= 0) return;
           const L = Number(lengthMm);
           downpipeCountsBySizeAndLength[size][L] = (downpipeCountsBySizeAndLength[size][L] || 0) + qty;
-          downpipeMeasuredMmBySizeAndLength[size][L] = (downpipeMeasuredMmBySizeAndLength[size][L] || 0) + requiredMm;
           if (!hasLength) downpipeIncompleteBySizeAndLength[size][L] = true;
         });
       }
@@ -7355,18 +7458,18 @@ function getElementsForQuote() {
   // Downpipe: emit bin-packed counts; send length_mm on first element per size for clip calc
   Object.entries(downpipeCountsBySizeAndLength).forEach(([size, byLength]) => {
     const incompleteByLength = downpipeIncompleteBySizeAndLength[size] || {};
-    const measuredByLength = downpipeMeasuredMmBySizeAndLength[size] || {};
+    const totalRequiredMm = downpipeRequiredMmBySize[size] || 0;
+    const measuredCoverageMm = downpipeHasMeasuredBySize[size] ? totalRequiredMm : 0;
     const sortedLengths = Object.keys(byLength).map(Number).sort((a, b) => b - a);
     let first = true;
     sortedLengths.forEach((lengthMm) => {
       const qty = byLength[lengthMm];
       if (qty <= 0) return;
-      const totalMeasuredMm = measuredByLength[lengthMm];
       const item = {
         assetId: downpipeProductIdForLength(size, lengthMm),
         quantity: qty,
         incomplete: !!incompleteByLength[lengthMm],
-        length_mm: first && totalMeasuredMm != null && totalMeasuredMm > 0 ? totalMeasuredMm : undefined,
+        length_mm: first && measuredCoverageMm != null && measuredCoverageMm > 0 ? measuredCoverageMm : undefined,
       };
       if (first) first = false;
       result.push(item);
@@ -11234,6 +11337,7 @@ function initAuth() {
   const menuItemUserPermissions = document.getElementById('menuItemUserPermissions');
   const menuItemMaterialRules = document.getElementById('menuItemMaterialRules');
   const menuItemBonusAdmin = document.getElementById('menuItemBonusAdmin');
+  const menuItemBonusAnalytics = document.getElementById('menuItemBonusAnalytics');
   const menuItemTechnicianBonus = document.getElementById('menuItemTechnicianBonus');
   const menuItemSignOut = document.getElementById('menuItemSignOut');
   const productsProfileWrap = document.getElementById('productsProfileWrap');
@@ -11386,6 +11490,17 @@ function initAuth() {
         return;
       }
       switchView('view-bonus-admin', { triggerEl: userAvatar || menuItemBonusAdmin });
+    });
+  }
+  if (menuItemBonusAnalytics) {
+    menuItemBonusAnalytics.addEventListener('click', (e) => {
+      setProfileDropdownExpanded(false);
+      e.stopPropagation();
+      if (!authState.isSuperAdmin) {
+        showMessage('Only super admin can access Bonus dashboard analytics.', 'error');
+        return;
+      }
+      switchView('view-bonus-analytics', { triggerEl: userAvatar || menuItemBonusAnalytics });
     });
   }
   if (menuItemTechnicianBonus) {
@@ -12022,6 +12137,13 @@ function updateBonusAdminMenuVisibility() {
   adminProductsBonusController?.updateBonusAdminMenuVisibility?.();
 }
 
+function updateBonusAnalyticsMenuVisibility() {
+  const menuItem = document.getElementById('menuItemBonusAnalytics');
+  if (!menuItem) return;
+  menuItem.hidden = !(authState.isSuperAdmin && isDesktopViewport());
+  adminProductsBonusController?.updateBonusAnalyticsMenuVisibility?.();
+}
+
 function updateMobileBonusButtonVisibility() {
   const btn = document.getElementById('mobileBonusDashboardBtn');
   if (btn) {
@@ -12044,11 +12166,91 @@ function openTechnicianBonusView(triggerEl) {
     });
 }
 
+/** 59.30: Format total_duration_seconds as "1h 5m" or "12m 30s". */
+function formatBonusAnalyticsDuration(seconds) {
+  const s = Math.round(Number(seconds)) || 0;
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m < 60) return sec ? `${m}m ${sec}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return min ? `${h}h ${min}m` : `${h}h`;
+}
+
+function initBonusAnalyticsView() {
+  const backBtn = document.getElementById('btnBonusAnalyticsBackToCanvas');
+  const applyBtn = document.getElementById('btnBonusAnalyticsApply');
+  const wrap = document.getElementById('view-bonus-analytics');
+  if (!wrap || wrap.dataset.bonusAnalyticsBound === 'true') return;
+  wrap.dataset.bonusAnalyticsBound = 'true';
+  if (backBtn) {
+    backBtn.addEventListener('click', () => switchView('view-canvas', { triggerEl: backBtn }));
+  }
+  if (applyBtn) {
+    applyBtn.addEventListener('click', () => void fetchBonusAnalyticsSummary());
+  }
+}
+
+async function fetchBonusAnalyticsSummary() {
+  const loadingEl = document.getElementById('bonusAnalyticsLoading');
+  const errorEl = document.getElementById('bonusAnalyticsError');
+  const tableWrap = document.getElementById('bonusAnalyticsTableWrap');
+  const tableBody = document.getElementById('bonusAnalyticsTableBody');
+  const emptyEl = document.getElementById('bonusAnalyticsEmpty');
+  if (!authState.token) return;
+  const dashboardType = document.getElementById('bonusAnalyticsDashboardType')?.value?.trim() || '';
+  const fromDate = document.getElementById('bonusAnalyticsFromDate')?.value?.trim() || '';
+  const toDate = document.getElementById('bonusAnalyticsToDate')?.value?.trim() || '';
+  const params = new URLSearchParams();
+  if (dashboardType) params.set('dashboard_type', dashboardType);
+  if (fromDate) params.set('from_date', fromDate);
+  if (toDate) params.set('to_date', toDate);
+  const qs = params.toString();
+  const url = '/api/bonus/analytics/summary' + (qs ? '?' + qs : '');
+  if (loadingEl) { loadingEl.hidden = false; }
+  if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+  if (tableWrap) tableWrap.hidden = true;
+  if (emptyEl) emptyEl.hidden = true;
+  try {
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(res.status === 403 ? 'Super admin only.' : (text || res.statusText));
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data?.rows) ? data.rows : [];
+    if (loadingEl) loadingEl.hidden = true;
+    if (rows.length === 0) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'No data for the selected filters.'; }
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (tableBody) {
+      tableBody.innerHTML = rows.map((r) => {
+        const user = (r.email || r.user_id || '—');
+        const dash = r.dashboard_type === 'bonus-admin' ? 'Bonus Admin' : (r.dashboard_type === 'technician-bonus' ? 'Technician bonus' : r.dashboard_type || '—');
+        const views = String(r.view_count ?? '—');
+        const duration = formatBonusAnalyticsDuration(r.total_duration_seconds);
+        return `<tr><td>${escapeHtml(user)}</td><td>${escapeHtml(dash)}</td><td>${views}</td><td>${escapeHtml(duration)}</td></tr>`;
+      }).join('');
+    }
+    if (tableWrap) tableWrap.hidden = false;
+  } catch (e) {
+    if (loadingEl) loadingEl.hidden = true;
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = e?.message || 'Failed to load analytics.';
+    }
+  }
+}
+
 function syncAdminDesktopAccess(options = {}) {
   updateUserPermissionsMenuVisibility();
   updateMaterialRulesMenuVisibility();
   updateTechnicianBonusMenuVisibility();
   updateBonusAdminMenuVisibility();
+  updateBonusAnalyticsMenuVisibility();
   updateMobileBonusButtonVisibility();
 
   const quoteTable = document.getElementById('quotePartsTable');
@@ -12061,6 +12263,11 @@ function syncAdminDesktopAccess(options = {}) {
   updateSavePricingButtonState();
 
   const visibleView = getVisibleViewId();
+  if (visibleView === 'view-bonus-analytics' && !authState.isSuperAdmin) {
+    switchView('view-canvas', { focus: options.focus !== false });
+    if (options.notify !== false) showMessage('Only super admin can access Bonus dashboard analytics.', 'info');
+    return;
+  }
   const needsController = visibleView === 'view-user-permissions'
     || visibleView === 'view-material-rules'
     || visibleView === 'view-bonus-admin'
@@ -14651,6 +14858,9 @@ function getPrimaryViewFocusTarget(viewId) {
   if (viewId === 'view-bonus-admin') {
     return document.getElementById('btnBonusAdminBackToCanvas');
   }
+  if (viewId === 'view-bonus-analytics') {
+    return document.getElementById('btnBonusAnalyticsBackToCanvas');
+  }
   if (viewId === 'view-technician-bonus') {
     return document.getElementById('btnBonusRefresh')
       || document.getElementById('btnBonusBackToCanvas')
@@ -14700,11 +14910,18 @@ function switchView(viewId, options = {}) {
     showMessage(message, 'error');
     return;
   }
+  if (viewId === 'view-bonus-analytics' && !authState.isSuperAdmin) {
+    showMessage('Only super admin can access Bonus dashboard analytics.', 'error');
+    return;
+  }
   if (viewId === 'view-technician-bonus' && !canAccessTechnicianBonusView()) {
     showMessage('Your role does not allow access to the bonus dashboard.', 'error');
     return;
   }
 
+  if (BONUS_DASHBOARD_VIEW_IDS.has(fromViewId)) {
+    reportBonusDashboardViewEnd(fromViewId);
+  }
   if (fromViewId === 'view-canvas' && viewId !== 'view-canvas') {
     diagramToolbarDragCleanupIfNeeded();
   }
@@ -14739,12 +14956,17 @@ function switchView(viewId, options = {}) {
       initMaterialRulesView();
       void fetchMaterialRules();
     } else if (viewId === 'view-bonus-admin') {
+      bonusDashboardViewStart[viewId] = new Date().toISOString();
       initBonusAdminView();
       void fetchBonusAdminPeriods();
     } else if (viewId === 'view-technician-bonus') {
+      bonusDashboardViewStart[viewId] = new Date().toISOString();
       initTechnicianBonusView();
       void fetchTechnicianBonusDashboard();
       startTechnicianBonusPolling();
+    } else if (viewId === 'view-bonus-analytics') {
+      initBonusAnalyticsView();
+      void fetchBonusAnalyticsSummary();
     }
     if (options.focus !== false) {
       const returnTarget = fromViewId && fromViewId !== viewId
@@ -14887,6 +15109,17 @@ function init() {
   initProducts();
   scheduleDeferredInitializers();
 
+  /* 59.30: Report bonus dashboard view when tab is hidden or page unloads so we don't lose the session. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    const viewId = getVisibleViewId();
+    if (BONUS_DASHBOARD_VIEW_IDS.has(viewId)) reportBonusDashboardViewEnd(viewId);
+  });
+  window.addEventListener('pagehide', () => {
+    const viewId = getVisibleViewId();
+    if (BONUS_DASHBOARD_VIEW_IDS.has(viewId)) reportBonusDashboardViewEnd(viewId, { keepalive: true });
+  });
+
   const authPromise = initAuth();
   const authReady = authPromise && typeof authPromise.then === 'function' ? authPromise : Promise.resolve();
   authReady.then(() => {
@@ -14942,10 +15175,32 @@ init();
 
 // E2E test hooks
 if (typeof window !== 'undefined') {
+  const getElementsForQuoteFromSynthetic = (syntheticElements) => {
+    const previousElements = state.elements;
+    try {
+      const source = Array.isArray(syntheticElements) ? syntheticElements : [];
+      state.elements = source
+        .map((item, idx) => {
+          const assetId = String(item?.assetId || '').trim();
+          if (!assetId) return null;
+          const measuredLength = Number(item?.measuredLength);
+          return {
+            id: `synthetic-${idx}`,
+            assetId,
+            measuredLength: Number.isFinite(measuredLength) && measuredLength > 0 ? measuredLength : null,
+          };
+        })
+        .filter(Boolean);
+      return getElementsForQuote();
+    } finally {
+      state.elements = previousElements;
+    }
+  };
   window.__quoteAppManualMetreTestFns = {
     mToMm,
     getOptimalGutterCombination,
     getOptimalDownpipeCombination,
+    getElementsForQuoteFromSynthetic,
     getElementsFromQuoteTable,
     commitMetresInput,
   };

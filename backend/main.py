@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Uploa
 from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user_id, get_current_user_id_and_role, get_validated_payload, is_super_admin_from_payload, require_role
+from app.auth import get_current_user_id, get_current_user_id_and_role, get_validated_payload, is_super_admin_from_payload, require_role, require_super_admin
 from app.bonus_dashboard import (
     build_badge_events,
     build_canonical_ledger_rows,
@@ -942,6 +942,14 @@ class UpdateJobPersonnelRequest(BaseModel):
     is_seller: Optional[bool] = None
     is_executor: Optional[bool] = None
     is_spotter: Optional[bool] = None
+
+
+class BonusDashboardViewRequest(BaseModel):
+    """Record one bonus dashboard view session (59.30). Client sends when leaving the view."""
+
+    dashboard_type: str = Field(..., description="bonus-admin | technician-bonus")
+    started_at: str = Field(..., description="ISO8601 when the view started")
+    duration_seconds: float = Field(..., ge=0, description="Seconds spent on the dashboard")
 
 
 class UpdateJobPerformanceRequest(BaseModel):
@@ -1886,6 +1894,119 @@ def api_bonus_technician_jobs(
     except Exception as e:
         logger.exception("Failed to read technician jobs: %s", e)
         raise HTTPException(500, "Failed to read technician jobs")
+
+
+# --- Bonus dashboard view analytics (59.30): record view, summary (super-admin only) ---
+
+
+VALID_DASHBOARD_TYPES = frozenset({"bonus-admin", "technician-bonus"})
+
+
+@app.post("/api/bonus/analytics/view")
+def api_bonus_analytics_view(
+    body: BonusDashboardViewRequest,
+    user_id: uuid_lib.UUID = Depends(get_current_user_id),
+):
+    """Record one bonus dashboard view session (59.30). Any authenticated user. Backend sets user_id from JWT."""
+    if body.dashboard_type not in VALID_DASHBOARD_TYPES:
+        raise HTTPException(400, "dashboard_type must be bonus-admin or technician-bonus")
+    try:
+        started_at = datetime.fromisoformat(body.started_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "started_at must be a valid ISO8601 datetime string")
+    duration = float(body.duration_seconds)
+    if duration > 86400:
+        duration = 86400
+    try:
+        supabase = get_supabase()
+        supabase.table("bonus_dashboard_view_events").insert(
+            {
+                "user_id": str(user_id),
+                "dashboard_type": body.dashboard_type,
+                "started_at": started_at.isoformat(),
+                "duration_seconds": duration,
+            }
+        ).execute()
+    except Exception as e:
+        logger.exception("Failed to insert bonus dashboard view event: %s", e)
+        raise HTTPException(500, "Failed to record view")
+    return {"ok": True}
+
+
+@app.get("/api/bonus/analytics/summary")
+def api_bonus_analytics_summary(
+    dashboard_type: Optional[str] = Query(None, description="Filter: bonus-admin | technician-bonus"),
+    from_date: Optional[str] = Query(None, description="Filter events on or after this date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="Filter events on or before this date (YYYY-MM-DD)"),
+    user_id: Any = Depends(require_super_admin),
+):
+    """Aggregated view count and total duration per user (and per dashboard_type). Super admin only (59.30)."""
+    if dashboard_type is not None and dashboard_type not in VALID_DASHBOARD_TYPES:
+        raise HTTPException(400, "dashboard_type must be bonus-admin or technician-bonus")
+    from_date_parsed = None
+    to_date_parsed = None
+    if from_date:
+        try:
+            from_date_parsed = date.fromisoformat(from_date)
+        except ValueError:
+            raise HTTPException(400, "from_date must be YYYY-MM-DD")
+    if to_date:
+        try:
+            to_date_parsed = date.fromisoformat(to_date)
+        except ValueError:
+            raise HTTPException(400, "to_date must be YYYY-MM-DD")
+    try:
+        supabase = get_supabase()
+        q = supabase.table("bonus_dashboard_view_events").select("user_id, dashboard_type, duration_seconds, started_at")
+        if dashboard_type:
+            q = q.eq("dashboard_type", dashboard_type)
+        if from_date_parsed:
+            q = q.gte("started_at", from_date_parsed.isoformat())
+        if to_date_parsed:
+            q = q.lte("started_at", (to_date_parsed.isoformat() + "T23:59:59.999999"))
+        resp = q.execute()
+        rows = list(resp.data or [])
+    except Exception as e:
+        logger.exception("Failed to fetch bonus dashboard view events: %s", e)
+        raise HTTPException(500, "Failed to load analytics")
+    # Aggregate by (user_id, dashboard_type)
+    agg = {}
+    for r in rows:
+        uid = r.get("user_id")
+        dt = r.get("dashboard_type")
+        dur = float(r.get("duration_seconds") or 0)
+        if uid and dt:
+            key = (str(uid), dt)
+            if key not in agg:
+                agg[key] = {"view_count": 0, "total_duration_seconds": 0}
+            agg[key]["view_count"] += 1
+            agg[key]["total_duration_seconds"] += dur
+    # Build output rows and resolve email per user_id
+    user_ids = list({k[0] for k in agg})
+    email_map = {}
+    for uid in user_ids:
+        try:
+            auth_resp = supabase.auth.admin.get_user_by_id(uid)
+            u = getattr(auth_resp, "user", None) or (auth_resp if isinstance(auth_resp, dict) else {}).get("user")
+            if isinstance(u, dict):
+                email_map[uid] = (u.get("email") or "").strip() or None
+            elif hasattr(u, "email"):
+                email_map[uid] = (getattr(u, "email") or "").strip() or None
+            else:
+                email_map[uid] = None
+        except Exception:
+            email_map[uid] = None
+    out = []
+    for (uid, dt), v in agg.items():
+        out.append({
+            "user_id": uid,
+            "email": email_map.get(uid),
+            "dashboard_type": dt,
+            "view_count": v["view_count"],
+            "total_duration_seconds": round(v["total_duration_seconds"], 2),
+        })
+    out.sort(key=lambda x: (-x["total_duration_seconds"], x["user_id"], x["dashboard_type"]))
+    return {"rows": out}
 
 
 @app.get("/api/labour-rates")

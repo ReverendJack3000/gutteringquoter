@@ -180,11 +180,11 @@ The following are **locked decisions**. Full rationale and implementation notes:
 
 ### Bonus dashboard view analytics (super-admin-only report)
 
-- [ ] **59.30** **Bonus dashboard view analytics:** Track how many times and how long each person spends on the bonus dashboard(s) (Bonus Admin and Technician bonus views); only super admin can view the report. Plan: docs/plans/2026-03-bonus-dashboard-view-analytics-plan.md.
-  - [ ] **59.30.1** Backend: add `require_super_admin` in auth.py; new table `bonus_dashboard_view_events` (user_id, dashboard_type, started_at, duration_seconds); migration + BACKEND_DATABASE.md.
-  - [ ] **59.30.2** Backend: POST /api/bonus/analytics/view (authenticated), GET /api/bonus/analytics/summary (super-admin only); implement and document in README.
-  - [ ] **59.30.3** Frontend: record view start on enter to view-bonus-admin / view-technician-bonus; on leave (switchView + visibilitychange/pagehide) POST one event per session; use sendBeacon on pagehide.
-  - [ ] **59.30.4** Frontend: super-admin-only “Bonus dashboard analytics” entry and view; fetch summary and display table (user, dashboard type, view count, total duration); hide when not isSuperAdmin.
+- [x] **59.30** **Bonus dashboard view analytics:** Track how many times and how long each person spends on the bonus dashboard(s) (Bonus Admin and Technician bonus views); only super admin can view the report. Plan: docs/plans/2026-03-bonus-dashboard-view-analytics-plan.md.
+  - [x] **59.30.1** Backend: add `require_super_admin` in auth.py; new table `bonus_dashboard_view_events` (user_id, dashboard_type, started_at, duration_seconds); migration + BACKEND_DATABASE.md.
+  - [x] **59.30.2** Backend: POST /api/bonus/analytics/view (authenticated), GET /api/bonus/analytics/summary (super-admin only); implement and document in README.
+  - [x] **59.30.3** Frontend: record view start on enter to view-bonus-admin / view-technician-bonus; on leave (switchView + visibilitychange/pagehide) POST one event per session; use sendBeacon on pagehide.
+  - [x] **59.30.4** Frontend: super-admin-only “Bonus dashboard analytics” entry and view; fetch summary and display table (user, dashboard type, view count, total duration); hide when not isSuperAdmin.
 
 ---
 

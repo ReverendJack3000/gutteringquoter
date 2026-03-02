@@ -47,6 +47,7 @@ async function run() {
         'mToMm',
         'getOptimalGutterCombination',
         'getOptimalDownpipeCombination',
+        'getElementsForQuoteFromSynthetic',
         'getElementsFromQuoteTable',
         'commitMetresInput',
       ];
@@ -97,6 +98,20 @@ async function run() {
         if (a !== e) failures.push(`${label}: expected ${e}, got ${a}`);
       };
 
+      const collectPacked = (elements, prefix) => {
+        const byId = {};
+        let firstLengthMm = null;
+        (Array.isArray(elements) ? elements : []).forEach((item) => {
+          const assetId = String(item && item.assetId ? item.assetId : '');
+          if (!assetId.startsWith(prefix)) return;
+          const qty = Number(item.quantity) || 0;
+          byId[assetId] = (byId[assetId] || 0) + qty;
+          const lengthMm = Number(item.length_mm);
+          if (firstLengthMm == null && Number.isFinite(lengthMm) && lengthMm > 0) firstLengthMm = lengthMm;
+        });
+        return { byId: stableObject(byId), firstLengthMm };
+      };
+
       let checksRun = 0;
 
       manualCases.forEach((testCase) => {
@@ -131,25 +146,55 @@ async function run() {
         if (pieceCount(downpipeCounts) <= 0) failures.push(`Downpipe piece count invalid @ ${testCase.metres}m`);
       });
 
+      const syntheticDownpipePacked = collectPacked(
+        fnBag.getElementsForQuoteFromSynthetic([
+          { assetId: 'DP-65-3M', measuredLength: 1600 },
+          { assetId: 'DP-65-3M', measuredLength: 1200 },
+        ]),
+        'DP-65-'
+      );
+
+      checksRun += 1;
+      assertEqual(
+        'getElementsForQuote synthetic downpipe packed counts',
+        syntheticDownpipePacked.byId,
+        stableObject({ 'DP-65-3M': 1, 'DP-65-1.5M': 1 })
+      );
+
+      checksRun += 1;
+      if (syntheticDownpipePacked.firstLengthMm !== 2800) {
+        failures.push(
+          `getElementsForQuote synthetic downpipe length_mm mismatch: expected 2800, got ${syntheticDownpipePacked.firstLengthMm}`
+        );
+      }
+
+      const syntheticMixedDownpipePacked = collectPacked(
+        fnBag.getElementsForQuoteFromSynthetic([
+          { assetId: 'DP-65-3M', measuredLength: 1600 },
+          { assetId: 'DP-65-3M' },
+        ]),
+        'DP-65-'
+      );
+
+      checksRun += 1;
+      assertEqual(
+        'getElementsForQuote synthetic mixed downpipe packed counts',
+        syntheticMixedDownpipePacked.byId,
+        stableObject({ 'DP-65-3M': 2 })
+      );
+
+      checksRun += 1;
+      if (syntheticMixedDownpipePacked.firstLengthMm !== 4600) {
+        failures.push(
+          `getElementsForQuote synthetic mixed downpipe length_mm mismatch: expected 4600, got ${syntheticMixedDownpipePacked.firstLengthMm}`
+        );
+      }
+
       const tableBody = document.getElementById('quoteTableBody');
       if (!tableBody) {
         failures.push('Missing #quoteTableBody; cannot run quote-table scaling checks.');
         return { failures, checksRun };
       }
-
-      const collectPacked = (elements, prefix) => {
-        const byId = {};
-        let firstLengthMm = null;
-        (Array.isArray(elements) ? elements : []).forEach((item) => {
-          const assetId = String(item && item.assetId ? item.assetId : '');
-          if (!assetId.startsWith(prefix)) return;
-          const qty = Number(item.quantity) || 0;
-          byId[assetId] = (byId[assetId] || 0) + qty;
-          const lengthMm = Number(item.length_mm);
-          if (firstLengthMm == null && Number.isFinite(lengthMm) && lengthMm > 0) firstLengthMm = lengthMm;
-        });
-        return { byId: stableObject(byId), firstLengthMm };
-      };
 
       const createIncompleteMetresRow = ({ assetId, enteredMetres, multiplier }) => {
         const tr = document.createElement('tr');

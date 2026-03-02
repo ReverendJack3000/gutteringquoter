@@ -130,6 +130,8 @@ Then sign in via the **Sign in** button, use **Save** to store the current diagr
 - `GET /api/bonus/periods` – list bonus periods (requires Bearer token, role `admin`)
 - `POST /api/bonus/periods` – create bonus period: body `period_name`, `start_date`, `end_date`, optional `status` (open|processing|closed) (requires Bearer token, role `admin`)
 - `PATCH /api/bonus/periods/{period_id}` – update bonus period: body optional `period_name`, `start_date`, `end_date`, `status` (requires Bearer token, role `admin`)
+- `POST /api/bonus/analytics/view` – record one bonus dashboard view session: body `dashboard_type` (bonus-admin | technician-bonus), `started_at` (ISO8601), `duration_seconds` (requires Bearer token; 59.30)
+- `GET /api/bonus/analytics/summary` – aggregated view count and total duration per user/dashboard (optional query: `dashboard_type`, `from_date`, `to_date`); **super admin only** (59.30)
 - `GET /manifest.webmanifest` – PWA manifest (static)
 - `GET /service-worker.js` – service worker script (static)
 

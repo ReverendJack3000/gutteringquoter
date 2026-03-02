@@ -24,3 +24,17 @@ Migrations are applied via **Supabase MCP** (`apply_migration`) to project **Jac
 - **Supabase version:** `20260302231629` (from `list_migrations`).
 
 **Documentation updated:** `docs/BACKEND_DATABASE.md` (quotes table columns, job_performance additions, migrations list).
+
+---
+
+## Session 2026-03-03: Bonus dashboard view analytics (Section 59.30)
+
+**Applied via MCP:**
+
+### 1. `add_bonus_dashboard_view_events`
+
+- **Purpose:** Store view sessions for Bonus Admin and Technician bonus dashboards so super admin can see per-user view count and total duration.
+- **Changes:**
+  - New table `public.bonus_dashboard_view_events`: `id` (uuid PK), `user_id` (uuid NOT NULL → auth.users.id), `dashboard_type` (text NOT NULL, CHECK IN ('bonus-admin', 'technician-bonus')), `started_at` (timestamptz NOT NULL), `duration_seconds` (numeric NOT NULL), `created_at` (timestamptz default now()). RLS off.
+
+**Documentation updated:** `docs/BACKEND_DATABASE.md` (§4 bonus section).

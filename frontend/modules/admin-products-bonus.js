@@ -672,6 +672,12 @@ function updateBonusAdminMenuVisibility() {
   menuItem.hidden = !canAccessDesktopAdminUi();
 }
 
+function updateBonusAnalyticsMenuVisibility() {
+  const menuItem = document.getElementById('menuItemBonusAnalytics');
+  if (!menuItem) return;
+  menuItem.hidden = !(authState.isSuperAdmin && isDesktopViewport());
+}
+
 function renderBonusAdminPeriodSelect() {
   const select = document.getElementById('bonusAdminPeriodSelect');
   const emptyEl = document.getElementById('bonusAdminPeriodsEmpty');
@@ -1380,6 +1386,7 @@ function syncAdminDesktopAccess(options = {}) {
   updateMaterialRulesMenuVisibility();
   updateTechnicianBonusMenuVisibility();
   updateBonusAdminMenuVisibility();
+  updateBonusAnalyticsMenuVisibility();
   updateMobileBonusButtonVisibility();
 
   const quoteTable = document.getElementById('quotePartsTable');
@@ -1461,6 +1468,11 @@ function syncAdminDesktopAccess(options = {}) {
         showMessage('Your role does not allow access to the bonus dashboard.', 'info');
       }
     }
+  }
+
+  if (getVisibleViewId() === 'view-bonus-analytics' && !authState.isSuperAdmin) {
+    switchView('view-canvas', { focus: options.focus !== false });
+    if (options.notify !== false) showMessage('Only super admin can access Bonus dashboard analytics.', 'info');
   }
 }
 
@@ -2003,11 +2015,16 @@ function getMaterialRulesTemplateSections() {
     const repairTypeId = String(repairType?.id || '').trim();
     if (!repairTypeId) return;
     const label = String(repairType?.label || '').trim() || repairTypeId;
+    const defaultTimeRaw = repairType?.default_time_minutes;
+    const defaultTimeParsed = defaultTimeRaw == null || defaultTimeRaw === ''
+      ? null
+      : parseInt(String(defaultTimeRaw), 10);
     sections.push({
       repairTypeId,
       label,
       isUnknown: false,
       rows: templatesByRepairTypeId.get(repairTypeId) || [],
+      defaultTimeMinutes: Number.isInteger(defaultTimeParsed) && defaultTimeParsed >= 0 ? defaultTimeParsed : null,
     });
     templatesByRepairTypeId.delete(repairTypeId);
   });
@@ -2020,10 +2037,34 @@ function getMaterialRulesTemplateSections() {
         label: String(repairTypeId || 'missing'),
         isUnknown: true,
         rows,
+        defaultTimeMinutes: null,
       });
     });
 
   return sections;
+}
+
+function formatMaterialRulesEstimatedTime(defaultTimeMinutes) {
+  const mins = Number.isInteger(defaultTimeMinutes) && defaultTimeMinutes >= 0 ? defaultTimeMinutes : null;
+  if (mins == null) return 'Est. No estimate';
+  if (mins < 60) return `Est. ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (rem === 0) return `Est. ${hours} ${hours === 1 ? 'hr' : 'hrs'}`;
+  return `Est. ${hours} ${hours === 1 ? 'hr' : 'hrs'} ${rem} min`;
+}
+
+function normalizeMaterialRulesSectionKey(repairTypeId) {
+  const key = String(repairTypeId || '').trim();
+  return key || '__missing__';
+}
+
+function getMaterialRulesTemplateSectionCollapsed(repairTypeId) {
+  const key = normalizeMaterialRulesSectionKey(repairTypeId);
+  if (!materialRulesTemplateSectionCollapseById.has(key)) {
+    materialRulesTemplateSectionCollapseById.set(key, true);
+  }
+  return materialRulesTemplateSectionCollapseById.get(key) === true;
 }
 
 /**
@@ -2066,6 +2107,31 @@ function getMaterialRulesSummaryBracketSuffix(rows) {
   if (profileLabels.size > 0) parts.push(Array.from(profileLabels).sort().join('/'));
   if (sizeLabels.size > 0) parts.push(Array.from(sizeLabels).sort().join('/'));
   return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+}
+
+function getMaterialRulesGroupVariantMeta(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const profileLabels = new Set();
+  const sizeLabels = new Set();
+  safeRows.forEach((row) => {
+    const profile = String(row?.condition_profile || '').trim().toUpperCase();
+    if (profile) profileLabels.add(MATERIAL_RULES_PROFILE_DISPLAY[profile] || profile);
+    const size = row?.condition_size_mm != null ? String(row.condition_size_mm).trim() : '';
+    if (size) sizeLabels.add(size.includes('mm') ? size : `${size}mm`);
+  });
+
+  const badges = [];
+  Array.from(profileLabels).sort().forEach((label) => {
+    badges.push({ kind: 'profile', text: `Profile ${label}` });
+  });
+  Array.from(sizeLabels).sort().forEach((label) => {
+    badges.push({ kind: 'size', text: `Size ${label}` });
+  });
+
+  return {
+    badges,
+    variantCount: safeRows.length,
+  };
 }
 
 /**
@@ -2131,6 +2197,7 @@ function getMaterialRulesDataWarnings() {
 
 let materialRulesLocalTemplateCounter = 0;
 let materialRulesLocalGroupCounter = 0;
+let materialRulesTemplateSectionCollapseById = new Map();
 
 function getMaterialRulesDragHandleHtml(label) {
   return `
@@ -2294,6 +2361,9 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
   tr.dataset.legacyFixedLengthMm = isLegacyFixedMm ? String(legacyFixedLengthMm) : '';
   tr.dataset.rowDirty = 'false';
   tr.innerHTML = `
+    <td class="material-rules-reorder-cell">
+      ${getMaterialRulesDragHandleHtml('Drag to reorder template row')}
+    </td>
     <td>
       <select class="material-rules-template-product-id" aria-label="Template product ID">
         ${getMaterialRulesProductSelectOptionsHtml(productId, true)}
@@ -2375,39 +2445,57 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
  * Append a grouped summary row (one logical part). No data-material-rules-template-row so collect ignores it.
  * baseLabel is shown in bold (product name); suffixLabel (e.g. " (Classic/Storm)") in normal weight. Colons are stripped from both.
  */
-function appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, collapsed) {
+function appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, collapsed, rows = []) {
   if (!(tbody instanceof HTMLTableSectionElement)) return;
   const stripColons = (s) => String(s || '').replace(/:/g, '').trim();
   const base = stripColons(baseLabel);
   const suffix = stripColons(suffixLabel);
+  const variantMeta = getMaterialRulesGroupVariantMeta(rows);
+  const variantCount = Number.isFinite(variantMeta.variantCount) ? variantMeta.variantCount : 0;
+  const variantCountLabel = `${variantCount} variant${variantCount === 1 ? '' : 's'}`;
   const fullLabel = base + (suffix || '');
   const tr = document.createElement('tr');
   tr.className = 'material-rules-group-summary-row';
   tr.dataset.materialRulesGroupSummary = 'true';
   tr.dataset.materialRulesGroupId = groupId;
   tr.dataset.materialRulesGroupCollapsed = collapsed ? 'true' : 'false';
-  const stateDesc = collapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
-  const ariaLabel = `${String(fullLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`;
+  const stateDesc = collapsed ? 'collapsed, activate to show variants' : 'expanded, activate to hide variants';
+  const ariaLabel = `${String(fullLabel || '').replace(/"/g, '&quot;')} (${variantCountLabel}, ${stateDesc})`;
   tr.setAttribute('aria-label', ariaLabel);
-  const expandLabel = collapsed ? 'Expand' : 'Collapse';
+  const buttonLabelText = collapsed ? 'Show variants' : 'Hide variants';
+  const buttonAriaLabel = `${buttonLabelText} for ${fullLabel || 'logical part group'}`;
   const suffixHtml = suffix ? `<span class="material-rules-group-summary-label">${escapeHtml(suffix)}</span>` : '';
+  const badgesHtml = variantMeta.badges.length > 0
+    ? `<div class="material-rules-group-summary-badges">${
+      variantMeta.badges
+        .map((badge) => `<span class="material-rules-group-summary-badge" data-badge-kind="${escapeHtml(badge.kind)}">${escapeHtml(badge.text)}</span>`)
+        .join('')
+    }</div>`
+    : '';
   tr.innerHTML = `
-    <td colspan="7" class="material-rules-group-summary-cell">
-      <button type="button" class="material-rules-group-expand-btn" aria-label="${escapeHtml(expandLabel)}" aria-expanded="${collapsed ? 'false' : 'true'}">${collapsed ? 'Expand' : 'Collapse'}</button>
-      <span class="material-rules-group-summary-label material-rules-group-summary-label--bold">${escapeHtml(base)}</span>${suffixHtml}
+    <td colspan="8" class="material-rules-group-summary-cell">
+      <div class="material-rules-group-summary-main">
+        <button type="button" class="material-rules-group-expand-btn" aria-label="${escapeHtml(buttonAriaLabel)}" aria-expanded="${collapsed ? 'false' : 'true'}">${escapeHtml(buttonLabelText)}</button>
+        <span class="material-rules-group-summary-text">
+          <span class="material-rules-group-summary-label material-rules-group-summary-label--bold">${escapeHtml(base)}</span>${suffixHtml}
+          <span class="material-rules-group-summary-count">${escapeHtml(variantCountLabel)}</span>
+        </span>
+      </div>
+      ${badgesHtml}
     </td>
   `;
   const btn = tr.querySelector('.material-rules-group-expand-btn');
   if (btn) {
     const updateRowAriaLabel = (isCollapsed) => {
-      const stateDesc = isCollapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
-      tr.setAttribute('aria-label', `${String(fullLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`);
+      const stateDesc = isCollapsed ? 'collapsed, activate to show variants' : 'expanded, activate to hide variants';
+      tr.setAttribute('aria-label', `${String(fullLabel || '').replace(/"/g, '&quot;')} (${variantCountLabel}, ${stateDesc})`);
     };
     btn.addEventListener('click', () => {
       const collapsedNow = tr.dataset.materialRulesGroupCollapsed === 'true';
       tr.dataset.materialRulesGroupCollapsed = collapsedNow ? 'false' : 'true';
-      btn.textContent = collapsedNow ? 'Collapse' : 'Expand';
-      btn.setAttribute('aria-label', collapsedNow ? 'Collapse' : 'Expand');
+      const nextButtonLabel = collapsedNow ? 'Hide variants' : 'Show variants';
+      btn.textContent = nextButtonLabel;
+      btn.setAttribute('aria-label', `${nextButtonLabel} for ${fullLabel || 'logical part group'}`);
       btn.setAttribute('aria-expanded', collapsedNow ? 'true' : 'false');
       updateRowAriaLabel(!collapsedNow);
       const container = tbody.closest('.material-rules-template-section');
@@ -2428,9 +2516,14 @@ function renderMaterialRulesTemplateSections() {
   groups.innerHTML = '';
   materialRulesLocalGroupCounter = 0;
   const disableActions = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
+  const sections = getMaterialRulesTemplateSections();
+  const validSectionKeys = new Set(sections.map((section) => normalizeMaterialRulesSectionKey(section.repairTypeId)));
+  Array.from(materialRulesTemplateSectionCollapseById.keys()).forEach((key) => {
+    if (!validSectionKeys.has(key)) materialRulesTemplateSectionCollapseById.delete(key);
+  });
 
   const fragment = document.createDocumentFragment();
-  getMaterialRulesTemplateSections().forEach((section) => {
+  sections.forEach((section, sectionIndex) => {
     const sectionEl = document.createElement('section');
     sectionEl.className = 'material-rules-template-section';
     if (section.isUnknown) sectionEl.classList.add('material-rules-template-section--unknown');
@@ -2438,15 +2531,27 @@ function renderMaterialRulesTemplateSections() {
     const sectionTitle = section.isUnknown
       ? `Unknown repair type: ${section.label}`.replace(/:/g, '')
       : section.label.replace(/:/g, '');
+    const sectionKey = normalizeMaterialRulesSectionKey(section.repairTypeId);
+    const sectionCollapsed = getMaterialRulesTemplateSectionCollapsed(section.repairTypeId);
+    const sectionBodyId = `materialRulesTemplateSectionBody-${sectionIndex + 1}`;
+    const estimateText = formatMaterialRulesEstimatedTime(section.defaultTimeMinutes);
     sectionEl.innerHTML = `
       <div class="material-rules-template-section-head">
-        <h4>${escapeHtml(sectionTitle)}</h4>
-        ${section.isUnknown ? '' : `<button type="button" class="btn material-rules-add-template-btn" data-repair-type-id="${escapeHtml(section.repairTypeId)}" ${disableActions ? 'disabled' : ''}>Add Template</button>`}
+        <button type="button" class="material-rules-template-section-toggle" data-repair-type-id="${escapeHtml(section.repairTypeId)}" data-section-key="${escapeHtml(sectionKey)}" aria-expanded="${sectionCollapsed ? 'false' : 'true'}" aria-controls="${escapeHtml(sectionBodyId)}">
+          <span class="material-rules-template-section-toggle-icon" aria-hidden="true">▸</span>
+          <span class="material-rules-template-section-title-wrap">
+            <span class="material-rules-template-section-title">${escapeHtml(sectionTitle)}</span>
+            <span class="material-rules-template-section-estimate">${escapeHtml(estimateText)}</span>
+          </span>
+        </button>
+        ${section.isUnknown || sectionCollapsed ? '' : `<button type="button" class="btn material-rules-add-template-btn" data-repair-type-id="${escapeHtml(section.repairTypeId)}" ${disableActions ? 'disabled' : ''}>Add Template</button>`}
       </div>
+      <div id="${escapeHtml(sectionBodyId)}" class="material-rules-template-section-body" ${sectionCollapsed ? 'hidden' : ''}>
       <div class="material-rules-table-wrap">
         <table class="material-rules-table material-rules-table--templates" aria-label="Templates for ${escapeHtml(sectionTitle)}">
           <thead>
             <tr>
+              <th scope="col">Reorder</th>
               <th scope="col">Product ID</th>
               <th scope="col">Qty/Unit</th>
               <th scope="col">Profile</th>
@@ -2458,6 +2563,7 @@ function renderMaterialRulesTemplateSections() {
           </thead>
           <tbody data-material-rules-template-section-body="true" data-repair-type-id="${escapeHtml(section.repairTypeId)}"></tbody>
         </table>
+      </div>
       </div>
     `;
     const tbody = sectionEl.querySelector('tbody[data-material-rules-template-section-body="true"]');
@@ -2479,7 +2585,7 @@ function renderMaterialRulesTemplateSections() {
           ? section.label
           : (getMaterialRulesSummaryDisplayName(group.rows[0]?.product_id).trim() || '—');
         const suffixLabel = singleGroupInSection && section.label ? '' : getMaterialRulesSummaryBracketSuffix(group.rows);
-        appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, true);
+        appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, true, group.rows);
         group.rows.forEach((row) => {
           appendMaterialRulesTemplateRow(row, {
             tbody,
@@ -2489,6 +2595,7 @@ function renderMaterialRulesTemplateSections() {
         });
       }
     });
+    bindMaterialRulesTableRowReorder(tbody);
     fragment.appendChild(sectionEl);
   });
 
@@ -2814,6 +2921,7 @@ async function fetchMaterialRules(options = {}) {
       ...productIdsFromMeasured,
     ]));
 
+    materialRulesTemplateSectionCollapseById = new Map();
     renderMaterialRulesQuickQuoterTables();
     populateMaterialRulesMeasuredForm(materialRulesState.measuredRules || {});
     const warnings = getMaterialRulesDataWarnings();
@@ -2956,6 +3064,17 @@ function initMaterialRulesView() {
 
   templateGroups?.addEventListener('click', (event) => {
     const target = event.target instanceof Element ? event.target : null;
+    const toggleBtn = target?.closest('.material-rules-template-section-toggle');
+    if (toggleBtn instanceof HTMLButtonElement) {
+      const sectionKey = String(toggleBtn.dataset.sectionKey || '').trim();
+      if (!sectionKey) return;
+      const isCollapsed = materialRulesTemplateSectionCollapseById.has(sectionKey)
+        ? materialRulesTemplateSectionCollapseById.get(sectionKey) === true
+        : true;
+      materialRulesTemplateSectionCollapseById.set(sectionKey, !isCollapsed);
+      renderMaterialRulesTemplateSections();
+      return;
+    }
     const addBtn = target?.closest('.material-rules-add-template-btn');
     if (!(addBtn instanceof HTMLButtonElement)) return;
     const section = addBtn.closest('.material-rules-template-section');

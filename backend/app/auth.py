@@ -171,3 +171,16 @@ def require_role(allowed_roles: List[str]):
         return user_id
 
     return _require
+
+
+def require_super_admin(
+    payload: dict = Depends(get_validated_payload),
+) -> UUID:
+    """
+    Dependency: require the current user to be super admin (JWT email matches SUPER_ADMIN_EMAIL).
+    Use for routes that only super admin may access (e.g. bonus dashboard analytics summary).
+    Raises 403 if not super admin. Returns user_id.
+    """
+    if not _is_super_admin_from_payload(payload):
+        raise HTTPException(status_code=403, detail="Super admin only.")
+    return UUID(payload["sub"])

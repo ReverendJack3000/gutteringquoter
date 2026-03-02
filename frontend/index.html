@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css?v=20260304-cache-bump" />
+  <link rel="stylesheet" href="/styles.css?v=20260306-cache-bump" />
 </head>
 <body>
   <a class="skip-link" href="#workspaceMain">Skip to canvas workspace</a>
@@ -128,6 +128,12 @@
                 <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
               </svg>
               <span>Bonus Admin</span>
+            </div>
+            <div class="profile-menu-item" id="menuItemBonusAnalytics" role="menuitem" hidden aria-label="Bonus dashboard analytics">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+              <span>Bonus dashboard analytics</span>
             </div>
             <div class="profile-menu-item" id="menuItemTechnicianBonus" role="menuitem" hidden>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -861,6 +867,52 @@
       </div>
     </div>
 
+    <div id="view-bonus-analytics" class="app-view hidden" role="region" aria-label="Bonus dashboard analytics">
+      <div class="bonus-analytics-view-container">
+        <header class="bonus-analytics-header">
+          <div class="bonus-analytics-header-left">
+            <button type="button" id="btnBonusAnalyticsBackToCanvas" class="btn-text-icon" aria-label="Back to Canvas">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to Canvas
+            </button>
+          </div>
+          <div class="bonus-analytics-header-title">Bonus dashboard analytics</div>
+          <div class="bonus-analytics-header-right"></div>
+        </header>
+        <main class="bonus-analytics-main" aria-label="Bonus dashboard analytics content">
+          <div id="bonusAnalyticsFilters" class="bonus-analytics-filters" aria-label="Filter results">
+            <label for="bonusAnalyticsDashboardType">Dashboard</label>
+            <select id="bonusAnalyticsDashboardType" class="bonus-analytics-select" aria-label="Filter by dashboard type">
+              <option value="">All</option>
+              <option value="bonus-admin">Bonus Admin</option>
+              <option value="technician-bonus">Technician bonus</option>
+            </select>
+            <label for="bonusAnalyticsFromDate">From</label>
+            <input type="date" id="bonusAnalyticsFromDate" class="bonus-analytics-input" aria-label="From date" />
+            <label for="bonusAnalyticsToDate">To</label>
+            <input type="date" id="bonusAnalyticsToDate" class="bonus-analytics-input" aria-label="To date" />
+            <button type="button" id="btnBonusAnalyticsApply" class="btn bonus-analytics-apply-btn">Apply</button>
+          </div>
+          <div id="bonusAnalyticsLoading" class="bonus-analytics-loading" hidden>Loading…</div>
+          <div id="bonusAnalyticsError" class="bonus-analytics-error" hidden role="alert"></div>
+          <div id="bonusAnalyticsTableWrap" class="bonus-analytics-table-wrap" hidden>
+            <table class="bonus-analytics-table" aria-label="Bonus dashboard view summary">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Dashboard</th>
+                  <th scope="col">Views</th>
+                  <th scope="col">Total time</th>
+                </tr>
+              </thead>
+              <tbody id="bonusAnalyticsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="bonusAnalyticsEmpty" class="bonus-analytics-empty" hidden>No data for the selected filters.</div>
+        </main>
+      </div>
+    </div>
+
     <div id="view-technician-bonus" class="app-view hidden" role="region" aria-label="Technician bonus dashboard">
       <div class="technician-bonus-view-container">
         <header class="technician-bonus-header">
@@ -1386,7 +1438,7 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=20260304-cache-bump"></script>
-  <script src="/pwa.js?v=20260304-cache-bump"></script>
+  <script type="module" src="/app.js?v=20260306-cache-bump"></script>
+  <script src="/pwa.js?v=20260306-cache-bump"></script>
 </body>
 </html>

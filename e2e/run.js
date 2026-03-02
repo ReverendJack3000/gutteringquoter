@@ -454,6 +454,9 @@ async function run() {
       const repairIdInput = document.querySelector('#materialRulesRepairTypesBody .material-rules-repair-id');
       const templateGroups = Array.from(document.querySelectorAll('.material-rules-template-section'));
       const templateSectionBodies = Array.from(document.querySelectorAll('tbody[data-material-rules-template-section-body="true"]'));
+      const templateSectionToggles = Array.from(document.querySelectorAll('.material-rules-template-section-toggle'));
+      const templateSectionBodiesHidden = Array.from(document.querySelectorAll('.material-rules-template-section-body[hidden]'));
+      const templateSectionEstimates = Array.from(document.querySelectorAll('.material-rules-template-section-estimate'));
       const templateRepairTypeInput = document.querySelector('.material-rules-template-section .material-rules-template-repair-type-id');
       const templateProductInput = document.querySelector('.material-rules-template-section .material-rules-template-product-id');
       const templateFixedLengthInput = document.querySelector('.material-rules-template-section .material-rules-template-fixed-length');
@@ -489,6 +492,9 @@ async function run() {
         templateFixedLengthVisible: !!templateFixedLengthInput,
         templateGroupCount: templateGroups.length,
         templateSectionBodyCount: templateSectionBodies.length,
+        templateSectionToggleCount: templateSectionToggles.length,
+        templateCollapsedCount: templateSectionBodiesHidden.length,
+        templateEstimateCount: templateSectionEstimates.length,
         templateAddButtonCount: document.querySelectorAll('.material-rules-add-template-btn').length,
         globalAddTemplateBtnExists: !!document.getElementById('btnMaterialRulesAddTemplate'),
         repairSortHeaderVisible: repairHeaders.some((th) => String(th.textContent || '').trim().toLowerCase() === 'sort'),
@@ -538,8 +544,14 @@ async function run() {
     if (desktopMaterialRulesViewState.templateGroupCount < 2 || desktopMaterialRulesViewState.templateSectionBodyCount < 2) {
       throw new Error('Desktop Material Rules regression: grouped template sections should render per repair type');
     }
-    if (desktopMaterialRulesViewState.templateAddButtonCount < 2) {
-      throw new Error('Desktop Material Rules regression: each repair type section should have an Add Template button');
+    if (desktopMaterialRulesViewState.templateSectionToggleCount < 2) {
+      throw new Error('Desktop Material Rules regression: each repair type section should have a collapse/expand toggle');
+    }
+    if (desktopMaterialRulesViewState.templateCollapsedCount !== desktopMaterialRulesViewState.templateGroupCount) {
+      throw new Error('Desktop Material Rules regression: template sections should be collapsed by default');
+    }
+    if (desktopMaterialRulesViewState.templateEstimateCount !== desktopMaterialRulesViewState.templateGroupCount) {
+      throw new Error('Desktop Material Rules regression: each template section should show estimated time in header');
     }
     if (
       desktopMaterialRulesViewState.repairSortHeaderVisible
@@ -552,9 +564,6 @@ async function run() {
     if (desktopMaterialRulesViewState.repairDragHandleCount < 2) {
       throw new Error('Desktop Material Rules regression: repair type rows should have drag handles');
     }
-    if (desktopMaterialRulesViewState.templateDragHandleCount < 2) {
-      throw new Error('Desktop Material Rules regression: template rows should have drag handles');
-    }
     if (!desktopMaterialRulesViewState.measuredSelectorsAllSelect) {
       throw new Error('Desktop Material Rules regression: measured product controls should all be dropdowns');
     }
@@ -563,6 +572,31 @@ async function run() {
     }
     if (desktopMaterialRulesViewState.hasLabourInMeasured) {
       throw new Error('Desktop Material Rules regression: measured product dropdowns should exclude REP-LAB');
+    }
+    await page.evaluate(() => {
+      for (let i = 0; i < 32; i += 1) {
+        const collapsedToggle = document.querySelector('.material-rules-template-section-toggle[aria-expanded="false"]');
+        if (!(collapsedToggle instanceof HTMLButtonElement)) break;
+        collapsedToggle.click();
+      }
+    });
+    await delay(140);
+    const desktopMaterialRulesExpandedState = await page.evaluate(() => {
+      const templateSectionBodiesHidden = Array.from(document.querySelectorAll('.material-rules-template-section-body[hidden]'));
+      return {
+        templateCollapsedCount: templateSectionBodiesHidden.length,
+        templateAddButtonCount: document.querySelectorAll('.material-rules-add-template-btn').length,
+        templateDragHandleCount: document.querySelectorAll('.material-rules-template-section .material-rules-row-drag-handle').length,
+      };
+    });
+    if (desktopMaterialRulesExpandedState.templateCollapsedCount !== 0) {
+      throw new Error('Desktop Material Rules regression: expand toggles should reveal all section bodies');
+    }
+    if (desktopMaterialRulesExpandedState.templateAddButtonCount < 2) {
+      throw new Error('Desktop Material Rules regression: expanded template sections should show Add Template buttons');
+    }
+    if (desktopMaterialRulesExpandedState.templateDragHandleCount < 2) {
+      throw new Error('Desktop Material Rules regression: template rows should have drag handles');
     }
     const desktopMaterialRulesReorderState = await page.evaluate(async () => {
       const legacyTemplateId = '11111111-1111-1111-1111-111111111111';

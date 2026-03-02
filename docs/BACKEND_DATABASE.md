@@ -201,6 +201,8 @@ Three tables support bonus-period math, job financials/callbacks, and technician
 
 **Lost shares to CSG (60.8):** Voided shares (e.g. seller share lost due to estimation accuracy fail, executor share voided by poor_workmanship callback, seller share voided by bad_scoping callback) **revert to CSG (the House)**, not to other technicians. The calculation pipeline zeros the affected tech’s share; that amount is not reallocated to anyone else.
 
+**Bonus dashboard view analytics (59.30):** Table **`public.bonus_dashboard_view_events`** stores one row per “view session” of the Bonus Admin or Technician bonus dashboard: who viewed, which dashboard, when they started, and how long they stayed. Used so super admin can see per-user view count and total duration. Columns: `id` (uuid PK), `user_id` (uuid NOT NULL → auth.users.id), `dashboard_type` (text NOT NULL, one of `bonus-admin`, `technician-bonus`), `started_at` (timestamptz NOT NULL), `duration_seconds` (numeric NOT NULL), `created_at` (timestamptz default now()). RLS off. Migration: `add_bonus_dashboard_view_events`.
+
 ---
 
 ## Staff → technician_id mapping (Section 59.2)
