@@ -4327,6 +4327,29 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
 .material-rules-group-summary-label--bold {
   font-weight: 700;
 }
+
+/* Part Templates profile/size dropdown colours (match parts thumbnails; 63.19.8) */
+.material-rules-template-profile[data-profile="SC"] {
+  background: #FDED3D;
+  color: #000000;
+  border-color: #e0d535;
+}
+.material-rules-template-profile[data-profile="CL"] {
+  background: #000000;
+  color: #FDED3D;
+  border-color: #333;
+}
+.material-rules-template-size[data-size="65"] {
+  background: #000000;
+  color: #ffffff;
+  border-color: #333;
+}
+.material-rules-template-size[data-size="80"] {
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #444;
+}
+
 .material-rules-grouped-member--hidden {
   display: none;
 }

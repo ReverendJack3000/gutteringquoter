@@ -2324,6 +2324,21 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
     </td>
   `;
 
+  const profileSelect = tr.querySelector('.material-rules-template-profile');
+  const sizeSelect = tr.querySelector('.material-rules-template-size');
+  if (profileSelect) {
+    profileSelect.dataset.profile = (conditionProfile === 'SC' || conditionProfile === 'CL') ? conditionProfile : 'any';
+    profileSelect.addEventListener('change', () => {
+      profileSelect.dataset.profile = profileSelect.value || 'any';
+    });
+  }
+  if (sizeSelect) {
+    sizeSelect.dataset.size = (conditionSize === '65' || conditionSize === '80') ? conditionSize : 'any';
+    sizeSelect.addEventListener('change', () => {
+      sizeSelect.dataset.size = sizeSelect.value || 'any';
+    });
+  }
+
   const markRowDirty = () => {
     tr.dataset.rowDirty = 'true';
   };
@@ -2417,10 +2432,9 @@ function renderMaterialRulesTemplateSections() {
     sectionEl.className = 'material-rules-template-section';
     if (section.isUnknown) sectionEl.classList.add('material-rules-template-section--unknown');
     sectionEl.dataset.repairTypeId = section.repairTypeId;
-    const sectionTitleRaw = section.isUnknown
-      ? `Unknown repair type: ${section.label}`
-      : `${section.label} (${section.repairTypeId})`;
-    const sectionTitle = sectionTitleRaw.replace(/:/g, '');
+    const sectionTitle = section.isUnknown
+      ? `Unknown repair type: ${section.label}`.replace(/:/g, '')
+      : section.label.replace(/:/g, '');
     sectionEl.innerHTML = `
       <div class="material-rules-template-section-head">
         <h4>${escapeHtml(sectionTitle)}</h4>

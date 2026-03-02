@@ -94,6 +94,9 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 | 63 | 63.18 | Material Rules dashboard UX improvements (desktop-only): clarity, labels, grouping, feedback; plan in docs/plans/MATERIAL_RULES_DASHBOARD_UX_PLAN.md. |
 | 63 | 63.19 | Profile/Size as material rule: single logical part display in Part Templates (desktop); optional profile/size in quote modal; plan in docs/plans/PLAN_QUICK_QUOTER_PROFILE_AS_MATERIAL_RULE.md. |
 | 63 | 63.19.3 | Desktop QA + Railway safety sign-off for 63.19 (Part Templates grouped display; 63.19.2.1 done). No backend/schema changes; desktop-only. |
+| 63 | 63.19.7 | Part Templates summary row titles: product name (minus profile/mm) instead of product ID; plan: docs/plans/PLAN_MATERIAL_RULES_SUMMARY_ROW_PRODUCT_NAME.md. |
+| 63 | 63.19.8 | Part Templates profile/size dropdown colours to match parts thumbnails (Storm Cloud/Classic/65mm/80mm); plan: docs/plans/PLAN_MATERIAL_RULES_PROFILE_SIZE_DROPDOWN_COLORS.md. |
+| 63 | 63.19.9 | Part Templates section titles: label only (remove repair_type_id from heading); plan: docs/plans/PLAN_MATERIAL_RULES_SECTION_TITLE_LABEL_ONLY.md. |
 ---
 
 ## Locked decisions
