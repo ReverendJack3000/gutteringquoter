@@ -4323,6 +4323,10 @@ body[data-viewport-mode="mobile"] .auth-forgot-link {
   font-weight: 500;
   color: #374151;
 }
+
+.material-rules-group-summary-label--bold {
+  font-weight: 700;
+}
 .material-rules-grouped-member--hidden {
   display: none;
 }

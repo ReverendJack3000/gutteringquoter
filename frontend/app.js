@@ -4,7 +4,7 @@
 
 import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260226-loadspeed2';
 
-const STATIC_ASSET_VERSION = '20260302-display-group-id-grouping';
+const STATIC_ASSET_VERSION = '20260303-summary-row-product-name';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {

@@ -15,8 +15,11 @@ When we hit an issue that might come up again, add an entry here so the project 
 ## Material Rules: "Failed to load quick quoter material rules" – 2026-03
 
 - **Symptom / context:** Opening the Material Rules view (desktop admin) shows the error "Failed to load quick quoter material rules". The view may show the status message and the Measured-Length / Quick Quoter sections fail to load.
-- **Cause:** The backend loads Quick Quoter rules by selecting columns including `updated_by` from `quick_quoter_repair_types` and `quick_quoter_part_templates`. If the Material Rules migration has not been applied to your Supabase project, those columns do not exist and the query fails (500).
-- **Fix / workaround:** Run the Material Rules migration in your Supabase project (the one used by `SUPABASE_URL` in `backend/.env`). In Supabase Dashboard → SQL Editor, run the full contents of **`docs/material_rules_migration.sql`**. That creates `public.measured_material_rules` (if missing), seeds the default row, and adds `updated_by` to `quick_quoter_repair_types` and `quick_quoter_part_templates`. Then reload the Material Rules page. For production (Railway), use the same SQL in the production Supabase project. If the error persists, check the backend logs for the actual exception (e.g. missing table or RLS).
+- **Cause:** The backend loads Quick Quoter rules by selecting columns including `updated_by` and `display_group_id` from `quick_quoter_repair_types` and `quick_quoter_part_templates`. If those columns do not exist in your Supabase project, the query fails (500). This often happens after a deploy when the DB schema was not updated.
+- **Fix / workaround:** In Supabase Dashboard → SQL Editor (use the project that production Railway uses via `SUPABASE_URL`), run one of:
+  1. **Quick fix (quick-quoter only):** Run the full contents of **`docs/material_rules_add_missing_columns.sql`**. That adds `updated_by` and `display_group_id` if missing. Then reload the Material Rules page.
+  2. **Full migration (if Measured-Length rules also fail or table missing):** Run the full contents of **`docs/material_rules_migration.sql`**. That creates `public.measured_material_rules` (if missing), seeds the default row, and adds `updated_by` to both quick quoter tables. Then run `material_rules_add_missing_columns.sql` if `display_group_id` is still missing.
+  If the error persists, check Railway (or backend) logs for the actual exception (e.g. column name, RLS).
 
 ---
 
@@ -212,6 +215,8 @@ When we hit an issue that might come up again, add an entry here so the project 
 - **Symptom / context:** After deploying a frontend change (e.g. Material Rules grouping by display_group_id), production still shows the old behaviour. Backend is up to date; API may return the new data; hard refresh doesn’t help.
 - **Cause:** The app is a PWA. The service worker caches shell assets (e.g. `index.html`, `app.js`, `modules/admin-products-bonus.js`) under a versioned URL (`?v=ASSET_VERSION`). If **ASSET_VERSION** (and **STATIC_ASSET_VERSION** in app.js) is not bumped when you change those files, browsers keep using the previously cached JS/CSS/HTML.
 - **Fix / workaround:** Bump the asset version so cached shell URLs change and the browser fetches the new files. Update **both**: (1) `frontend/service-worker.js` → `const ASSET_VERSION = '...'` and (2) `frontend/app.js` → `const STATIC_ASSET_VERSION = '...'` to the same new value (e.g. a new date or feature suffix). Deploy. Then: close all tabs for the app (or use “Unregister” for the site in DevTools → Application → Service Workers), reopen the app so the new service worker installs and caches the new assets. Optional: ask users to do the same if they report stale UI.
+- **Local iteration:** While testing frontend changes locally, avoid bumping the version on every edit: in DevTools → Application → Service Workers, check **"Bypass for network"** so requests skip the cache, or use a hard refresh (Cmd/Ctrl+Shift+R). Save the version bump for the actual deployment.
+- **New tab / new window:** After bumping the version, opening the app in a **new browser tab** (or new window) often loads the new assets immediately, since the new tab has no prior cache for the updated script URLs.
 
 ---
 

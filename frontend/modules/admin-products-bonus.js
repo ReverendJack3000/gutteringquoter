@@ -1935,6 +1935,24 @@ function getMaterialRulesProductNameOnly(productId) {
   return name || id;
 }
 
+/**
+ * Base product name for Part Templates summary row: name with profile/mm stripped.
+ * Strip rule: whole-word removal of Storm Cloud, Classic, SC, CL, 65mm, 80mm (and trailing " 65", " 80").
+ * Fallback: productId when catalog missing, name missing, or result empty.
+ * Used by formatMaterialRulesGroupSummaryLabel so summary shows e.g. "3m Gutter Marley" not "GUT-SC-MAR-3M".
+ */
+function getMaterialRulesSummaryDisplayName(productId) {
+  const id = String(productId || '').trim();
+  if (!id) return '';
+  const meta = materialRulesState.productMetaById.get(id);
+  let name = String(meta?.name || '').trim();
+  if (!name) return id;
+  // Whole-word and trailing token strip (profile + size) so base name doesn't duplicate bracketed suffix
+  const profileSizeTokens = /\b(Storm Cloud|Classic|SC|CL|65mm|80mm)\b|(\s|,|-)(65|80)(?=\s|$|,|-)/gi;
+  name = name.replace(profileSizeTokens, '').replace(/\s+/g, ' ').trim().replace(/^[,-\s]+|[,-\s]+$/g, '');
+  return name.length > 0 ? name : id;
+}
+
 function getMaterialRulesRepairTypeSelectOptionsHtml(selectedId) {
   const selected = String(selectedId || '').trim();
   const ids = Array.from(new Set((materialRulesState.repairTypes || []).map((row) => String(row?.id || '').trim()).filter(Boolean))).sort();
@@ -2015,9 +2033,9 @@ function getMaterialRulesTemplateSections() {
 function getMaterialRulesTemplateGroupsByDisplayGroupId(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
   const byKey = new Map();
-  rows.forEach((row) => {
+  rows.forEach((row, index) => {
     const key = row.display_group_id != null ? String(row.display_group_id) : (row.id != null ? String(row.id) : null);
-    const k = key || `__single_${row.id || Math.random()}`;
+    const k = key || `__single_new_${index}`;
     if (!byKey.has(k)) byKey.set(k, []);
     byKey.get(k).push(row);
   });
@@ -2027,26 +2045,40 @@ function getMaterialRulesTemplateGroupsByDisplayGroupId(rows) {
   }));
 }
 
+/** Profile code → human-readable label for summary bracket (SC→Storm, CL→Classic). Unknown codes passed through. */
+const MATERIAL_RULES_PROFILE_DISPLAY = { SC: 'Storm', CL: 'Classic' };
+
 /**
- * Format a short label for a group of profile/size variant rows, e.g. "EC (SC/CL)" or "EC-SC-MAR / EC-CL-MAR".
+ * Human-readable bracket suffix for multi-row groups, e.g. " (Classic/Storm, 65mm/80mm)".
+ * Returns empty string for single-row or when no profile/size variants.
+ */
+function getMaterialRulesSummaryBracketSuffix(rows) {
+  if (!Array.isArray(rows) || rows.length <= 1) return '';
+  const profileLabels = new Set();
+  const sizeLabels = new Set();
+  rows.forEach((r) => {
+    const p = String(r?.condition_profile || '').trim().toUpperCase();
+    if (p) profileLabels.add(MATERIAL_RULES_PROFILE_DISPLAY[p] || p);
+    const s = r?.condition_size_mm != null ? String(r.condition_size_mm).trim() : '';
+    if (s) sizeLabels.add(s.includes('mm') ? s : `${s}mm`);
+  });
+  const parts = [];
+  if (profileLabels.size > 0) parts.push(Array.from(profileLabels).sort().join('/'));
+  if (sizeLabels.size > 0) parts.push(Array.from(sizeLabels).sort().join('/'));
+  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+}
+
+/**
+ * Format a short label for a group of profile/size variant rows, e.g. "3m Gutter Marley (Classic/Storm)".
+ * Uses product name (minus profile/mm) as base; keeps profile/mm in brackets with human-readable labels.
  */
 function formatMaterialRulesGroupSummaryLabel(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return '';
-  if (rows.length === 1) return String(rows[0]?.product_id || '').trim() || '—';
-  const profiles = new Set();
-  const sizes = new Set();
-  rows.forEach((r) => {
-    const p = String(r?.condition_profile || '').trim().toUpperCase();
-    if (p) profiles.add(p);
-    const s = r?.condition_size_mm != null ? String(r.condition_size_mm).trim() : '';
-    if (s) sizes.add(s);
-  });
-  const parts = [];
-  if (profiles.size > 0) parts.push(Array.from(profiles).sort().join('/'));
-  if (sizes.size > 0) parts.push(Array.from(sizes).sort().join('/') + 'mm');
-  const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
-  const firstProductId = String(rows[0]?.product_id || '').trim();
-  return (firstProductId || '—') + suffix;
+  const productId = rows[0]?.product_id;
+  const baseName = getMaterialRulesSummaryDisplayName(productId).trim() || '—';
+  if (rows.length === 1) return baseName;
+  const bracketSuffix = getMaterialRulesSummaryBracketSuffix(rows);
+  return baseName + bracketSuffix;
 }
 
 function renderMaterialRulesMeasuredProductSelects(rules = null) {
@@ -2098,6 +2130,7 @@ function getMaterialRulesDataWarnings() {
 }
 
 let materialRulesLocalTemplateCounter = 0;
+let materialRulesLocalGroupCounter = 0;
 
 function getMaterialRulesDragHandleHtml(label) {
   return `
@@ -2320,29 +2353,37 @@ function appendMaterialRulesTemplateRow(row = {}, options = {}) {
   tbody.appendChild(tr);
 }
 
-/** Append a grouped summary row (one logical part). No data-material-rules-template-row so collect ignores it. */
-function appendMaterialRulesTemplateGroupSummaryRow(tbody, summaryLabel, groupId, collapsed) {
+/**
+ * Append a grouped summary row (one logical part). No data-material-rules-template-row so collect ignores it.
+ * baseLabel is shown in bold (product name); suffixLabel (e.g. " (Classic/Storm)") in normal weight. Colons are stripped from both.
+ */
+function appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, collapsed) {
   if (!(tbody instanceof HTMLTableSectionElement)) return;
+  const stripColons = (s) => String(s || '').replace(/:/g, '').trim();
+  const base = stripColons(baseLabel);
+  const suffix = stripColons(suffixLabel);
+  const fullLabel = base + (suffix || '');
   const tr = document.createElement('tr');
   tr.className = 'material-rules-group-summary-row';
   tr.dataset.materialRulesGroupSummary = 'true';
   tr.dataset.materialRulesGroupId = groupId;
   tr.dataset.materialRulesGroupCollapsed = collapsed ? 'true' : 'false';
   const stateDesc = collapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
-  const ariaLabel = `${String(summaryLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`;
+  const ariaLabel = `${String(fullLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`;
   tr.setAttribute('aria-label', ariaLabel);
   const expandLabel = collapsed ? 'Expand' : 'Collapse';
+  const suffixHtml = suffix ? `<span class="material-rules-group-summary-label">${escapeHtml(suffix)}</span>` : '';
   tr.innerHTML = `
     <td colspan="7" class="material-rules-group-summary-cell">
       <button type="button" class="material-rules-group-expand-btn" aria-label="${escapeHtml(expandLabel)}" aria-expanded="${collapsed ? 'false' : 'true'}">${collapsed ? 'Expand' : 'Collapse'}</button>
-      <span class="material-rules-group-summary-label">${escapeHtml(summaryLabel)}</span>
+      <span class="material-rules-group-summary-label material-rules-group-summary-label--bold">${escapeHtml(base)}</span>${suffixHtml}
     </td>
   `;
   const btn = tr.querySelector('.material-rules-group-expand-btn');
   if (btn) {
     const updateRowAriaLabel = (isCollapsed) => {
       const stateDesc = isCollapsed ? 'collapsed, click button to expand' : 'expanded, click button to collapse';
-      tr.setAttribute('aria-label', `${String(summaryLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`);
+      tr.setAttribute('aria-label', `${String(fullLabel || '').replace(/"/g, '&quot;')} (${stateDesc})`);
     };
     btn.addEventListener('click', () => {
       const collapsedNow = tr.dataset.materialRulesGroupCollapsed === 'true';
@@ -2367,6 +2408,7 @@ function renderMaterialRulesTemplateSections() {
   const groups = getMaterialRulesTemplateGroupsContainer();
   if (!groups) return;
   groups.innerHTML = '';
+  materialRulesLocalGroupCounter = 0;
   const disableActions = materialRulesState.loading || materialRulesState.savingQuickQuoter || materialRulesState.savingMeasured;
 
   const fragment = document.createDocumentFragment();
@@ -2375,9 +2417,10 @@ function renderMaterialRulesTemplateSections() {
     sectionEl.className = 'material-rules-template-section';
     if (section.isUnknown) sectionEl.classList.add('material-rules-template-section--unknown');
     sectionEl.dataset.repairTypeId = section.repairTypeId;
-    const sectionTitle = section.isUnknown
+    const sectionTitleRaw = section.isUnknown
       ? `Unknown repair type: ${section.label}`
       : `${section.label} (${section.repairTypeId})`;
+    const sectionTitle = sectionTitleRaw.replace(/:/g, '');
     sectionEl.innerHTML = `
       <div class="material-rules-template-section-head">
         <h4>${escapeHtml(sectionTitle)}</h4>
@@ -2410,13 +2453,16 @@ function renderMaterialRulesTemplateSections() {
     templateGroups.forEach((group) => {
       const groupId = group.rows[0]?.display_group_id != null
         ? String(group.rows[0].display_group_id)
-        : (group.rows[0]?.id != null ? String(group.rows[0].id) : `g-${Math.random()}`);
+        : (group.rows[0]?.id != null ? String(group.rows[0].id) : `g-new-${materialRulesLocalGroupCounter++}`);
       if (group.rows.length === 1) {
         appendMaterialRulesTemplateRow(group.rows[0], { tbody, repairTypeId: section.repairTypeId });
       } else {
         // When section has only one group, show repair type label (e.g. "Bracket Replacement") so admin sees one row per type
-        const summaryDisplayLabel = singleGroupInSection && section.label ? section.label : group.summaryLabel;
-        appendMaterialRulesTemplateGroupSummaryRow(tbody, summaryDisplayLabel, groupId, true);
+        const baseLabel = singleGroupInSection && section.label
+          ? section.label
+          : (getMaterialRulesSummaryDisplayName(group.rows[0]?.product_id).trim() || '—');
+        const suffixLabel = singleGroupInSection && section.label ? '' : getMaterialRulesSummaryBracketSuffix(group.rows);
+        appendMaterialRulesTemplateGroupSummaryRow(tbody, baseLabel, suffixLabel, groupId, true);
         group.rows.forEach((row) => {
           appendMaterialRulesTemplateRow(row, {
             tbody,
