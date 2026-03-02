@@ -1937,6 +1937,13 @@ function getQuoteLineTotal(row) {
   return parseCurrencyNumber(totalEl ? totalEl.textContent : row.cells[5]?.textContent);
 }
 
+/** True if row is a conditional/inferred product (BRK-, SCR-SS, SCL-, ACL-). Used to avoid re-calling API on qty edit (would merge with gutter and double total). */
+function isInferredProductRow(row) {
+  if (!row?.dataset?.assetId) return false;
+  const id = String(row.dataset.assetId).toUpperCase();
+  return id.startsWith('BRK-') || id === 'SCR-SS' || id.startsWith('SCL-') || id.startsWith('ACL-');
+}
+
 function syncMobileQuoteLineSummaries() {
   const isMobile = isMobileQuoteViewport();
   const tableBody = document.getElementById('quoteTableBody');
@@ -2278,7 +2285,18 @@ function syncMobileQuoteLineSummaries() {
             const next = Math.max(0, current + delta);
             setQuoteRowStoredQty(row, next);
             updateStepperValue();
-            calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+            // 50.19 follow-up: inferred rows (BRK/SCR/SCL/ACL) must not trigger API — backend would merge with gutter and double total
+            if (isInferredProductRow(row)) {
+              const unitPrice = getQuoteLineUnitPrice(row);
+              const lineTotal = Math.round(next * unitPrice * 100) / 100;
+              const totalVal = row.cells[5]?.querySelector('.quote-cell-total-value');
+              if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
+              else if (row.cells[5]) row.cells[5].textContent = formatCurrency(lineTotal);
+              recalcQuoteTotalsFromTableBody();
+              syncMobileQuoteLineSummaries();
+            } else {
+              calculateAndDisplayQuote().then(() => syncMobileQuoteLineSummaries());
+            }
           };
         }
         minusBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); applyStep(-step); });
@@ -4801,12 +4819,24 @@ async function calculateAndDisplayQuote() {
       const qtyInput = row.querySelector('.quote-line-qty-input');
       if (qtyInput) {
         qtyInput.addEventListener('change', () => {
-          setQuoteRowStoredQty(row, parseFloat(qtyInput.value) || 0);
-          if (row.dataset.inferred === 'true') {
-            delete row.dataset.inferred;
-            row.removeAttribute('data-inferred');
+          const next = parseFloat(qtyInput.value) || 0;
+          setQuoteRowStoredQty(row, next);
+          // 50.19 follow-up: inferred rows must not trigger API (would merge with gutter and double total)
+          if (isInferredProductRow(row)) {
+            const unitPrice = getQuoteLineUnitPrice(row);
+            const lineTotal = Math.round(next * unitPrice * 100) / 100;
+            const totalVal = row.cells[5]?.querySelector('.quote-cell-total-value');
+            if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
+            else if (row.cells[5]) row.cells[5].textContent = formatCurrency(lineTotal);
+            recalcQuoteTotalsFromTableBody();
+            syncMobileQuoteLineSummaries();
+          } else {
+            if (row.dataset.inferred === 'true') {
+              delete row.dataset.inferred;
+              row.removeAttribute('data-inferred');
+            }
+            calculateAndDisplayQuote();
           }
-          calculateAndDisplayQuote();
         });
       }
       return row;

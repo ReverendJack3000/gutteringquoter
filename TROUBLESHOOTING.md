@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Quote modal: total doubles when incrementing bracket (or inferred) qty with stepper – 2026-03 (50.19 follow-up)
+
+- **Symptom / context:** After the 50.19 fix, opening the quote modal shows the correct total (e.g. brackets 13 × price). But when the user increments the bracket qty by 1 (e.g. 13→14) using the mobile stepper (or desktop qty input), the total jumps or roughly doubles instead of increasing by one unit price.
+- **Cause:** Changing qty triggered `calculateAndDisplayQuote()`, which builds the API payload from `getElementsFromQuoteTable()`. The bracket row was not skipped (it had a manual override so `data-inferred` was not set). So we sent **gutter** (from section header) **and** bracket 14. The backend merges by assetId (gutter→13 brackets + standalone 14 = 27), so the response had bracket qty 27 and a much higher line total.
+- **Fix / workaround:** For inferred-product rows (BRK-, SCR-SS, SCL-, ACL-), when the user changes qty via the stepper or qty input, **do not** call `calculateAndDisplayQuote()`. Instead: update the row’s line total cell locally (`next × getQuoteLineUnitPrice(row)`), then call `recalcQuoteTotalsFromTableBody()` and `syncMobileQuoteLineSummaries()`. Helper `isInferredProductRow(row)` identifies these rows. See `frontend/app.js`: stepper `applyStep` (material, non-labour, non-metres) and `renderMaterialRow` qty input `change` handler. If the user later triggers a full recalc (e.g. by changing gutter length), the inferred line will show the backend qty again (local edit is “until next recalc”).
+
+---
+
 ## Mobile: element disappears when colour is changed (still selectable) – 2026-03
 
 - **Symptom / context:** On mobile only, after changing an element’s colour (e.g. from the floating toolbar palette), the element is no longer visible but remains selectable (tap on the same area still selects it). Desktop shows the tinted element correctly.
