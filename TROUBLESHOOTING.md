@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Local changes not visible at http://127.0.0.1:8000 (desktop or Cursor browser) – 2026-03
+
+- **Symptom / context:** You changed frontend code (e.g. Repair Types “Default time (min)” column, coloured profile/size dropdowns) but loading `http://127.0.0.1:8000/?viewport=desktop` still shows the old UI. The server is local and files are saved.
+- **Cause:** (1) Backend sends **long-lived cache headers** for versioned static assets: requests with `?v=` get `Cache-Control: public, max-age=31536000, immutable`, so the browser keeps using cached JS/CSS. (2) The version in `index.html` and in `app.js` (toolbar import, STATIC_ASSET_VERSION) is not bumped when you edit files, so the same URL keeps returning cached content. (3) If the **service worker** was ever registered (e.g. PWA tested), it serves shell assets with stale-while-revalidate, so you see old files until the SW cache is updated or cleared.
+- **Fix / workaround:** (1) **Hard reload with cache disabled:** Open DevTools → Network → check “Disable cache” → reload (Ctrl+Shift+R / Cmd+Shift+R). (2) **Unregister the service worker:** Application → Service Workers → Unregister for this origin, then hard reload. (3) **Bump version to force new URLs:** In `frontend/index.html` change the `?v=` on the stylesheet and script tags (e.g. to a new string or timestamp); optionally in `frontend/app.js` bump `STATIC_ASSET_VERSION` and the toolbar import `?v=`, then reload. (4) Or use a private/incognito window or another browser profile. Full investigation: **`docs/plans/2026-03-local-changes-not-visible-investigation.md`**.
+
+---
+
 ## Quick Quoter default time (63.20): migration required in production – 2025-03
 
 - **Symptom / context:** Material Rules Repair Types may load but the "Default time (min)" column will not persist or resolve may not return `suggested_labour_minutes` if the database is missing the column.

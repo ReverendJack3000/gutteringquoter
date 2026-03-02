@@ -1,5 +1,5 @@
 const SW_VERSION = '3';
-const ASSET_VERSION = '20260303-summary-row-product-name';
+const ASSET_VERSION = '20260303-cache-bump';
 const CACHE_PREFIX = 'quote-app';
 const SHELL_CACHE = `${CACHE_PREFIX}-shell-v${SW_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v${SW_VERSION}`;

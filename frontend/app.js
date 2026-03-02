@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260226-loadspeed2';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260303-cache-bump';
 
-const STATIC_ASSET_VERSION = '20260303-summary-row-product-name';
+const STATIC_ASSET_VERSION = '20260303-cache-bump';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
