@@ -1,6 +1,6 @@
 # Quote App – Repair Blueprint MVP
 
-Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG. PWA support is enabled by default (service worker, Add to Home Screen, cached shell); set `PWA_ENABLED=false` to disable. The same deployment serves both desktop and mobile layouts automatically.
+Desktop-first web app: upload a property photo → get a technical drawing blueprint → drag Marley guttering products onto it (Canva-style move, resize, rotate) → export PNG. PWA is disabled by default (no service worker cache during development); set `PWA_ENABLED=true` to enable (Add to Home Screen, cached shell). The same deployment serves both desktop and mobile layouts automatically.
 
 ## Stack
 
@@ -28,7 +28,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
    cd backend
    cp .env.example .env
    # Edit .env: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from Supabase dashboard → Settings → API
-   # Optional: set PWA_ENABLED=false to disable PWA (enabled by default)
+   # Optional: set PWA_ENABLED=true to enable PWA (disabled by default)
    ```
 
 3. **Run the local server (single command)**
@@ -46,7 +46,7 @@ Desktop-first web app: upload a property photo → get a technical drawing bluep
 
    ```bash
    HOST=0.0.0.0 PORT=8000 ./scripts/run-server.sh
-   # To disable PWA: PWA_ENABLED=false ./scripts/run-server.sh
+   # To enable PWA: PWA_ENABLED=true ./scripts/run-server.sh
    ```
 
    **Alternative (manual):** from the `backend` directory run:
@@ -141,17 +141,16 @@ To deploy to production:
 
 1. Push the repo to GitHub (or GitLab/Bitbucket).
 2. Create a project at [railway.app](https://railway.app) and deploy from the repo.
-3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`, `PWA_ENABLED`, `SUPER_ADMIN_EMAIL`, `SERVICEM8_COMPANY_EMAIL`, `SERVICEM8_COMPANY_USER_ID`, `APP_BASE_URL`). `APP_BASE_URL` should be your live Railway app origin (for example `https://quote-app-production.up.railway.app`) so ServiceM8 OAuth callback URLs are generated correctly and match the Return URL in ServiceM8 Store Connect exactly. Optional ServiceM8 company token: set `SERVICEM8_COMPANY_EMAIL` to the ServiceM8 account owner email (e.g. `jack@clearstreamguttering.co.nz`); that user connects ServiceM8 once and all app users can Add to Job / Create New Job. Alternatively set `SERVICEM8_COMPANY_USER_ID` to the Supabase user UUID. For the optional **job_performance sync** (Section 59, run via cron or `scripts/run_job_performance_sync.py`), the company user must have connected ServiceM8 at least once; the app requests OAuth scopes `read_jobs` and `read_job_materials` by default, which the sync needs. See **[docs/SERVICEM8_SYNC.md](docs/SERVICEM8_SYNC.md)** for token expiry handling, recommended sync frequency, and additional sync/backfill. **Bonus:** The bonus labour rate is read from `public.company_settings` (row id=1, column `bonus_labour_rate`); optional env `BONUS_LABOUR_RATE` overrides when set (e.g. if company_settings is missing). No other bonus-specific env or permissions are required.
+3. Set environment variables in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and optionally `SUPABASE_JWT_SECRET`, `PWA_ENABLED=true` to enable PWA, `SUPER_ADMIN_EMAIL`, `SERVICEM8_COMPANY_EMAIL`, `SERVICEM8_COMPANY_USER_ID`, `APP_BASE_URL`). `APP_BASE_URL` should be your live Railway app origin (for example `https://quote-app-production.up.railway.app`) so ServiceM8 OAuth callback URLs are generated correctly and match the Return URL in ServiceM8 Store Connect exactly. Optional ServiceM8 company token: set `SERVICEM8_COMPANY_EMAIL` to the ServiceM8 account owner email (e.g. `jack@clearstreamguttering.co.nz`); that user connects ServiceM8 once and all app users can Add to Job / Create New Job. Alternatively set `SERVICEM8_COMPANY_USER_ID` to the Supabase user UUID. For the optional **job_performance sync** (Section 59, run via cron or `scripts/run_job_performance_sync.py`), the company user must have connected ServiceM8 at least once; the app requests OAuth scopes `read_jobs` and `read_job_materials` by default, which the sync needs. See **[docs/SERVICEM8_SYNC.md](docs/SERVICEM8_SYNC.md)** for token expiry handling, recommended sync frequency, and additional sync/backfill. **Bonus:** The bonus labour rate is read from `public.company_settings` (row id=1, column `bonus_labour_rate`); optional env `BONUS_LABOUR_RATE` overrides when set (e.g. if company_settings is missing). No other bonus-specific env or permissions are required.
 4. The repo includes a **Procfile** and **nixpacks.toml** so Railway runs `uvicorn` from `backend/` and serves the frontend.
 5. Before deploy, run Supabase migration **`docs/material_rules_migration.sql`** (creates `public.measured_material_rules` and quick-quoter audit columns). No new Railway env vars are required for this feature.
 
 Full steps, env vars, and troubleshooting: **[docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)**. After deploy, the live app URL is shown in the Railway dashboard (e.g. `https://quote-app-production.up.railway.app`).
 
-## PWA rollout (enabled by default)
+## PWA rollout (disabled by default)
 
-- **Default behavior:** PWA is on (service worker registered, Add to Home Screen, cached shell). Same app for desktop and mobile; both benefit from faster repeat loads and optional install.
-- **Disable PWA:** set `PWA_ENABLED=false` in the server environment and redeploy/restart. On next app load, client logic unregisters service workers and clears Quote App PWA caches.
-- **Scope:** app shell/assets are cached for offline load; `/api/*` remains network-only.
+- **Default behavior:** PWA is off (no service worker, no install prompt). Set `PWA_ENABLED=true` in the server environment when you want to enable (Add to Home Screen, cached shell) and redeploy/restart.
+- **Scope:** when enabled, app shell/assets are cached for offline load; `/api/*` remains network-only.
 
 ## Phone homescreen testing
 

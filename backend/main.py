@@ -1029,7 +1029,7 @@ def api_config():
     """Public frontend config (Supabase auth values + PWA rollout flag). Safe to expose."""
     url = os.environ.get("SUPABASE_URL", "").strip()
     anon = os.environ.get("SUPABASE_ANON_KEY", "").strip()
-    pwa_enabled = _env_flag("PWA_ENABLED", True)
+    pwa_enabled = _env_flag("PWA_ENABLED", False)
     return {"supabaseUrl": url or None, "anonKey": anon or None, "pwaEnabled": pwa_enabled}
 
 
