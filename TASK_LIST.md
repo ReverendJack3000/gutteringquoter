@@ -58,10 +58,8 @@ Task list for the property photo → repair blueprint web app (desktop-first, 2/
 
 ## 🔁 Current Working Branch
 
-- Branch: feature/schedule-now-61-9
-- Based on: main
-- Status: In Progress
-- Related Tasks: 61.9 (Schedule now)
+- Branch: main
+- Status: Stable
 
 **Uncompleted tasks (by section):**
 
