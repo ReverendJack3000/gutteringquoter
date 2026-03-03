@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260304-cache-bump';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260305-cache-bump';
 
-const STATIC_ASSET_VERSION = '20260304-cache-bump';
+const STATIC_ASSET_VERSION = '20260305-cache-bump';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -263,8 +263,8 @@ function getCurrentUserId() {
 }
 
 /**
- * Fetch /api/me and set authState.isSuperAdmin, then refresh auth UI (menu visibility for bonus/admin).
- * Call after setAuthFromSession when token is present so super admin can access Bonus Admin and My Bonus.
+ * Fetch /api/me and set authState.isSuperAdmin and authState.role, then refresh auth UI (menu visibility for bonus/admin).
+ * Call after setAuthFromSession when token is present. Role from API is authoritative so profile menu shows correct items per role.
  */
 async function fetchMeAndUpdateAuth() {
   if (!authState.token) {
@@ -276,6 +276,9 @@ async function fetchMeAndUpdateAuth() {
     const r = await fetch('/api/me', { headers: getAuthHeaders() });
     const data = r.ok ? await r.json().catch(() => ({})) : {};
     authState.isSuperAdmin = !!data.is_super_admin;
+    if (r.ok && data && data.hasOwnProperty('role')) {
+      authState.role = normalizeAppRole(data.role);
+    }
   } catch (_) {
     authState.isSuperAdmin = false;
   }
