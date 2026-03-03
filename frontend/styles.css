@@ -7210,6 +7210,45 @@ body[data-viewport-mode="mobile"] .quick-quoter-list {
   font-weight: 600;
 }
 
+.quote-section-mode-btn {
+  margin-left: 8px;
+  padding: 3px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.quote-section-mode-btn:hover,
+.quote-section-mode-btn:focus-visible {
+  border-color: #9ca3af;
+  color: #111827;
+  outline: none;
+}
+
+.quote-section-inline-action {
+  background: #f9fafb;
+}
+
+.quote-section-inline-action td {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.quote-section-inline-title {
+  margin-right: 8px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.quote-section-inline-label {
+  color: #6b7280;
+  font-weight: 600;
+}
+
 /* Two-cell appearance when header Qty (metres) is filled: product+qty | merged rest */
 .quote-section-header--has-metres td:nth-child(2) {
   border-right: 2px solid #f8f9fa;
@@ -8660,6 +8699,18 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table td {
 
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table .quote-section-header td {
   border-bottom: none;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-section-mode-btn {
+  margin-left: 6px;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-section-inline-action td:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 /* Section header first cell: single-line truncate with ellipsis on mobile to keep row height fixed */
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-header td:first-child .quote-section-header-label {

@@ -2914,6 +2914,243 @@ async function run() {
         }
       }
 
+      const sectionModeUiRegression = await page.evaluate(async () => {
+        const tableBody = document.getElementById('quoteTableBody');
+        const fnBag = window.__quoteAppManualMetreTestFns || {};
+        if (!tableBody) return { ready: false, reason: 'missing-table' };
+        if (typeof fnBag.setQuoteSectionModeForTest !== 'function' || typeof fnBag.resetQuoteSectionModesForTest !== 'function') {
+          return { ready: false, reason: 'missing-hooks' };
+        }
+
+        const originalFetch = window.fetch;
+        const waitFor = (predicate, timeoutMs = 4000) => new Promise((resolve, reject) => {
+          const startedAt = Date.now();
+          const tick = () => {
+            let done = false;
+            try {
+              done = !!predicate();
+            } catch (_) {}
+            if (done) {
+              resolve(true);
+              return;
+            }
+            if ((Date.now() - startedAt) >= timeoutMs) {
+              reject(new Error('timeout'));
+              return;
+            }
+            setTimeout(tick, 40);
+          };
+          tick();
+        });
+
+        const createHeaderRow = ({ sectionId, label, metresValue }) => {
+          const row = document.createElement('tr');
+          row.className = 'quote-section-header quote-section-header--has-metres';
+          row.dataset.sectionHeader = sectionId;
+          row.innerHTML = `<td><span class="quote-section-header-label">${label} (<span class="quote-header-metres-label">${metresValue}</span> m)</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${metresValue}" min="0" step="0.5" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${sectionId}">Clear</button></td><td></td><td></td><td></td><td></td>`;
+          return row;
+        };
+
+        const createChildRow = ({ assetId, qty, sectionFor }) => {
+          const row = document.createElement('tr');
+          row.dataset.assetId = assetId;
+          row.dataset.sectionFor = sectionFor;
+          row.innerHTML = `<td>${assetId}</td><td><input type="number" class="quote-line-qty-input" value="${qty}" min="0" step="1"></td><td>—</td><td>—</td><td>—</td><td class="quote-cell-total"><span class="quote-cell-total-value">—</span></td>`;
+          return row;
+        };
+
+        const installQuoteCalcEchoFetch = () => {
+          window.fetch = async (input, init = {}) => {
+            const href = typeof input === 'string'
+              ? input
+              : (input && typeof input.url === 'string' ? input.url : '');
+            const method = String(init?.method || input?.method || 'GET').toUpperCase();
+            if (!href.includes('/api/calculate-quote') || method !== 'POST') {
+              return originalFetch(input, init);
+            }
+
+            let payload = {};
+            try {
+              payload = JSON.parse(init?.body || '{}');
+            } catch (_) {}
+            const byId = Object.create(null);
+            const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+            elements.forEach((item) => {
+              const assetId = String(item?.assetId || '').trim();
+              const qty = Number(item?.quantity);
+              if (!assetId || !Number.isFinite(qty) || qty <= 0) return;
+              byId[assetId] = (byId[assetId] || 0) + qty;
+            });
+            const materials = Object.entries(byId).map(([id, qty]) => {
+              const unit = 10;
+              const lineTotal = unit * qty;
+              return {
+                id,
+                name: id,
+                qty,
+                cost_price: unit,
+                markup_percentage: 0,
+                sell_price: unit,
+                line_total: lineTotal,
+              };
+            });
+            const materialsSubtotal = materials.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0);
+            return new Response(
+              JSON.stringify({
+                quote: {
+                  materials,
+                  materials_subtotal: materialsSubtotal,
+                  labour_subtotal: 0,
+                  total: materialsSubtotal,
+                },
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+          };
+        };
+
+        const countSectionChildRows = (sectionId) => {
+          return tableBody.querySelectorAll(`tr[data-section-for="${sectionId}"][data-asset-id]`).length;
+        };
+
+        const getInlineAutoLabel = (sectionId) => {
+          const label = tableBody.querySelector(`tr[data-section-inline-action-for="${sectionId}"] .quote-section-inline-label`);
+          return (label?.textContent || '').trim();
+        };
+
+        const runGutterScenario = async () => {
+          fnBag.resetQuoteSectionModesForTest();
+          tableBody.innerHTML = '';
+          tableBody.appendChild(createHeaderRow({
+            sectionId: 'SC',
+            label: 'Gutter Length: Storm Cloud',
+            metresValue: '6',
+          }));
+          tableBody.appendChild(createChildRow({ assetId: 'GUT-SC-MAR-3M', qty: 1, sectionFor: 'SC' }));
+          tableBody.appendChild(createChildRow({ assetId: 'GUT-SC-MAR-1.5M', qty: 2, sectionFor: 'SC' }));
+
+          const clearBtn = tableBody.querySelector('.quote-section-mode-btn[data-section-action="parts"][data-section-id="SC"]');
+          if (!clearBtn) throw new Error('gutter-missing-clear-button');
+          clearBtn.click();
+
+          await waitFor(() => tableBody.querySelector('tr[data-section-inline-action-for="SC"]'));
+          await waitFor(() => !tableBody.querySelector('tr[data-section-header="SC"]'));
+          const autoAfterClear = getInlineAutoLabel('SC');
+          const childCountAfterClear = countSectionChildRows('SC');
+
+          const qtyInput = tableBody.querySelector('tr[data-asset-id="GUT-SC-MAR-3M"] .quote-line-qty-input');
+          if (!qtyInput) throw new Error('gutter-missing-qty-input-after-clear');
+          qtyInput.value = '2';
+          qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+          qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+          await waitFor(() => /Auto:\s*9m\b/i.test(getInlineAutoLabel('SC')));
+          const autoAfterQtyEdit = getInlineAutoLabel('SC');
+
+          const restoreBtn = tableBody.querySelector('.quote-section-inline-action[data-section-inline-action-for="SC"] .quote-section-mode-btn[data-section-action="header"][data-section-id="SC"]');
+          if (!restoreBtn) throw new Error('gutter-missing-restore-button');
+          restoreBtn.click();
+
+          await waitFor(() => tableBody.querySelector('tr[data-section-header="SC"]'));
+          const childCountAfterRestore = countSectionChildRows('SC');
+          const headerRestored = !!tableBody.querySelector('tr[data-section-header="SC"]');
+
+          return {
+            autoAfterClear,
+            autoAfterQtyEdit,
+            childCountAfterClear,
+            childCountAfterRestore,
+            headerRestored,
+          };
+        };
+
+        const runDownpipeScenario = async () => {
+          fnBag.resetQuoteSectionModesForTest();
+          tableBody.innerHTML = '';
+          tableBody.appendChild(createHeaderRow({
+            sectionId: 'downpipe-65',
+            label: 'Downpipe 65mm Length',
+            metresValue: '6',
+          }));
+          tableBody.appendChild(createChildRow({ assetId: 'DP-65-3M', qty: 1, sectionFor: 'downpipe-65' }));
+          tableBody.appendChild(createChildRow({ assetId: 'DP-65-1.5M', qty: 2, sectionFor: 'downpipe-65' }));
+
+          const clearBtn = tableBody.querySelector('.quote-section-mode-btn[data-section-action="parts"][data-section-id="downpipe-65"]');
+          if (!clearBtn) throw new Error('downpipe-missing-clear-button');
+          clearBtn.click();
+
+          await waitFor(() => tableBody.querySelector('tr[data-section-inline-action-for="downpipe-65"]'));
+          await waitFor(() => !tableBody.querySelector('tr[data-section-header="downpipe-65"]'));
+          const autoAfterClear = getInlineAutoLabel('downpipe-65');
+          const childCountAfterClear = countSectionChildRows('downpipe-65');
+
+          const restoreBtn = tableBody.querySelector('.quote-section-inline-action[data-section-inline-action-for="downpipe-65"] .quote-section-mode-btn[data-section-action="header"][data-section-id="downpipe-65"]');
+          if (!restoreBtn) throw new Error('downpipe-missing-restore-button');
+          restoreBtn.click();
+
+          await waitFor(() => tableBody.querySelector('tr[data-section-header="downpipe-65"]'));
+          const childCountAfterRestore = countSectionChildRows('downpipe-65');
+          const headerRestored = !!tableBody.querySelector('tr[data-section-header="downpipe-65"]');
+
+          return {
+            autoAfterClear,
+            childCountAfterClear,
+            childCountAfterRestore,
+            headerRestored,
+          };
+        };
+
+        installQuoteCalcEchoFetch();
+        try {
+          const gutter = await runGutterScenario();
+          const downpipe = await runDownpipeScenario();
+          return { ready: true, gutter, downpipe };
+        } catch (err) {
+          return { ready: true, error: String(err?.message || err) };
+        } finally {
+          fnBag.resetQuoteSectionModesForTest();
+          window.fetch = originalFetch;
+        }
+      });
+      if (!sectionModeUiRegression.ready) {
+        if (sectionModeUiRegression.reason === 'missing-hooks') {
+          throw new Error('Quote section mode UI regression: missing mode test hooks');
+        }
+        throw new Error('Quote section mode UI regression: quote table unavailable');
+      }
+      if (sectionModeUiRegression.error) {
+        throw new Error(`Quote section mode UI regression failed: ${sectionModeUiRegression.error}`);
+      }
+      if (!/Auto:\s*6m\b/i.test(sectionModeUiRegression.gutter.autoAfterClear || '')) {
+        throw new Error(
+          `Quote section mode UI regression (gutter clear): expected Auto: 6m, got "${sectionModeUiRegression.gutter.autoAfterClear}"`
+        );
+      }
+      if (!/Auto:\s*9m\b/i.test(sectionModeUiRegression.gutter.autoAfterQtyEdit || '')) {
+        throw new Error(
+          `Quote section mode UI regression (gutter qty edit): expected Auto: 9m, got "${sectionModeUiRegression.gutter.autoAfterQtyEdit}"`
+        );
+      }
+      if (!(sectionModeUiRegression.gutter.childCountAfterClear > 0 && sectionModeUiRegression.gutter.childCountAfterRestore > 0 && sectionModeUiRegression.gutter.headerRestored)) {
+        throw new Error(
+          `Quote section mode UI regression (gutter restore): expected child rows retained + header restored, got ${JSON.stringify(sectionModeUiRegression.gutter)}`
+        );
+      }
+      if (!/Auto:\s*6m\b/i.test(sectionModeUiRegression.downpipe.autoAfterClear || '')) {
+        throw new Error(
+          `Quote section mode UI regression (downpipe clear): expected Auto: 6m, got "${sectionModeUiRegression.downpipe.autoAfterClear}"`
+        );
+      }
+      if (!(sectionModeUiRegression.downpipe.childCountAfterClear > 0 && sectionModeUiRegression.downpipe.childCountAfterRestore > 0 && sectionModeUiRegression.downpipe.headerRestored)) {
+        throw new Error(
+          `Quote section mode UI regression (downpipe restore): expected child rows retained + header restored, got ${JSON.stringify(sectionModeUiRegression.downpipe)}`
+        );
+      }
+      console.log('  ✓ Quote section mode UI: clear -> parts auto metres -> restore works for gutter and downpipe');
+
       // Close modal
       const closeBtn = await page.$('#quoteModalClose');
       if (closeBtn) {

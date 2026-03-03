@@ -1021,6 +1021,111 @@ const quoteLineEditorState = {
   initialMarkup: 0,
 };
 
+const QUOTE_SECTION_MODES = Object.create(null); // sectionId -> 'parts' (default is header)
+
+function normalizeQuoteSectionId(sectionId) {
+  const raw = String(sectionId || '').trim();
+  if (!raw) return '';
+  const upper = raw.toUpperCase();
+  if (upper === 'SC' || upper === 'CL') return upper;
+  const downpipe = /^DOWNPIPE-(65|80)$/i.exec(raw);
+  if (downpipe) return `downpipe-${downpipe[1]}`;
+  return '';
+}
+
+function resetQuoteSectionModes() {
+  Object.keys(QUOTE_SECTION_MODES).forEach((key) => {
+    delete QUOTE_SECTION_MODES[key];
+  });
+}
+
+function getQuoteSectionMode(sectionId) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  if (!normalized) return 'header';
+  return QUOTE_SECTION_MODES[normalized] === 'parts' ? 'parts' : 'header';
+}
+
+function setQuoteSectionMode(sectionId, mode) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  if (!normalized) return;
+  if (mode === 'parts') QUOTE_SECTION_MODES[normalized] = 'parts';
+  else delete QUOTE_SECTION_MODES[normalized];
+}
+
+function isQuoteSectionPartsMode(sectionId) {
+  return getQuoteSectionMode(sectionId) === 'parts';
+}
+
+function getQuoteMaterialRowQtyForDerivedMetres(row) {
+  if (!row) return 0;
+  const qtyInput = row.cells?.[1]?.querySelector('.quote-line-qty-input');
+  if (qtyInput) {
+    const value = parseFloat(qtyInput.value);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  const storedQty = getQuoteRowStoredQty(row);
+  if (storedQty != null && Number.isFinite(storedQty) && storedQty > 0) return storedQty;
+  const fallback = parseFloat(getQuoteCellTextWithoutSummaries(row));
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+}
+
+function getQuoteSectionDerivedMetresFromTable(sectionId, tableBody = null) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  const table = tableBody || document.getElementById('quoteTableBody');
+  if (!normalized || !table) return 0;
+  let totalMetres = 0;
+  const isDownpipeSection = normalized.startsWith('downpipe-');
+  const sectionSize = isDownpipeSection ? normalized.replace(/^downpipe-/, '') : null;
+  for (const row of table.rows) {
+    if (row.dataset.sectionFor !== normalized) continue;
+    const assetId = row.dataset.assetId;
+    if (!assetId) continue;
+    const qty = getQuoteMaterialRowQtyForDerivedMetres(row);
+    if (qty <= 0) continue;
+    if (!isDownpipeSection) {
+      const gutterMatch = GUTTER_PATTERN.exec(assetId.trim());
+      if (!gutterMatch || gutterMatch[1].toUpperCase() !== normalized) continue;
+      totalMetres += getGutterLengthMetres(assetId) * qty;
+      continue;
+    }
+    if (!isDownpipeElement(assetId)) continue;
+    const size = getDownpipeSizeFromAssetId(assetId);
+    if (!size || size !== sectionSize) continue;
+    totalMetres += getDownpipeLengthMetres(assetId) * qty;
+  }
+  return totalMetres;
+}
+
+function formatQuoteSectionMetresValue(metres) {
+  if (!Number.isFinite(metres) || metres <= 0) return '0';
+  return metres % 1 === 0 ? String(metres) : metres.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function removeOrphanQuoteSectionInlineActionRows() {
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return;
+  const rows = Array.from(tableBody.rows);
+  rows.forEach((row) => {
+    const sectionId = normalizeQuoteSectionId(row.dataset.sectionInlineActionFor);
+    if (!sectionId) return;
+    const hasChildren = rows.some((candidate) => candidate.dataset.sectionFor === sectionId);
+    if (!hasChildren) row.remove();
+  });
+}
+
+function refreshQuoteSectionInlineActionLabels() {
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return;
+  Array.from(tableBody.querySelectorAll('tr[data-section-inline-action-for]')).forEach((row) => {
+    const sectionId = normalizeQuoteSectionId(row.dataset.sectionInlineActionFor);
+    if (!sectionId) return;
+    const label = row.querySelector('.quote-section-inline-label');
+    if (!label) return;
+    const metres = getQuoteSectionDerivedMetresFromTable(sectionId, tableBody);
+    label.textContent = `Auto: ${formatQuoteSectionMetresValue(metres)}m`;
+  });
+}
+
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
 let hasPricingChanges = false;
 
@@ -1406,6 +1511,7 @@ function hideQuoteModal() {
   closeAccessibleModal('quoteModal');
   setQuoteModalScrollLock(false);
   setQuoteEditMode(false);
+  resetQuoteSectionModes();
   syncQuoteModalViewportState();
 }
 
@@ -1514,7 +1620,7 @@ function setQuoteEditMode(editing) {
     btn.textContent = 'Done Editing';
     if (tableBody) {
       for (const row of tableBody.rows) {
-        if (row.dataset.emptyRow === 'true') continue;
+        if (row.dataset.emptyRow === 'true' || row.dataset.sectionInlineActionFor) continue;
         addEditInputsToRow(row);
       }
     }
@@ -1526,7 +1632,7 @@ function setQuoteEditMode(editing) {
     btn.textContent = 'Edit Pricing';
     if (tableBody) {
       for (const row of tableBody.rows) {
-        if (row.cells.length < 6 || row.dataset.emptyRow === 'true') continue;
+        if (row.cells.length < 6 || row.dataset.emptyRow === 'true' || row.dataset.sectionInlineActionFor) continue;
         const costInput = row.querySelector('.quote-input-cost');
         const markupInput = row.querySelector('.quote-input-markup');
         const unitInput = row.querySelector('.quote-input-unit');
@@ -1687,6 +1793,7 @@ function recalcQuoteTotalsFromTableBody() {
   materialsTotalDisplay.textContent = formatCurrency(materialsSubtotal);
   if (labourTotalDisplay) labourTotalDisplay.textContent = formatCurrency(labourSubtotal);
   quoteTotalDisplay.textContent = formatCurrency(total);
+  refreshQuoteSectionInlineActionLabels();
   updateQuoteTotalWarning();
   syncMobileQuoteLineSummaries();
 }
@@ -1713,6 +1820,8 @@ function removeEmptySectionHeaders() {
     if (childCount === 0) headersToRemove.push(row);
   }
   headersToRemove.forEach((r) => r.remove());
+  removeOrphanQuoteSectionInlineActionRows();
+  refreshQuoteSectionInlineActionLabels();
 }
 
 /** Filter products by search term (name or item_number). Excludes labour so it cannot be added as a material line. */
@@ -3277,6 +3386,7 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null, sug
 
   closeQuickQuoterModal({ restoreFocus: false });
   await ensurePanelProductsLoaded({ reason: 'quote-modal-open' });
+  resetQuoteSectionModes();
 
   if (tableBody) tableBody.innerHTML = '';
   if (materialsTotalDisplay) materialsTotalDisplay.textContent = '0.00';
@@ -3403,6 +3513,16 @@ function initQuoteModal() {
 
   // Row remove X (Section 40.4): remove line from quote and recalc totals. 54.93.2: on mobile, red minus in cell 0 also removes (no early return).
   tableBody?.addEventListener('click', (ev) => {
+    const sectionModeBtn = ev.target.closest('.quote-section-mode-btn[data-section-action][data-section-id]');
+    if (sectionModeBtn) {
+      ev.preventDefault();
+      const action = String(sectionModeBtn.dataset.sectionAction || '').trim();
+      const sectionId = String(sectionModeBtn.dataset.sectionId || '').trim();
+      if (action === 'parts') setQuoteSectionMode(sectionId, 'parts');
+      else if (action === 'header') setQuoteSectionMode(sectionId, 'header');
+      calculateAndDisplayQuote();
+      return;
+    }
     const control = ev.target.closest('.quote-row-remove-x');
     if (!control) return;
     ev.preventDefault();
@@ -3427,7 +3547,7 @@ function initQuoteModal() {
 
   tableBody?.addEventListener('click', (ev) => {
     if (!isMobileQuoteViewport()) return;
-    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost, .quote-mobile-qty-stepper')) return;
+    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost, .quote-mobile-qty-stepper, .quote-section-mode-btn')) return;
     const row = ev.target.closest('tr');
     if (!isEditableQuoteLineRow(row)) return;
     openLabourEditorModal(row, row);
@@ -4262,6 +4382,7 @@ function getElementsFromQuoteTable() {
   for (const row of tableBody.rows) {
     const sectionHeader = row.dataset.sectionHeader;
     if (!sectionHeader) continue;
+    if (isQuoteSectionPartsMode(sectionHeader)) continue;
     const metresInput = row.cells[1]?.querySelector('.quote-header-metres-input');
     if (metresInput) {
       const metresVal = parseFloat(metresInput.value);
@@ -4465,6 +4586,7 @@ function printQuote() {
         rowsHtml += `<tr><td colspan="5"><strong>${escapeHtml(label)}</strong></td><td>${escapeHtml(total)}</td></tr>`;
         continue;
       }
+      if (row.dataset.sectionInlineActionFor) continue;
       if (row.dataset.emptyRow === 'true') continue;
       const productCell = row.cells[0];
       const rawProduct = getQuoteLineProductName(row);
@@ -4904,16 +5026,33 @@ async function calculateAndDisplayQuote() {
       return row;
     }
 
+    function renderSectionInlineActionRow(sectionId, label, insertBefore) {
+      const row = document.createElement('tr');
+      row.className = 'quote-section-inline-action';
+      row.dataset.sectionInlineActionFor = sectionId;
+      row.innerHTML = `<td><span class="quote-section-inline-title">${escapeHtml(label)}</span><span class="quote-section-inline-label">Auto: 0m</span></td><td><button type="button" class="quote-section-mode-btn quote-section-mode-btn--restore" data-section-action="header" data-section-id="${escapeHtml(sectionId)}">Set custom metres</button></td><td></td><td></td><td></td><td></td>`;
+      if (insertBefore) tableBody.insertBefore(row, insertBefore);
+      else tableBody.appendChild(row);
+      const metres = getQuoteSectionDerivedMetresFromTable(sectionId, tableBody);
+      const inlineLabel = row.querySelector('.quote-section-inline-label');
+      if (inlineLabel) inlineLabel.textContent = `Auto: ${formatQuoteSectionMetresValue(metres)}m`;
+      return row;
+    }
+
     // Track incomplete profiles before clearing: profiles with empty/invalid header inputs or incomplete measurement rows
     const incompleteProfiles = new Set();
     const incompleteDownpipeSizes = new Set();
     Array.from(tableBody?.rows || []).forEach((r) => {
       if (r.dataset.sectionHeader) {
+        const sectionId = r.dataset.sectionHeader;
+        if (isQuoteSectionPartsMode(sectionId)) {
+          return;
+        }
         // Check section header for empty/invalid input
         const metresInput = r.querySelector('.quote-header-metres-input');
         if (metresInput) {
           const v = parseFloat(metresInput.value);
-          const sh = r.dataset.sectionHeader;
+          const sh = sectionId;
           if (sh && sh.startsWith('downpipe-')) {
             const size = sh.replace(/^downpipe-/, '');
             if (!Number.isFinite(v) || v <= 0) incompleteDownpipeSizes.add(size);
@@ -4946,6 +5085,9 @@ async function calculateAndDisplayQuote() {
     Array.from(tableBody?.rows || []).forEach((r) => {
       if (r.dataset.sectionHeader) {
         const sh = r.dataset.sectionHeader;
+        if (isQuoteSectionPartsMode(sh)) {
+          return;
+        }
         if (sh && sh.startsWith('downpipe-')) {
           preservedDownpipeSizes.add(sh.replace(/^downpipe-/, ''));
         } else if (sh && (sh === 'SC' || sh === 'CL')) {
@@ -4986,16 +5128,26 @@ async function calculateAndDisplayQuote() {
     const profileOrder = ['SC', 'CL'];
     const groupHasGutterOrBracket = (group) => group && group.children.some((c) => GUTTER_PATTERN.test(c.id) || u(c.id).startsWith('BRK-'));
     profileOrder.forEach((profile) => {
+      const sectionId = profile;
+      const partsMode = isQuoteSectionPartsMode(sectionId);
       const group = gutterGroups[profile];
       const hasGroup = group && group.children.length > 0;
-      const showHeader = hasGroup && groupHasGutterOrBracket(group) || preservedGutterProfiles.has(profile);
-      if (!showHeader) return;
+      const showSection = (hasGroup && groupHasGutterOrBracket(group)) || preservedGutterProfiles.has(profile);
+      if (!showSection) return;
       const effectiveGroup = group || { totalMetres: 0, children: [] };
       if (hasGroup && !groupHasGutterOrBracket(group)) return; // Do not show header when only screws in group (and we have materials)
-      const isIncomplete = incompleteProfiles.has(profile);
-      const headerTotal = effectiveGroup.children.reduce((sum, c) => sum + (c.line_total || 0), 0);
       const profileName = PROFILE_DISPLAY_NAMES[profile] || profile;
-      
+
+      if (partsMode) {
+        renderSectionInlineActionRow(sectionId, `Gutter Length: ${profileName}`, materialInsertBefore);
+        effectiveGroup.children.forEach((line) => {
+          renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionId });
+        });
+        return;
+      }
+
+      const isIncomplete = incompleteProfiles.has(profile);
+
       // If incomplete, force empty value; otherwise use override or group total
       let metresDisplay = '';
       let inputValue = '';
@@ -5007,7 +5159,7 @@ async function calculateAndDisplayQuote() {
         metresDisplay = totalMetres % 1 === 0 ? totalMetres : totalMetres.toFixed(3).replace(/\.?0+$/, '');
         inputValue = String(metresDisplay);
       }
-      
+
       const headerRow = document.createElement('tr');
       headerRow.className = 'quote-section-header';
       if (isIncomplete) {
@@ -5017,7 +5169,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = profile;
-      headerRow.innerHTML = `<td><span class="quote-section-header-label">Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td><span class="quote-section-header-label">Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${escapeHtml(sectionId)}">Clear</button></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -5033,7 +5185,7 @@ async function calculateAndDisplayQuote() {
         if (isGutter && isIncomplete) {
           return;
         }
-        renderMaterialRow(line, materialInsertBefore, { sectionFor: profile });
+        renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionId });
       });
     });
 
@@ -5047,14 +5199,24 @@ async function calculateAndDisplayQuote() {
     // Downpipe section: per-size header with metres input. Show header for every size that has a group OR was preserved (one filled header auto-populates that section)
     const downpipeSizeOrder = ['65', '80'];
     downpipeSizeOrder.forEach((size) => {
+      const sectionHeaderId = 'downpipe-' + size;
+      const partsMode = isQuoteSectionPartsMode(sectionHeaderId);
       const group = downpipeGroups[size];
       const hasGroup = group && group.children.length > 0;
-      const showHeader = hasGroup || preservedDownpipeSizes.has(size);
-      if (!showHeader) return;
+      const showSection = hasGroup || preservedDownpipeSizes.has(size);
+      if (!showSection) return;
       const effectiveGroup = group || { totalMetres: 0, children: [] };
-      const isIncomplete = incompleteDownpipeSizes.has(size);
-      const headerTotal = effectiveGroup.children.reduce((sum, c) => sum + (c.line_total || 0), 0);
       const sizeLabel = size + 'mm';
+
+      if (partsMode) {
+        renderSectionInlineActionRow(sectionHeaderId, `Downpipe ${sizeLabel} Length`, materialInsertBefore);
+        effectiveGroup.children.forEach((line) => {
+          renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionHeaderId });
+        });
+        return;
+      }
+
+      const isIncomplete = incompleteDownpipeSizes.has(size);
       let metresDisplay = '';
       let inputValue = '';
       if (isIncomplete) {
@@ -5065,7 +5227,6 @@ async function calculateAndDisplayQuote() {
         metresDisplay = totalMetres % 1 === 0 ? totalMetres : totalMetres.toFixed(3).replace(/\.?0+$/, '');
         inputValue = String(metresDisplay);
       }
-      const sectionHeaderId = 'downpipe-' + size;
       const headerRow = document.createElement('tr');
       headerRow.className = 'quote-section-header';
       if (isIncomplete) {
@@ -5075,7 +5236,7 @@ async function calculateAndDisplayQuote() {
         headerRow.classList.add('quote-section-header--has-metres');
       }
       headerRow.dataset.sectionHeader = sectionHeaderId;
-      headerRow.innerHTML = `<td><span class="quote-section-header-label">Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span></td><td></td><td></td><td></td><td></td>`;
+      headerRow.innerHTML = `<td><span class="quote-section-header-label">Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${escapeHtml(sectionHeaderId)}">Clear</button></td><td></td><td></td><td></td><td></td>`;
       if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
       else tableBody.appendChild(headerRow);
       const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
@@ -5102,6 +5263,8 @@ async function calculateAndDisplayQuote() {
       renderMaterialRow(line, materialInsertBefore);
     });
 
+    removeOrphanQuoteSectionInlineActionRows();
+    refreshQuoteSectionInlineActionLabels();
     ensureLabourRowsExist();
 
     // Remove incomplete placeholder rows that were replaced by actual product rows
@@ -15257,6 +15420,8 @@ if (typeof window !== 'undefined') {
     getElementsForQuoteFromSynthetic,
     getElementsFromQuoteTable,
     commitMetresInput,
+    setQuoteSectionModeForTest: setQuoteSectionMode,
+    resetQuoteSectionModesForTest: resetQuoteSectionModes,
   };
   window.__quoteAppSwitchView = function (viewId) { switchView(viewId); };
   window.__quoteAppElementCount = function () { return state.elements.length; };

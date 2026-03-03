@@ -1047,13 +1047,25 @@ def api_me(
     user_id_and_role: tuple[uuid_lib.UUID, str] = Depends(get_current_user_id_and_role),
     payload: dict = Depends(get_validated_payload),
 ):
-    """Current user info (Bearer required). Used so frontend can show bonus/admin entry for super admin."""
+    """Current user info (Bearer required). Role is authoritative from public.profiles when present, else JWT."""
     user_id, role = user_id_and_role
+    is_super = is_super_admin_from_payload(payload)
+    try:
+        supabase = get_supabase()
+        resp = supabase.table("profiles").select("role").eq("user_id", str(user_id)).limit(1).execute()
+        if resp.data and len(resp.data) > 0 and resp.data[0].get("role"):
+            role = _normalize_app_role(resp.data[0]["role"])
+    except Exception as e:
+        logger.warning("api_me: could not read role from profiles for user_id=%s: %s", user_id, e)
+    if is_super:
+        role = "admin"
+    email = payload.get("email") or ""
+    logger.info("api_me email=%s role=%s is_super_admin=%s", email, role, is_super)
     return {
         "user_id": str(user_id),
         "email": payload.get("email"),
         "role": role,
-        "is_super_admin": is_super_admin_from_payload(payload),
+        "is_super_admin": is_super,
     }
 
 

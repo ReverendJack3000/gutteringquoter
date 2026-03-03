@@ -50,6 +50,8 @@ async function run() {
         'getElementsForQuoteFromSynthetic',
         'getElementsFromQuoteTable',
         'commitMetresInput',
+        'setQuoteSectionModeForTest',
+        'resetQuoteSectionModesForTest',
       ];
       requiredFns.forEach((name) => {
         if (typeof fnBag[name] !== 'function') {
@@ -70,7 +72,14 @@ async function run() {
 
       const stableObject = (obj) => {
         const out = {};
-        Object.keys(obj || {}).sort((a, b) => Number(a) - Number(b)).forEach((key) => {
+        Object.keys(obj || {}).sort((a, b) => {
+          const aNum = Number(a);
+          const bNum = Number(b);
+          const aIsNum = Number.isFinite(aNum);
+          const bIsNum = Number.isFinite(bNum);
+          if (aIsNum && bIsNum) return aNum - bNum;
+          return String(a).localeCompare(String(b));
+        }).forEach((key) => {
           out[key] = obj[key];
         });
         return out;
@@ -259,9 +268,9 @@ async function run() {
         return { tr, input };
       };
 
-      const createGutterHeaderRow = ({ profile, metresValue }) => {
+      const createSectionHeaderRow = ({ sectionId, metresValue }) => {
         const tr = document.createElement('tr');
-        tr.dataset.sectionHeader = profile;
+        tr.dataset.sectionHeader = sectionId;
         tr.innerHTML = '<td>Header</td><td><span class="quote-header-metres-wrap"></span></td><td></td><td></td><td></td><td></td>';
         const wrap = tr.querySelector('.quote-header-metres-wrap');
         const input = document.createElement('input');
@@ -274,9 +283,10 @@ async function run() {
         return { tr, input };
       };
 
-      const createGutterChildRow = ({ assetId, qty }) => {
+      const createChildRow = ({ assetId, qty, sectionFor }) => {
         const tr = document.createElement('tr');
         tr.dataset.assetId = assetId;
+        if (sectionFor) tr.dataset.sectionFor = sectionFor;
         tr.innerHTML = '<td>Synthetic</td><td><input type="number" class="quote-line-qty-input" min="0" step="1"></td><td>—</td><td>—</td><td>—</td><td>—</td>';
         const qtyInput = tr.querySelector('.quote-line-qty-input');
         if (qtyInput) qtyInput.value = String(qty);
@@ -378,10 +388,11 @@ async function run() {
         }
 
         // Risk guard 1: quote-table rebuild path drops packed tags; header metres must still prevent child-row inflation.
+        fnBag.resetQuoteSectionModesForTest();
         tableBody.innerHTML = '';
-        const rebuiltHeader = createGutterHeaderRow({ profile: 'SC', metresValue: 6 });
-        const rebuiltChildA = createGutterChildRow({ assetId: 'GUT-SC-MAR-1.5M', qty: 2 });
-        const rebuiltChildB = createGutterChildRow({ assetId: 'GUT-SC-MAR-3M', qty: 1 });
+        const rebuiltHeader = createSectionHeaderRow({ sectionId: 'SC', metresValue: 6 });
+        const rebuiltChildA = createChildRow({ assetId: 'GUT-SC-MAR-1.5M', qty: 2, sectionFor: 'SC' });
+        const rebuiltChildB = createChildRow({ assetId: 'GUT-SC-MAR-3M', qty: 1, sectionFor: 'SC' });
         tableBody.appendChild(rebuiltHeader.tr);
         tableBody.appendChild(rebuiltChildA.tr);
         tableBody.appendChild(rebuiltChildB.tr);
@@ -421,6 +432,90 @@ async function run() {
           'storm cloud rebuilt table cleared header emits no child gutters',
           rebuiltIncompletePacked.byId,
           stableObject({})
+        );
+
+        // Section mode serialization guard: gutter header mode -> parts mode -> header mode.
+        fnBag.resetQuoteSectionModesForTest();
+        tableBody.innerHTML = '';
+        const gutterModeHeader = createSectionHeaderRow({ sectionId: 'SC', metresValue: 6 });
+        const gutterModeChildA = createChildRow({ assetId: 'GUT-SC-MAR-1.5M', qty: 2, sectionFor: 'SC' });
+        const gutterModeChildB = createChildRow({ assetId: 'GUT-SC-MAR-3M', qty: 1, sectionFor: 'SC' });
+        tableBody.appendChild(gutterModeHeader.tr);
+        tableBody.appendChild(gutterModeChildA.tr);
+        tableBody.appendChild(gutterModeChildB.tr);
+
+        const gutterHeaderModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'section mode gutter header baseline',
+          gutterHeaderModePacked.byId,
+          stableObject({ 'GUT-SC-MAR-3M': 2 })
+        );
+
+        fnBag.setQuoteSectionModeForTest('SC', 'parts');
+        const gutterPartsModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'section mode gutter parts ignores header',
+          gutterPartsModePacked.byId,
+          stableObject({ 'GUT-SC-MAR-1.5M': 2, 'GUT-SC-MAR-3M': 1 })
+        );
+        checksRun += 1;
+        if (stockMmFromById(gutterPartsModePacked.byId) !== 6000) {
+          failures.push(
+            `section mode gutter parts stock_mm mismatch: expected 6000, got ${stockMmFromById(gutterPartsModePacked.byId)}`
+          );
+        }
+
+        fnBag.setQuoteSectionModeForTest('SC', 'header');
+        const gutterRestoredModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'section mode gutter restore to header',
+          gutterRestoredModePacked.byId,
+          stableObject({ 'GUT-SC-MAR-3M': 2 })
+        );
+
+        // Section mode serialization guard: downpipe header mode -> parts mode -> header mode.
+        fnBag.resetQuoteSectionModesForTest();
+        tableBody.innerHTML = '';
+        const downpipeModeHeader = createSectionHeaderRow({ sectionId: 'downpipe-65', metresValue: 4.5 });
+        const downpipeModeChildA = createChildRow({ assetId: 'DP-65-3M', qty: 1, sectionFor: 'downpipe-65' });
+        const downpipeModeChildB = createChildRow({ assetId: 'DP-65-1.5M', qty: 2, sectionFor: 'downpipe-65' });
+        tableBody.appendChild(downpipeModeHeader.tr);
+        tableBody.appendChild(downpipeModeChildA.tr);
+        tableBody.appendChild(downpipeModeChildB.tr);
+
+        const downpipeHeaderModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'DP-65-');
+        checksRun += 1;
+        assertEqual(
+          'section mode downpipe header baseline',
+          downpipeHeaderModePacked.byId,
+          stableObject({ 'DP-65-1.5M': 1, 'DP-65-3M': 1 })
+        );
+
+        fnBag.setQuoteSectionModeForTest('downpipe-65', 'parts');
+        const downpipePartsModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'DP-65-');
+        checksRun += 1;
+        assertEqual(
+          'section mode downpipe parts ignores header',
+          downpipePartsModePacked.byId,
+          stableObject({ 'DP-65-1.5M': 2, 'DP-65-3M': 1 })
+        );
+        checksRun += 1;
+        if (stockMmFromById(downpipePartsModePacked.byId) !== 6000) {
+          failures.push(
+            `section mode downpipe parts stock_mm mismatch: expected 6000, got ${stockMmFromById(downpipePartsModePacked.byId)}`
+          );
+        }
+
+        fnBag.setQuoteSectionModeForTest('downpipe-65', 'header');
+        const downpipeRestoredModePacked = collectPacked(fnBag.getElementsFromQuoteTable(), 'DP-65-');
+        checksRun += 1;
+        assertEqual(
+          'section mode downpipe restore to header',
+          downpipeRestoredModePacked.byId,
+          stableObject({ 'DP-65-1.5M': 1, 'DP-65-3M': 1 })
         );
 
         tableBody.innerHTML = '';

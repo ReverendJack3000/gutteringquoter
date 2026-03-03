@@ -4,6 +4,14 @@ When we hit an issue that might come up again, add an entry here so the project 
 
 ---
 
+## Technician sees admin-only profile menu options – 2026-03 (Section 59)
+
+- **Symptom / context:** A user with role `technician` in `public.profiles` still sees all profile dropdown options (User Permissions, Material Rules, Bonus Admin, Bonus dashboard analytics, My Bonus) instead of only Product Management, My Bonus, Accessibility, Sign out.
+- **Cause:** (1) **GET /api/me** now uses role from **public.profiles** when present (authoritative). If the JWT had a stale or wrong `app_metadata.role` (e.g. Custom Access Token Hook not set or not updating), the API used to return that; we now override with the profile row. (2) **SUPER_ADMIN_EMAIL:** If the user’s email is set in `SUPER_ADMIN_EMAIL` (Railway/backend env), the backend forces role to `admin` and they will see all menus. (3) Frontend menu visibility is driven by `authState.role` and `authState.isSuperAdmin` after `fetchMeAndUpdateAuth()` completes; it calls `setAuthUIRef()` so `syncAdminDesktopAccess()` runs.
+- **Fix / workaround:** (1) In Supabase, ensure **public.profiles** has the correct `role` for that user (`user_id` = auth.users.id). (2) If they must not have admin access, ensure their email is **not** in `SUPER_ADMIN_EMAIL` in Railway (or backend `.env`). (3) Check backend logs: `api_me` logs `email`, `role`, and `is_super_admin` for every request; confirm the logged role matches expectations. (4) If the issue persists, in the browser console after sign-in look for any errors from `fetch('/api/me')` or confirm that the network response for `/api/me` shows `role: "technician"` and `is_super_admin: false`.
+
+---
+
 ## Local changes not visible at http://127.0.0.1:8000 (desktop or Cursor browser) – 2026-03
 
 - **Symptom / context:** You changed frontend code (e.g. Repair Types “Default time (min)” column, coloured profile/size dropdowns) but loading `http://127.0.0.1:8000/?viewport=desktop` still shows the old UI. The server is local and files are saved.
