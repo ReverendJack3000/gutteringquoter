@@ -259,6 +259,30 @@ async function run() {
         return { tr, input };
       };
 
+      const createGutterHeaderRow = ({ profile, metresValue }) => {
+        const tr = document.createElement('tr');
+        tr.dataset.sectionHeader = profile;
+        tr.innerHTML = '<td>Header</td><td><span class="quote-header-metres-wrap"></span></td><td></td><td></td><td></td><td></td>';
+        const wrap = tr.querySelector('.quote-header-metres-wrap');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'quote-header-metres-input';
+        input.min = '0';
+        input.step = '0.5';
+        input.value = metresValue == null ? '' : String(metresValue);
+        wrap.appendChild(input);
+        return { tr, input };
+      };
+
+      const createGutterChildRow = ({ assetId, qty }) => {
+        const tr = document.createElement('tr');
+        tr.dataset.assetId = assetId;
+        tr.innerHTML = '<td>Synthetic</td><td><input type="number" class="quote-line-qty-input" min="0" step="1"></td><td>—</td><td>—</td><td>—</td><td>—</td>';
+        const qtyInput = tr.querySelector('.quote-line-qty-input');
+        if (qtyInput) qtyInput.value = String(qty);
+        return { tr, qtyInput };
+      };
+
       const originalTableHtml = tableBody.innerHTML;
 
       try {
@@ -352,6 +376,52 @@ async function run() {
             `storm cloud 4m+1m second-pass stock_mm mismatch: expected 6000, got ${syntheticStormCloudSecondPassStockMm}`
           );
         }
+
+        // Risk guard 1: quote-table rebuild path drops packed tags; header metres must still prevent child-row inflation.
+        tableBody.innerHTML = '';
+        const rebuiltHeader = createGutterHeaderRow({ profile: 'SC', metresValue: 6 });
+        const rebuiltChildA = createGutterChildRow({ assetId: 'GUT-SC-MAR-1.5M', qty: 2 });
+        const rebuiltChildB = createGutterChildRow({ assetId: 'GUT-SC-MAR-3M', qty: 1 });
+        tableBody.appendChild(rebuiltHeader.tr);
+        tableBody.appendChild(rebuiltChildA.tr);
+        tableBody.appendChild(rebuiltChildB.tr);
+
+        const rebuiltHeaderElements = fnBag.getElementsFromQuoteTable();
+        const rebuiltHeaderPacked = collectPacked(rebuiltHeaderElements, 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'storm cloud rebuilt table uses header metres (tags dropped)',
+          rebuiltHeaderPacked.byId,
+          stableObject({ 'GUT-SC-MAR-3M': 2 })
+        );
+        checksRun += 1;
+        if (stockMmFromById(rebuiltHeaderPacked.byId) !== 6000) {
+          failures.push(
+            `storm cloud rebuilt table stock_mm mismatch: expected 6000, got ${stockMmFromById(rebuiltHeaderPacked.byId)}`
+          );
+        }
+
+        // Risk guard 2: child qty edits after rebuild should not bypass header metres path.
+        if (rebuiltChildA.qtyInput) rebuiltChildA.qtyInput.value = '99';
+        const rebuiltEditedElements = fnBag.getElementsFromQuoteTable();
+        const rebuiltEditedPacked = collectPacked(rebuiltEditedElements, 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'storm cloud rebuilt child qty edit still header-driven',
+          rebuiltEditedPacked.byId,
+          stableObject({ 'GUT-SC-MAR-3M': 2 })
+        );
+
+        // Risk guard 3: clearing header metres after rebuild should suppress child gutter serialization (no fallback inflation).
+        rebuiltHeader.input.value = '';
+        const rebuiltIncompleteElements = fnBag.getElementsFromQuoteTable();
+        const rebuiltIncompletePacked = collectPacked(rebuiltIncompleteElements, 'GUT-SC-');
+        checksRun += 1;
+        assertEqual(
+          'storm cloud rebuilt table cleared header emits no child gutters',
+          rebuiltIncompletePacked.byId,
+          stableObject({})
+        );
 
         tableBody.innerHTML = '';
         const commitScenario = createIncompleteMetresRow({
