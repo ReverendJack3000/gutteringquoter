@@ -112,6 +112,14 @@ async function run() {
         return { byId: stableObject(byId), firstLengthMm };
       };
 
+      const stockMmFromById = (byId) => {
+        return Object.entries(byId || {}).reduce((acc, [assetId, qty]) => {
+          const match = /-(\d+(?:\.\d+)?)M$/i.exec(String(assetId || '').trim());
+          if (!match) return acc;
+          return acc + (Math.round(Number(match[1]) * 1000) * (Number(qty) || 0));
+        }, 0);
+      };
+
       let checksRun = 0;
 
       manualCases.forEach((testCase) => {
@@ -187,6 +195,43 @@ async function run() {
       if (syntheticMixedDownpipePacked.firstLengthMm !== 4600) {
         failures.push(
           `getElementsForQuote synthetic mixed downpipe length_mm mismatch: expected 4600, got ${syntheticMixedDownpipePacked.firstLengthMm}`
+        );
+      }
+
+      const syntheticStormCloudPackedElements = fnBag.getElementsForQuoteFromSynthetic([
+        { assetId: 'GUT-SC-MAR-3M', measuredLength: 4000 },
+        { assetId: 'GUT-SC-MAR-3M', measuredLength: 1000 },
+      ]);
+      const syntheticStormCloudPacked = collectPacked(syntheticStormCloudPackedElements, 'GUT-SC-');
+
+      checksRun += 1;
+      assertEqual(
+        'getElementsForQuote synthetic storm cloud packed counts',
+        syntheticStormCloudPacked.byId,
+        stableObject({ 'GUT-SC-MAR-1.5M': 2, 'GUT-SC-MAR-3M': 1 })
+      );
+
+      checksRun += 1;
+      const syntheticStormCloudStockMm = stockMmFromById(syntheticStormCloudPacked.byId);
+      if (syntheticStormCloudStockMm !== 6000) {
+        failures.push(
+          `getElementsForQuote synthetic storm cloud stock_mm mismatch: expected 6000, got ${syntheticStormCloudStockMm}`
+        );
+      }
+
+      checksRun += 1;
+      const syntheticStormCloudProvenanceFlags = (Array.isArray(syntheticStormCloudPackedElements)
+        ? syntheticStormCloudPackedElements
+        : []
+      ).filter((item) => {
+        return String(item && item.assetId ? item.assetId : '').startsWith('GUT-SC-');
+      }).map((item) => item && item.packed_from_canvas === true);
+      if (
+        syntheticStormCloudProvenanceFlags.length !== 2
+        || syntheticStormCloudProvenanceFlags.some((flag) => flag !== true)
+      ) {
+        failures.push(
+          `getElementsForQuote synthetic storm cloud packed_from_canvas flags invalid: ${JSON.stringify(syntheticStormCloudProvenanceFlags)}`
         );
       }
 
@@ -274,6 +319,39 @@ async function run() {
             );
           }
         });
+
+        tableBody.innerHTML = '';
+        (Array.isArray(syntheticStormCloudPackedElements) ? syntheticStormCloudPackedElements : []).forEach((item) => {
+          const assetId = String(item && item.assetId ? item.assetId : '');
+          if (!assetId) return;
+          const tr = document.createElement('tr');
+          tr.dataset.assetId = assetId;
+          tr.dataset.manualLength = 'true';
+          tr.dataset.packedFromCanvas = 'true';
+          const lengthMm = Number(item && item.length_mm);
+          if (Number.isFinite(lengthMm) && lengthMm > 0) tr.dataset.lengthMm = String(lengthMm);
+          tr.innerHTML = '<td>Synthetic</td><td></td><td>—</td><td>—</td><td>—</td><td>—</td>';
+          tr.cells[1].textContent = String(Number(item && item.quantity) || 0);
+          tableBody.appendChild(tr);
+        });
+
+        const syntheticStormCloudSecondPass = fnBag.getElementsFromQuoteTable();
+        const syntheticStormCloudSecondPassPacked = collectPacked(syntheticStormCloudSecondPass, 'GUT-SC-');
+
+        checksRun += 1;
+        assertEqual(
+          'storm cloud 4m+1m second-pass packed counts',
+          syntheticStormCloudSecondPassPacked.byId,
+          stableObject({ 'GUT-SC-MAR-1.5M': 2, 'GUT-SC-MAR-3M': 1 })
+        );
+
+        checksRun += 1;
+        const syntheticStormCloudSecondPassStockMm = stockMmFromById(syntheticStormCloudSecondPassPacked.byId);
+        if (syntheticStormCloudSecondPassStockMm !== 6000) {
+          failures.push(
+            `storm cloud 4m+1m second-pass stock_mm mismatch: expected 6000, got ${syntheticStormCloudSecondPassStockMm}`
+          );
+        }
 
         tableBody.innerHTML = '';
         const commitScenario = createIncompleteMetresRow({

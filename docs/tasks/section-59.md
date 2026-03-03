@@ -185,6 +185,7 @@ The following are **locked decisions**. Full rationale and implementation notes:
   - [x] **59.30.2** Backend: POST /api/bonus/analytics/view (authenticated), GET /api/bonus/analytics/summary (super-admin only); implement and document in README.
   - [x] **59.30.3** Frontend: record view start on enter to view-bonus-admin / view-technician-bonus; on leave (switchView + visibilitychange/pagehide) POST one event per session; use sendBeacon on pagehide.
   - [x] **59.30.4** Frontend: super-admin-only “Bonus dashboard analytics” entry and view; fetch summary and display table (user, dashboard type, view count, total duration); hide when not isSuperAdmin.
+  - [x] **59.30.5** Bonus dashboard analytics leaderboard (desktop only): add a leaderboard at the top of the analytics view taking ¼ screen height (25vh); desktop only (hidden on mobile via `body[data-viewport-mode="mobile"]`); reuse existing summary API data; aggregate by user, top N by total time; no backend changes. Plan: docs/plans/2026-03-bonus-analytics-leaderboard-plan.md.
 
 ---
 

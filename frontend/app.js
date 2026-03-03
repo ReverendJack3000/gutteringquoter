@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260306-cache-bump';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260303-cache-bump';
 
-const STATIC_ASSET_VERSION = '20260306-cache-bump';
+const STATIC_ASSET_VERSION = '20260303-cache-bump';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -3286,12 +3286,16 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null, sug
     const quantity = Number(item?.quantity);
     const incomplete = !!item?.incomplete;
     const lengthMm = Number(item?.length_mm);
+    const packedFromCanvas = !!item?.packed_from_canvas;
     const missingMeasurementMultiplier = Number(item?.missing_measurement_multiplier);
     const product = state.products.find((p) => p.id === assetId);
     const name = incomplete ? getQuoteProductDisplayName(assetId, product?.name) : (product?.name ?? assetId);
 
     const tr = document.createElement('tr');
     tr.dataset.assetId = assetId;
+    if (packedFromCanvas && GUTTER_PATTERN.test(assetId)) {
+      tr.dataset.packedFromCanvas = 'true';
+    }
     if (incomplete) {
       tr.dataset.incompleteMeasurement = 'true';
       tr.classList.add('quote-row-incomplete-measurement');
@@ -4367,6 +4371,13 @@ function getElementsFromQuoteTable() {
     // Always send incomplete rows (qty=1, no length_mm) so backend returns inferred items
     // Skip only if both qty is 0 AND no length (truly empty row)
     if (qty <= 0 && !lengthMm && !metresInput) continue;
+
+    // Preserve already packed gutter rows from canvas flow to avoid second-pass inflation in quote-table serialization.
+    if (rowGutterMatch && isManualLengthRow && row.dataset.packedFromCanvas === 'true' && lengthMm != null && lengthMm > 0) {
+      if (qty <= 0) qty = 1;
+      elements.push({ assetId, quantity: qty, length_mm: lengthMm });
+      continue;
+    }
 
     // Gutter with length: expand into one element per length type (bin-packing) so backend returns one row per length.
     // Send length_mm on the first bin-packed element so bracket/screw count uses manual length, not bin-packed stock length.
@@ -7367,7 +7378,7 @@ function getOptimalDownpipeCombination(requiredMm, costByLength = null) {
 /**
  * Elements for quote: gutters use bin-packing per run (each run optimized separately, then counts aggregated); other measurable use length→quantity; rest use count.
  * Per-run optimization ensures we don't treat "Run A 2.9m + Run B 2.9m" as one 5.8m span; each run gets its own stock (max single length 5m, cut from one end).
- * @returns {{ assetId: string, quantity: number, incomplete?: boolean }[]}
+ * @returns {{ assetId: string, quantity: number, incomplete?: boolean, packed_from_canvas?: boolean }[]}
  */
 function getElementsForQuote() {
   const result = []; // { assetId, quantity, incomplete?, length_mm? }[]
@@ -7451,6 +7462,7 @@ function getElementsForQuote() {
         quantity: qty,
         incomplete: !!incompleteByLength[lengthMm],
         length_mm: totalMeasuredMm != null && totalMeasuredMm > 0 ? totalMeasuredMm : undefined,
+        packed_from_canvas: true,
       });
     });
   });
@@ -11427,7 +11439,15 @@ function initAuth() {
     if (profileDropdown) profileDropdown.hidden = !expanded;
     if (userAvatar) userAvatar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     if (productsUserAvatar) productsUserAvatar.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    if (expanded) collapseDiagramToolbarIfExpanded();
+    if (expanded) {
+      collapseDiagramToolbarIfExpanded();
+      // Sync permission-gated menu items so users only see entries they can access.
+      updateUserPermissionsMenuVisibility();
+      updateMaterialRulesMenuVisibility();
+      updateTechnicianBonusMenuVisibility();
+      updateBonusAdminMenuVisibility();
+      updateBonusAnalyticsMenuVisibility();
+    }
   }
 
   function toggleProfileDropdown(event) {
@@ -12192,13 +12212,21 @@ function initBonusAnalyticsView() {
   }
 }
 
+const BONUS_ANALYTICS_LEADERBOARD_TOP_N = 10;
+
 async function fetchBonusAnalyticsSummary() {
   const loadingEl = document.getElementById('bonusAnalyticsLoading');
   const errorEl = document.getElementById('bonusAnalyticsError');
   const tableWrap = document.getElementById('bonusAnalyticsTableWrap');
   const tableBody = document.getElementById('bonusAnalyticsTableBody');
   const emptyEl = document.getElementById('bonusAnalyticsEmpty');
-  if (!authState.token) return;
+  const leaderboardList = document.getElementById('bonusAnalyticsLeaderboardList');
+  const leaderboardEmpty = document.getElementById('bonusAnalyticsLeaderboardEmpty');
+  if (!authState.token) {
+    if (leaderboardList) leaderboardList.innerHTML = '';
+    if (leaderboardEmpty) { leaderboardEmpty.textContent = 'No data yet.'; leaderboardEmpty.hidden = false; }
+    return;
+  }
   const dashboardType = document.getElementById('bonusAnalyticsDashboardType')?.value?.trim() || '';
   const fromDate = document.getElementById('bonusAnalyticsFromDate')?.value?.trim() || '';
   const toDate = document.getElementById('bonusAnalyticsToDate')?.value?.trim() || '';
@@ -12212,6 +12240,8 @@ async function fetchBonusAnalyticsSummary() {
   if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
   if (tableWrap) tableWrap.hidden = true;
   if (emptyEl) emptyEl.hidden = true;
+  if (leaderboardList) leaderboardList.innerHTML = '';
+  if (leaderboardEmpty) { leaderboardEmpty.hidden = true; leaderboardEmpty.textContent = ''; }
   try {
     const res = await fetch(url, { headers: getAuthHeaders() });
     if (!res.ok) {
@@ -12223,6 +12253,8 @@ async function fetchBonusAnalyticsSummary() {
     if (loadingEl) loadingEl.hidden = true;
     if (rows.length === 0) {
       if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'No data for the selected filters.'; }
+      if (leaderboardList) leaderboardList.innerHTML = '';
+      if (leaderboardEmpty) { leaderboardEmpty.textContent = 'No data for the selected filters.'; leaderboardEmpty.hidden = false; }
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
@@ -12236,12 +12268,37 @@ async function fetchBonusAnalyticsSummary() {
       }).join('');
     }
     if (tableWrap) tableWrap.hidden = false;
+    // Leaderboard: aggregate by user, top N by total time (59.30.5)
+    const byUser = new Map();
+    for (const r of rows) {
+      const key = String(r.user_id ?? r.email ?? '—');
+      const duration = Number(r.total_duration_seconds) || 0;
+      const label = r.email || r.user_id || '—';
+      const existing = byUser.get(key);
+      if (existing) {
+        existing.total_duration_seconds += duration;
+      } else {
+        byUser.set(key, { label, total_duration_seconds: duration });
+      }
+    }
+    const topN = Array.from(byUser.values())
+      .sort((a, b) => b.total_duration_seconds - a.total_duration_seconds)
+      .slice(0, BONUS_ANALYTICS_LEADERBOARD_TOP_N);
+    if (leaderboardList) {
+      leaderboardList.innerHTML = topN.map((u) => {
+        const duration = formatBonusAnalyticsDuration(u.total_duration_seconds);
+        return `<li>${escapeHtml(u.label)} — ${escapeHtml(duration)}</li>`;
+      }).join('');
+    }
+    if (leaderboardEmpty) leaderboardEmpty.hidden = true;
   } catch (e) {
     if (loadingEl) loadingEl.hidden = true;
     if (errorEl) {
       errorEl.hidden = false;
       errorEl.textContent = e?.message || 'Failed to load analytics.';
     }
+    if (leaderboardList) leaderboardList.innerHTML = '';
+    if (leaderboardEmpty) { leaderboardEmpty.textContent = 'No data yet.'; leaderboardEmpty.hidden = false; }
   }
 }
 
