@@ -57,8 +57,11 @@ Short reference for “what we can pull” from the ServiceM8 API for Section 59
 | Endpoint | Method | URL | Scope |
 |----------|--------|-----|--------|
 | List all Job Activities | GET | `/api_1.0/jobactivity.json` | `read_schedule` |
+| Create Job Activity | POST | `/api_1.0/jobactivity.json` | `manage_schedule` |
 
 **Filtering:** Use `$filter=job_uuid eq 'VALUE'` to get activities for one job.
+
+**Create Job Activity (61.9 Schedule Now):** When a technician chooses "Yes, doing it now" and Create New Job succeeds, the backend POSTs to this endpoint to allocate the job on their schedule. Request body: `job_uuid`, `staff_uuid`, `start_date`, `end_date` (format `"YYYY-MM-DD HH:MM:SS"`), `activity_was_scheduled: "1"`. Start time = processing time (optional `SERVICEM8_SCHEDULE_TIMEZONE`, else UTC); end = start + quote labour hours. Implemented in `backend/app/servicem8.py` (`create_job_activity`) and invoked from the create-new-job handler in `backend/main.py` when `body.schedule_now` is true.
 
 **Terminology (REST overview):**
 

@@ -238,6 +238,96 @@ async function run() {
     }
     console.log('  ✓ Product Library avatar opens user menu without forcing sign-out');
 
+    const meVerificationFailClosedState = await page.evaluate(async () => {
+      if (
+        typeof window.__quoteAppSetAuthForTests !== 'function'
+        || typeof window.__quoteAppGetAdminUiState !== 'function'
+        || typeof window.__quoteAppFetchMeAndUpdateAuthForTests !== 'function'
+      ) {
+        return { hookReady: false };
+      }
+      const originalFetch = window.fetch.bind(window);
+      window.__quoteAppSetAuthForTests({
+        token: 'e2e-stale-admin-token',
+        role: 'admin',
+        email: 'qa-fail-closed@example.com',
+        userId: '00000000-0000-0000-0000-00000000d102',
+      });
+      if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-canvas');
+      window.fetch = async (input, init = {}) => {
+        const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        const href = String(url || '');
+        if (href.includes('/api/me')) {
+          return new Response(JSON.stringify({ detail: 'forced /api/me failure for e2e' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return originalFetch(input, init);
+      };
+      try {
+        await window.__quoteAppFetchMeAndUpdateAuthForTests();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const adminState = window.__quoteAppGetAdminUiState();
+        const visibleView = document.querySelector('.app-view:not(.hidden)')?.id || null;
+        const userPermissionsMenu = document.getElementById('menuItemUserPermissions');
+        const materialRulesMenu = document.getElementById('menuItemMaterialRules');
+        const bonusAdminMenu = document.getElementById('menuItemBonusAdmin');
+        return {
+          hookReady: true,
+          hasToken: !!adminState?.hasToken,
+          canAccessDesktopAdminUi: !!adminState?.canAccessDesktopAdminUi,
+          visibleView,
+          userPermissionsMenuExists: !!userPermissionsMenu,
+          userPermissionsMenuHidden: userPermissionsMenu ? !!userPermissionsMenu.hidden : null,
+          materialRulesMenuExists: !!materialRulesMenu,
+          materialRulesMenuHidden: materialRulesMenu ? !!materialRulesMenu.hidden : null,
+          bonusAdminMenuExists: !!bonusAdminMenu,
+          bonusAdminMenuHidden: bonusAdminMenu ? !!bonusAdminMenu.hidden : null,
+        };
+      } finally {
+        window.fetch = originalFetch;
+      }
+    });
+    if (!meVerificationFailClosedState.hookReady) {
+      throw new Error('Auth fail-closed regression: missing auth verification test hooks');
+    }
+    if (meVerificationFailClosedState.hasToken || meVerificationFailClosedState.canAccessDesktopAdminUi) {
+      throw new Error(
+        `Auth fail-closed regression: /api/me failure should clear token/admin access ` +
+        `(hasToken=${meVerificationFailClosedState.hasToken}, canAccessDesktopAdminUi=${meVerificationFailClosedState.canAccessDesktopAdminUi})`
+      );
+    }
+    if (meVerificationFailClosedState.visibleView !== 'view-login') {
+      throw new Error(
+        `Auth fail-closed regression: /api/me failure should redirect to login ` +
+        `(visibleView=${meVerificationFailClosedState.visibleView})`
+      );
+    }
+    if (
+      !meVerificationFailClosedState.userPermissionsMenuExists
+      || !meVerificationFailClosedState.userPermissionsMenuHidden
+      || !meVerificationFailClosedState.materialRulesMenuExists
+      || !meVerificationFailClosedState.materialRulesMenuHidden
+      || !meVerificationFailClosedState.bonusAdminMenuExists
+      || !meVerificationFailClosedState.bonusAdminMenuHidden
+    ) {
+      throw new Error('Auth fail-closed regression: admin desktop menu items should be hidden after /api/me failure');
+    }
+    console.log('  ✓ /api/me verification failure fails closed (logout + admin menu lockout)');
+    await page.evaluate(() => {
+      if (typeof window.__quoteAppSetAuthForTests === 'function') {
+        window.__quoteAppSetAuthForTests({
+          token: 'e2e-post-fail-closed-token',
+          role: 'admin',
+          email: 'qa-post-fail-closed@example.com',
+          userId: '00000000-0000-0000-0000-00000000d103',
+        });
+      }
+      if (typeof window.__quoteAppSwitchView === 'function') window.__quoteAppSwitchView('view-products');
+    });
+    await delay(220);
+
     const productCardKeyboardBehavior = await page.evaluate(() => {
       const card = document.getElementById('productCardNew');
       const modal = document.getElementById('productModal');

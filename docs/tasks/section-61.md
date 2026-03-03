@@ -46,4 +46,10 @@
 
 ---
 
-*For the index and uncompleted table, see TASK_LIST.md. Implementation order: 61.1 (permissions) first; then 61.2–61.3 (pop-up); then 61.4–61.6 (labour); 61.7 (regression); 61.8 (confirm overlay buttons) last.*
+### Schedule now: allocate job on technician’s ServiceM8 schedule
+
+- [x] **61.9** **Schedule now: Create Job Activity after Create New Job.** When a technician chooses "Yes, doing it now" and Create New Job succeeds, call ServiceM8 to create a Job Activity (scheduled booking) so the job is allocated on their schedule. **Backend:** Add optional `schedule_now` to `CreateNewJobRequest`; after job creation and quote persist, if `schedule_now` true: resolve current user to ServiceM8 `staff_uuid` (invert `get_staff_uuid_to_technician_id_map` or add `resolve_technician_id_to_staff_uuid`); set start_date = current time (use optional `SERVICEM8_SCHEDULE_TIMEZONE`, else UTC); set end_date = start_date + `body.labour_hours` (hours); POST to `https://api.servicem8.com/api_1.0/jobactivity.json` with body `{ job_uuid, staff_uuid, start_date, end_date, activity_was_scheduled: "1" }`; log (and optionally store) that at schedule-now creation the job was not completed (`job_completed_at_schedule_time = false`). Do not fail Create New Job if schedule-now fails (log and optionally return `schedule_now_done: false`). **Frontend:** When technician and `doingItNow === true`, set `body.schedule_now = true` in Create New Job request. **Scope:** `manage_schedule` already in DEFAULT_SCOPES. Plan: `docs/plans/2026-03-schedule-now-job-activity-plan.md`. Railway-safe; document new env and API in SERVICEM8_API_REFERENCE.md.
+
+---
+
+*For the index and uncompleted table, see TASK_LIST.md. Implementation order: 61.1 (permissions) first; then 61.2–61.3 (pop-up); then 61.4–61.6 (labour); 61.7 (regression); 61.8 (confirm overlay buttons); 61.9 (schedule now) last.*

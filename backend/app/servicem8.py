@@ -558,6 +558,16 @@ def get_staff_uuid_to_technician_id_map(access_token: str) -> dict[str, Optional
     return result
 
 
+def resolve_technician_id_to_staff_uuid(access_token: str, user_id: str) -> Optional[str]:
+    """
+    Resolve auth user id (technician_id) to ServiceM8 staff_uuid for Schedule Now (61.9).
+    Inverts get_staff_uuid_to_technician_id_map; returns None if user has no staff mapping.
+    """
+    m = get_staff_uuid_to_technician_id_map(access_token)
+    tech_to_staff = {v: k for k, v in m.items() if v is not None}
+    return tech_to_staff.get(str(user_id))
+
+
 def _build_email_to_user_id_map(emails: set[str]) -> dict[str, str]:
     """Resolve multiple emails to auth user ids in one list_users call. Returns email_lower -> user_id."""
     if not emails:
@@ -642,6 +652,38 @@ def list_job_activities(access_token: str, job_uuid: str) -> list[dict[str, Any]
     except Exception as e:
         logger.warning("ServiceM8 list_job_activities failed for job_uuid=%s: %s", job_uuid, e)
         return []
+
+
+def create_job_activity(
+    access_token: str,
+    job_uuid: str,
+    staff_uuid: str,
+    start_date: str,
+    end_date: str,
+) -> tuple[bool, Optional[str]]:
+    """
+    POST to ServiceM8 jobactivity.json to create a scheduled booking (61.9 Schedule Now).
+    Body: job_uuid, staff_uuid, start_date, end_date, activity_was_scheduled="1".
+    Date format: "YYYY-MM-DD HH:MM:SS". Returns (success, error_message).
+    """
+    payload = {
+        "job_uuid": job_uuid,
+        "staff_uuid": staff_uuid,
+        "start_date": start_date,
+        "end_date": end_date,
+        "activity_was_scheduled": "1",
+    }
+    try:
+        resp = make_api_request("POST", "/api_1.0/jobactivity.json", access_token, json_data=payload)
+        resp.raise_for_status()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        body = e.response.text
+        logger.warning("ServiceM8 create_job_activity failed: %s %s", e.response.status_code, body)
+        return False, body or str(e)
+    except Exception as e:
+        logger.warning("ServiceM8 create_job_activity failed: %s", e)
+        return False, str(e)
 
 
 def create_job(access_token: str, payload: dict[str, Any]) -> tuple[bool, Optional[str]]:

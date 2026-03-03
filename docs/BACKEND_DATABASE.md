@@ -381,6 +381,68 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 
 ---
 
+## Audit: Data required for GP commission attribution (Section 59.27)
+
+**Purpose:** Document exactly what the commission plan (Sections 59, 60) requires to attribute completed jobs to who sold/executed, and map each requirement to (a) what we store at quote time in `public.quotes` and (b) what we get at completion from ServiceM8 and what we write to `job_performance` / `job_personnel`. Identifies gaps and implementation status.
+
+### What the commission plan requires
+
+To attribute GP commission (60/40 seller/executor, estimation accuracy, Schedule Saver, callbacks, seller penalties) the system needs:
+
+| Requirement | Used for |
+|-------------|----------|
+| **Job identity** (uuid, job number) | Link completed ServiceM8 job to our quote and `job_performance` row; API lookups. |
+| **Who sold** (seller(s)) | 60% of Job GP to seller(s); truck share split; Schedule Saver (seller-only keeps 60%). |
+| **Who executed** (executor(s)) | 40% of Job GP to executor(s); truck share; do-it-all (same person → 100%). |
+| **Quoted labour (time)** | Estimation accuracy: seller share only if actual labour within 15% or 20 min of quoted. |
+| **Actual labour (time)** | Sum onsite + travel/shopping per job for estimation check; “clock keeps ticking.” |
+| **Total price (revenue)** | Job GP = revenue − materials − (standard_parts_runs × $10). |
+| **Materials cost** | Job GP; minimum margin 50%; Missed Materials (seller penalty) comparison. |
+| **Payment date** | Period assignment (60.7): jobs paid after 11:59 PM last Sunday roll to next period. |
+| **Materials (line items)** | Missed Materials: compare quoted vs actual usage for seller penalty (optional/future). |
+
+### (a) Stored at quote time (Add to Job / Create New Job) in `public.quotes`
+
+| Data point | Column / shape | Status |
+|------------|-----------------|--------|
+| Job identity | `servicem8_job_id`, `servicem8_job_uuid` | Implemented (59.19, 59.4). |
+| Who sold (primary) | `created_by` (auth.users.id) | Implemented (59.25). |
+| Who sold (co-seller) | `co_seller_user_id` (auth.users.id) | Implemented (59.28). |
+| Quoted labour | `labour_hours` → `quoted_labor_minutes = round(labour_hours * 60)` when syncing | Implemented (59.3, 59.19, 59.6/59.7). |
+| Quote total / materials | `total`, `items` (JSONB material lines: id, qty; 59.19.1) | Implemented (59.19, 59.19.1). |
+| Active quote for job | `is_final_quote` (set when job → Scheduled/In Progress) | Implemented; sync uses last quote by updated_at or is_final_quote. |
+
+### (b) At completion: from ServiceM8 and written to `job_performance` / `job_personnel`
+
+| Data point | ServiceM8 source | Our storage | Status |
+|------------|------------------|-------------|--------|
+| Job identity | Job `uuid`, `generated_job_id` | `job_performance.servicem8_job_id` (UNIQUE), `servicem8_job_uuid` | Sync (59.6, 59.7). |
+| Revenue | Job `total_invoice_amount` (inc GST) | `job_performance.invoiced_revenue_exc_gst` (÷ 1.15) | Sync. |
+| Materials cost | Job Materials (list); our DB cost or ServiceM8 fallback | `job_performance.materials_cost` | Sync (59.7). |
+| Payment date | Job `payment_date` | `job_performance.payment_date` | Sync (59.29, 60.7). |
+| Quote link | — (we match by servicem8_job_id) | `job_performance.quote_id`, `quoted_labor_minutes` from quote | Sync. |
+| Who was on job (baseline) | Job Activities (staff_uuid, duration) | `job_personnel`: technician_id (staff→email→auth.users), onsite_minutes (total), travel_shopping_minutes=0 | Sync (59.8); admin verifies/splits. |
+| Who sold (pre-populate) | Quote `created_by`, `co_seller_user_id` | `job_personnel`: insert rows with `is_seller=true` for those users (insert-only) | Sync (59.26). |
+| Who executed | Admin (or from schedule); JobActivity assignees as baseline | `job_personnel.is_executor`, `is_seller` (admin can override) | Admin in Bonus Admin (59.17). |
+| Actual labour split | Admin verifies from raw JobActivity | `job_personnel.onsite_minutes`, `travel_shopping_minutes` | Admin. |
+
+**ServiceM8 API reference:** Jobs (uuid, generated_job_id, status, total_invoice_amount, payment_date, created_by_staff_uuid); Job Materials (cost/quantity); Job Activities (job_uuid, staff_uuid, duration); Staff (uuid, email for technician_id). See `docs/SERVICEM8_API_REFERENCE.md`.
+
+### Gaps and implementation status
+
+- **created_by, co-seller, payment_date:** No gap. Implemented in 59.25, 59.26, 59.28, 59.29; sync reads quote attribution and payment_date, pre-populates sellers, writes payment_date.
+- **Quoted labour:** No gap. From linked quote (`quoted_labor_minutes = round(quote.labour_hours * 60)`); sync sets from active quote.
+- **Job identity:** No gap. Quotes and job_performance store servicem8_job_id and servicem8_job_uuid; sync matches job to quote by servicem8_job_id.
+- **Actual labour:** Admin must verify/split onsite vs travel (ServiceM8 check-in/out unreliable); sync provides baseline from JobActivity; no code gap.
+- **Missed Materials (automatic):** Optional future enhancement. We store `quotes.items` (id, qty) at quote time (59.19.1); comparison to ServiceM8 Job Materials for auto-detection is not yet implemented; admin can enter `missed_materials_cost` in Bonus Admin.
+- **created_by_staff_uuid (ServiceM8):** Available on Job response; could be used as cross-check or fallback when quote was not created from our app (e.g. job created in ServiceM8 only). Not required for current flow; document as optional refinement if jobs are ever created outside the app.
+
+### Conclusion
+
+All data required for GP commission attribution (who sold/executed, quoted/actual time, revenue, materials, payment date, period assignment) is either stored at quote time in `public.quotes` or obtained at completion from ServiceM8 and written by sync to `job_performance` / `job_personnel`. Tasks 59.25, 59.26, 59.28, and 59.29 cover the attribution and period-assignment pipeline; no new implementation tasks are required from this audit. Optional refinements: use ServiceM8 `created_by_staff_uuid` as fallback for seller when no app quote exists; implement automatic Missed Materials comparison from `quotes.items` vs Job Materials.
+
+---
+
 ## Audit: ServiceM8 job syncing (Section 59 / job_performance link)
 
 **Purpose:** Ensure we capture and persist ServiceM8 job identifiers so the payroll/bonus system can link finalized jobs back to the original estimate. `job_performance` uses `servicem8_job_id` (UNIQUE) to link to a ServiceM8 job; a `job_uuid` fallback supports API lookups (e.g. `fetch_job_by_uuid`).
@@ -395,13 +457,13 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 | **Add to current job** | POST `/api/servicem8/add-to-job` | Body has `job_uuid` (from lookup). Backend returns `{ "success": true, "uuid": "<job_uuid>", "generated_job_id": "<number>" }` so the client can persist both for diagram save even if overlay state is lost (59.4.4). |
 | **After Add to Job success** | Frontend `autoSaveDiagramWithJobNumber(jobNumber, jobUuid)` | `jobNumber` from `jobConfirmAddId`, `jobUuid` from `overlay.dataset.jobUuid`. POST `/api/diagrams` with `servicem8JobId` and optional `servicem8JobUuid`. Backend writes both to `saved_diagrams` (59.4.2–59.4.3 implemented). |
 | **Create New Job** | POST `/api/servicem8/create-new-job` | Backend returns `new_job_uuid`, `generated_job_id`. Frontend passes both to `autoSaveDiagramWithJobNumber(newJobNumber, newJobUuid)` so both job number and uuid are stored in `saved_diagrams`. |
-| **public.quotes** | — | **Never written.** No `servicem8_job_id` or `servicem8_job_uuid` stored when Add to Job runs. |
+| **public.quotes** | 59.19 | Persisted on Add to Job / Create New Job with `servicem8_job_id`, `servicem8_job_uuid`, labour_hours, items, created_by, co_seller_user_id. |
 
 ### Gaps and risk
 
 - **saved_diagrams:** Schema now has `servicem8_job_uuid` (nullable). App still writes only `servicem8_job_id`; 59.4.2–59.4.3 add API and frontend to persist both.
-- **public.quotes:** Not used; when we add quote persistence (Section 59), we should store both job number and job uuid so `job_performance` can link via `quote_id` and/or `servicem8_job_id` / `servicem8_job_uuid`.
-- **job_performance:** Has `servicem8_job_id` (UNIQUE) and `servicem8_job_uuid` (nullable, schema done). App does not write to this table yet; when it does, use both columns as needed.
+- **public.quotes:** Quote persistence (59.19) stores servicem8_job_id and servicem8_job_uuid so sync can link job_performance via quote_id.
+- **job_performance:** Sync (59.6/59.7) creates/updates rows; schema has servicem8_job_id (UNIQUE) and servicem8_job_uuid (nullable).
 
 ### Recommendations
 
@@ -423,7 +485,7 @@ The following are **locked decisions** for bonus ledger and calculation. Full ra
 
 | Touchpoint | Behaviour |
 |------------|-----------|
-| **public.quotes** | Table has `items` (jsonb). **No code path inserts or updates this table**; `items` is never populated. |
+| **public.quotes** | Table has `items` (jsonb). Persisted on Add to Job / Create New Job (59.19); `items` set to material-only array `{ id, qty }` per 59.19.1. |
 | **POST /api/calculate-quote** | Accepts `elements` (assetId + quantity, optional length_mm). Returns `quote.materials` array: `{ id, name, qty, cost_price, markup_percentage, sell_price, line_total }`. So we have product **id** and **qty** in the response. Not persisted. |
 | **getElementsFromQuoteTable()** | Builds elements with `assetId`, `quantity`, optionally `length_mm`. Used for calculate-quote request. Source of truth for what’s on the quote table (including gutter/downpipe bin-pack from header metres). |
 | **Add to Job payload** | `getAddToJobPayload()` sends `elements: [{ name, qty }]` — **display name and qty only, no product id.** Backend `AddToJobRequest.elements` is `AddToJobElement(name, qty)`. Used for job note text and the single bundled material line in ServiceM8. So the payload to ServiceM8 does **not** include product IDs; we cannot reliably match “quoted line” to “ServiceM8 material line” by id later. |

@@ -107,6 +107,8 @@ function getEffectiveDpr() {
 
 /** Auth: token, user, role, and Supabase client for saved diagrams and product uploads. */
 const authState = { token: null, email: null, user: null, role: 'viewer', isSuperAdmin: false, supabase: null, recoveryLandingFromHash: false };
+/** Prevent duplicate sign-out/redirect loops when concurrent /api/me verification calls fail. */
+let meVerificationFailureHandled = false;
 
 let appConfigPromise = null;
 let supabaseSdkPromise = null;
@@ -234,6 +236,7 @@ function setAuthFromSession(session, explicitUser = null) {
   authState.email = user?.email ?? null;
   authState.user = user ?? null;
   authState.role = deriveAuthRole(session, user, authState.token);
+  meVerificationFailureHandled = false;
   markPanelProductsDirty();
 }
 
@@ -274,19 +277,38 @@ async function fetchMeAndUpdateAuth() {
   }
   try {
     const r = await fetch('/api/me', { headers: getAuthHeaders() });
-    const data = r.ok ? await r.json().catch(() => ({})) : {};
-    authState.isSuperAdmin = !!data.is_super_admin;
-    if (r.ok && data && data.hasOwnProperty('role')) {
-      authState.role = normalizeAppRole(data.role);
+    if (!r.ok) {
+      handleMeVerificationFailure();
+      return;
     }
+    const data = await r.json().catch(() => null);
+    if (!data || !Object.prototype.hasOwnProperty.call(data, 'role') || typeof data.role !== 'string') {
+      handleMeVerificationFailure();
+      return;
+    }
+    authState.isSuperAdmin = !!data.is_super_admin;
+    authState.role = normalizeAppRole(data.role);
+    meVerificationFailureHandled = false;
   } catch (_) {
-    authState.isSuperAdmin = false;
+    handleMeVerificationFailure();
+    return;
   }
   if (setAuthUIRef) setAuthUIRef();
 }
 
 /** Set by initAuth so handleAuthFailure can refresh login UI when session is invalid. */
 let setAuthUIRef = null;
+
+/** Fail closed when /api/me role verification cannot be completed. */
+function handleMeVerificationFailure() {
+  if (meVerificationFailureHandled) return;
+  meVerificationFailureHandled = true;
+  clearAuthState();
+  closeAllModals({ restoreFocus: false });
+  switchView('view-login');
+  if (setAuthUIRef) setAuthUIRef();
+  showMessage('Could not verify your account permissions. Please sign in again.', 'info');
+}
 
 /**
  * If response is 401 or 403, clear auth, refresh auth UI, redirect to sign-in, and return true.
@@ -4263,6 +4285,10 @@ function initJobConfirmationOverlay() {
     if (coSellerUserId != null && String(coSellerUserId).trim()) {
       body.co_seller_user_id = String(coSellerUserId).trim();
     }
+    // 61.9 Schedule now: when technician chose "Yes, doing it now", ask backend to create Job Activity
+    if (isTechnicianRole() && doingItNow === true) {
+      body.schedule_now = true;
+    }
     try {
       const resp = await fetch('/api/servicem8/create-new-job', {
         method: 'POST',
@@ -4295,9 +4321,15 @@ function initJobConfirmationOverlay() {
       }
       const newJobNumber = data.generated_job_id || data.new_job_uuid || '';
       const newJobUuid = data.new_job_uuid || '';
+      const scheduleNowRequested = body.schedule_now === true;
+      const scheduleNowDone = data.schedule_now_done === true;
       setTimeout(() => {
         hideOverlay();
-        showFeedback('New job created. Note and blueprint added to both jobs.', false);
+        let msg = 'New job created. Note and blueprint added to both jobs.';
+        if (scheduleNowRequested && !scheduleNowDone) {
+          msg += ' Could not add to your schedule.';
+        }
+        showFeedback(msg, false);
         if (createNewBtn) {
           createNewBtn.classList.remove('job-confirm-create-new--done');
           createNewBtn.disabled = false;
@@ -15491,6 +15523,9 @@ if (typeof window !== 'undefined') {
       syncAdminDesktopAccess({ notify: false, focus: false });
     }
     return window.__quoteAppGetAdminUiState();
+  };
+  window.__quoteAppFetchMeAndUpdateAuthForTests = function () {
+    return fetchMeAndUpdateAuth();
   };
   window.__quoteAppGetOrientationPolicyState = function () {
     return {

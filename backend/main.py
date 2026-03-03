@@ -6,9 +6,10 @@ import base64
 import logging
 import os
 import uuid as uuid_lib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from starlette.responses import RedirectResponse
@@ -914,6 +915,7 @@ class CreateNewJobRequest(BaseModel):
     image_base64: Optional[str] = Field(None, description="PNG blueprint image as base64 (no data URL prefix); attached to both original and new job")
     job_notes_above: Optional[str] = Field(None, description="Optional text prepended above job note/description when posting to ServiceM8 (49.35)")
     co_seller_user_id: Optional[str] = Field(None, description="Section 59.28: optional auth.users.id of co-seller from doing-it-now modal; persisted for job_personnel attribution")
+    schedule_now: Optional[bool] = Field(False, description="If true, create a Job Activity to allocate the job on the current user's schedule (61.9 technician doing it now).")
 
 
 class CreateBonusPeriodRequest(BaseModel):
@@ -1047,16 +1049,32 @@ def api_me(
     user_id_and_role: tuple[uuid_lib.UUID, str] = Depends(get_current_user_id_and_role),
     payload: dict = Depends(get_validated_payload),
 ):
-    """Current user info (Bearer required). Role is authoritative from public.profiles when present, else JWT."""
-    user_id, role = user_id_and_role
+    """Current user info (Bearer required). Role is authoritative from public.profiles and fails closed if unreadable."""
+    user_id, _ = user_id_and_role
     is_super = is_super_admin_from_payload(payload)
+    role = "viewer"
     try:
         supabase = get_supabase()
         resp = supabase.table("profiles").select("role").eq("user_id", str(user_id)).limit(1).execute()
-        if resp.data and len(resp.data) > 0 and resp.data[0].get("role"):
-            role = _normalize_app_role(resp.data[0]["role"])
+        rows = list(resp.data or [])
+        if not rows:
+            logger.warning("api_me: no profile row for user_id=%s; defaulting role=viewer", user_id)
+        else:
+            raw_role = (rows[0] or {}).get("role")
+            normalized_role = _normalize_app_role(raw_role)
+            normalized_raw = str(raw_role or "").strip().lower()
+            role = normalized_role
+            if not normalized_raw:
+                logger.warning("api_me: profile row has no role for user_id=%s; defaulting role=viewer", user_id)
+            elif normalized_role == "viewer" and normalized_raw != "viewer":
+                logger.warning(
+                    "api_me: invalid profile role=%r for user_id=%s; defaulting role=viewer",
+                    raw_role,
+                    user_id,
+                )
     except Exception as e:
         logger.warning("api_me: could not read role from profiles for user_id=%s: %s", user_id, e)
+        raise HTTPException(503, "Could not verify current user role. Please sign in again.")
     if is_super:
         role = "admin"
     email = payload.get("email") or ""
@@ -2821,7 +2839,41 @@ def api_servicem8_create_new_job(
         logger.exception("Failed to persist quote for Create New Job: %s", e)
         raise HTTPException(503, "New job was created in ServiceM8, but we couldn't save a copy for bonus tracking. Please don't create another copy of this job; contact support if you need this recorded.")
 
-    return {"success": True, "new_job_uuid": new_job_uuid, "generated_job_id": generated_job_id}
+    # Schedule Now (61.9): create Job Activity when technician chose "Yes, doing it now"
+    schedule_now_done: Optional[bool] = None
+    if body.schedule_now:
+        staff_uuid = sm8.resolve_technician_id_to_staff_uuid(access_token, str(user_id))
+        if staff_uuid is None:
+            logger.warning("Schedule now skipped: current user has no ServiceM8 staff mapping (user_id=%s)", user_id)
+            schedule_now_done = False
+        else:
+            tz_name = (os.environ.get("SERVICEM8_SCHEDULE_TIMEZONE") or "").strip()
+            tz = timezone.utc
+            if tz_name:
+                try:
+                    tz = ZoneInfo(tz_name)
+                except Exception:
+                    pass
+            now = datetime.now(tz)
+            start_date = now.strftime("%Y-%m-%d %H:%M:%S")
+            end_dt = now + timedelta(hours=body.labour_hours)
+            end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+            ok, err = sm8.create_job_activity(access_token, new_job_uuid, staff_uuid, start_date, end_date)
+            if ok:
+                logger.info(
+                    "schedule_now_created job_uuid=%s staff_uuid=%s job_completed_at_schedule_time=false",
+                    new_job_uuid,
+                    staff_uuid,
+                )
+                schedule_now_done = True
+            else:
+                logger.warning("Schedule now create_job_activity failed: %s", err)
+                schedule_now_done = False
+
+    out = {"success": True, "new_job_uuid": new_job_uuid, "generated_job_id": generated_job_id}
+    if body.schedule_now is True:
+        out["schedule_now_done"] = schedule_now_done
+    return out
 
 
 # Serve static frontend and assets (must be after API routes)
