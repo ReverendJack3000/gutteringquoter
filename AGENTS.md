@@ -16,7 +16,13 @@ From the project root:
 
 This activates `backend/.venv`, starts Uvicorn with `--reload` on `http://127.0.0.1:8000/`. Health check: `GET /api/health`.
 
-The server requires Supabase credentials in `backend/.env`. Copy from `backend/.env.example` and set `SUPABASE_URL=https://rlptjmkejfykisaefkeh.supabase.co` plus a valid `SUPABASE_ANON_KEY` or `SUPABASE_SERVICE_ROLE_KEY`. See `README.md` for details.
+The server requires Supabase credentials in `backend/.env`. The environment secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically. On first run, write them to `backend/.env` (the update script does not do this since `.env` is gitignored and secrets are environment-specific). Example:
+
+```bash
+python3 -c "import os; open('backend/.env','w').write('\n'.join(f'{k}={os.environ[k]}' for k in ['SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY'])+'\nPWA_ENABLED=false\n')"
+```
+
+See `README.md` for full `.env` options.
 
 ### Running tests
 
