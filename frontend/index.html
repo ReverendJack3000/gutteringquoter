@@ -1274,7 +1274,7 @@
         <h2 id="quickQuoterModalTitle" class="auth-modal-title quick-quoter-modal-title">Quick Quoter</h2>
         <button type="button" class="quick-quoter-close" id="quickQuoterModalClose" aria-label="Close Quick Quoter">×</button>
       </div>
-      <p id="quickQuoterModalDescription" class="auth-modal-desc quick-quoter-modal-desc">Select one or more repair types and set quantity for each.</p>
+      <p id="quickQuoterModalDescription" class="auth-modal-desc quick-quoter-modal-desc">Pick repair types, then adjust quantity for each one.</p>
       <div class="quick-quoter-selectors" role="group" aria-label="Quick Quoter selectors">
         <label class="quick-quoter-selector-field" for="quickQuoterProfileSelect">
           <span>Profile</span>
@@ -1285,7 +1285,7 @@
           </select>
         </label>
         <label class="quick-quoter-selector-field" for="quickQuoterSizeSelect">
-          <span>Size mm</span>
+          <span>Downpipe size</span>
           <select id="quickQuoterSizeSelect">
             <option value="">Select size</option>
             <option value="65">65 mm</option>
@@ -1293,6 +1293,7 @@
           </select>
         </label>
       </div>
+      <p class="quick-quoter-helper">Only choose profile or size when the selected repair asks for it.</p>
       <div class="quick-quoter-validation" id="quickQuoterValidation" role="alert" aria-live="polite" hidden></div>
       <div class="quick-quoter-list" id="quickQuoterList" role="listbox" aria-multiselectable="true"></div>
       <div class="quick-quoter-actions">
