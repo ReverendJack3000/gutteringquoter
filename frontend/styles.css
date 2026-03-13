@@ -6911,6 +6911,30 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
   gap: 10px;
 }
 
+.quote-global-markup-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quote-global-markup-input {
+  width: 96px;
+  min-width: 96px;
+  padding: 6px 8px;
+  border: 1px solid #d6dce2;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.quote-global-markup-input:focus {
+  outline: none;
+  border-color: #1f4f7a;
+}
+
+.quote-global-markup-apply {
+  white-space: nowrap;
+}
+
 .quote-modal-title {
   margin: 0;
   font-size: 18px;
@@ -8850,16 +8874,41 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
 }
 /* 54.93.11: AUTO label pill for inferred/conditional rows (desktop + mobile) */
 #quoteModal .quote-parts-table .quote-product-auto-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
+  border: 1px solid transparent;
   background: #e8f4fc;
   color: #0a7ea4;
   white-space: nowrap;
   vertical-align: middle;
+  box-shadow: none;
+  font-family: inherit;
+  cursor: default;
+}
+
+#quoteModal .quote-parts-table .quote-product-auto-badge:disabled {
+  opacity: 1;
+}
+
+#quoteModal .quote-parts-table .quote-product-auto-badge--manual {
+  background: #e4e7ea;
+  border-color: #c6cdd4;
+  color: #59636c;
+  cursor: pointer;
+}
+
+#quoteModal .quote-parts-table .quote-product-auto-badge--manual:hover,
+#quoteModal .quote-parts-table .quote-product-auto-badge--manual:focus-visible {
+  background: #d7dde2;
+  border-color: #b2bcc5;
+  color: #3f4850;
+  outline: none;
 }
 /* Product name in first cell: single-line truncate with ellipsis on mobile to keep row height fixed */
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-mobile-editable-line td:first-child > span:not(.quote-row-remove-x):not(.quote-row-add-plus):not(.quote-product-auto-badge) {
