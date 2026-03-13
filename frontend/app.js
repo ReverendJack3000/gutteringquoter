@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260304-main';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260313-quote-overrides-3';
 
-const STATIC_ASSET_VERSION = '20260304-main';
+const STATIC_ASSET_VERSION = '20260313-quote-overrides-3';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -1023,6 +1023,12 @@ let diagramToolbarApi = null;
 /** Last successful quote response for edit mode: { materials, materials_subtotal, labour_hours, labour_rate, labour_subtotal, total } */
 let lastQuoteData = null;
 
+const quoteLocalOverrides = {
+  markupPctByAssetId: Object.create(null),
+  inferredQtyByAssetId: Object.create(null),
+  globalMarkupPct: null,
+};
+
 /** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
 let cachedLabourRates = [];
 let quoteRowIdCounter = 0;
@@ -1044,6 +1050,93 @@ const quoteLineEditorState = {
 };
 
 const QUOTE_SECTION_MODES = Object.create(null); // sectionId -> 'parts' (default is header)
+
+function resetQuoteLocalOverrides() {
+  Object.keys(quoteLocalOverrides.markupPctByAssetId).forEach((key) => {
+    delete quoteLocalOverrides.markupPctByAssetId[key];
+  });
+  Object.keys(quoteLocalOverrides.inferredQtyByAssetId).forEach((key) => {
+    delete quoteLocalOverrides.inferredQtyByAssetId[key];
+  });
+  quoteLocalOverrides.globalMarkupPct = null;
+  const globalMarkupInput = document.getElementById('quoteGlobalMarkupInput');
+  if (globalMarkupInput) globalMarkupInput.value = '';
+}
+
+function getQuoteOverrideAssetId(assetId) {
+  const normalized = String(assetId || '').trim();
+  return normalized || '';
+}
+
+function getQuoteMarkupOverride(assetId) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key || !Object.prototype.hasOwnProperty.call(quoteLocalOverrides.markupPctByAssetId, key)) return null;
+  const value = parseFloat(quoteLocalOverrides.markupPctByAssetId[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function setQuoteMarkupOverride(assetId, markup) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key) return;
+  quoteLocalOverrides.markupPctByAssetId[key] = String(markup);
+}
+
+function clearQuoteMarkupOverride(assetId) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key) return;
+  delete quoteLocalOverrides.markupPctByAssetId[key];
+}
+
+function getQuoteGlobalMarkupOverride() {
+  const value = parseFloat(quoteLocalOverrides.globalMarkupPct);
+  return Number.isFinite(value) ? value : null;
+}
+
+function setQuoteGlobalMarkupOverride(markup) {
+  quoteLocalOverrides.globalMarkupPct = String(markup);
+}
+
+function getQuoteInferredQtyOverride(assetId) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key || !Object.prototype.hasOwnProperty.call(quoteLocalOverrides.inferredQtyByAssetId, key)) return null;
+  const value = parseFloat(quoteLocalOverrides.inferredQtyByAssetId[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function setQuoteInferredQtyOverride(assetId, qty) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key) return;
+  quoteLocalOverrides.inferredQtyByAssetId[key] = String(qty);
+}
+
+function clearQuoteInferredQtyOverride(assetId) {
+  const key = getQuoteOverrideAssetId(assetId);
+  if (!key) return;
+  delete quoteLocalOverrides.inferredQtyByAssetId[key];
+}
+
+function getQuoteRowBaseMarkup(row) {
+  if (!row) return null;
+  const value = parseFloat(row.dataset.baseMarkupPct);
+  return Number.isFinite(value) ? value : null;
+}
+
+function getQuoteRowBaseQty(row) {
+  if (!row) return null;
+  const value = parseFloat(row.dataset.baseQty);
+  return Number.isFinite(value) ? value : null;
+}
+
+function isQuoteRowAutoOverrideActive(row) {
+  if (!row || row.dataset.inferred !== 'true') return false;
+  return getQuoteInferredQtyOverride(row.dataset.assetId) != null;
+}
+
+function clearQuoteRowLocalOverrides(row) {
+  if (!row?.dataset?.assetId) return;
+  clearQuoteMarkupOverride(row.dataset.assetId);
+  clearQuoteInferredQtyOverride(row.dataset.assetId);
+}
 
 function normalizeQuoteSectionId(sectionId) {
   const raw = String(sectionId || '').trim();
@@ -1533,6 +1626,7 @@ function hideQuoteModal() {
   closeAccessibleModal('quoteModal');
   setQuoteModalScrollLock(false);
   setQuoteEditMode(false);
+  resetQuoteLocalOverrides();
   resetQuoteSectionModes();
   syncQuoteModalViewportState();
 }
@@ -1580,6 +1674,63 @@ function updateSavePricingButtonState() {
     saveBtn.setAttribute('hidden', '');
     saveBtn.disabled = true;
   }
+  updateQuoteGlobalMarkupControlState();
+}
+
+function getQuoteMaterialRows() {
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return [];
+  return Array.from(tableBody.rows).filter((row) =>
+    !row.dataset.sectionHeader
+    && row.dataset.emptyRow !== 'true'
+    && row.dataset.labourRow !== 'true'
+    && !!row.dataset.assetId
+  );
+}
+
+function updateQuoteGlobalMarkupControlState() {
+  const control = document.getElementById('quoteGlobalMarkupControl');
+  const input = document.getElementById('quoteGlobalMarkupInput');
+  const applyBtn = document.getElementById('quoteGlobalMarkupApplyBtn');
+  const table = document.getElementById('quotePartsTable');
+  if (!control || !input || !applyBtn) return;
+  const inEditMode = table?.classList.contains('quote-parts-table--editing');
+  const showControl = canUsePricingAdminControls() && !inEditMode;
+  const activeGlobalMarkup = getQuoteGlobalMarkupOverride();
+  control.hidden = !showControl;
+  input.disabled = !showControl;
+  if (showControl && activeGlobalMarkup != null && document.activeElement !== input) {
+    input.value = formatQuoteQtyDisplay(activeGlobalMarkup);
+  }
+  const parsedValue = parseFloat(input.value);
+  const hasValidValue = Number.isFinite(parsedValue) && parsedValue >= 0 && parsedValue <= 1000;
+  applyBtn.disabled = !showControl || !hasValidValue || getQuoteMaterialRows().length === 0;
+}
+
+function applyQuoteGlobalMarkupOverride() {
+  const input = document.getElementById('quoteGlobalMarkupInput');
+  if (!input) return;
+  let markup = parseFloat(input.value);
+  if (!Number.isFinite(markup) || markup < 0 || markup > 1000) {
+    updateQuoteGlobalMarkupControlState();
+    return;
+  }
+  markup = Math.round(markup * 100) / 100;
+  input.value = formatQuoteQtyDisplay(markup);
+  setQuoteGlobalMarkupOverride(markup);
+  Object.keys(quoteLocalOverrides.markupPctByAssetId).forEach((key) => {
+    delete quoteLocalOverrides.markupPctByAssetId[key];
+  });
+  getQuoteMaterialRows().forEach((row) => {
+    const markupInput = row.querySelector('.quote-input-markup-inline');
+    if (!markupInput) return;
+    markupInput.value = formatQuoteQtyDisplay(markup);
+    setQuoteRowMarkupOverrideState(row, markup);
+    row.dataset.markupPct = String(markup);
+    updateQuoteMaterialRowComputedValues(row);
+  });
+  recalcQuoteTotalsFromTableBody();
+  updateQuoteGlobalMarkupControlState();
 }
 
 /** Add cost/markup/unit inputs to a single quote table row (for edit mode or when adding a row in edit mode). */
@@ -1677,18 +1828,12 @@ function setQuoteEditMode(editing) {
           inlineMarkup.setAttribute('aria-label', 'Markup percentage');
           inlineMarkup.disabled = !canUsePricingAdminControls();
           inlineMarkup.addEventListener('change', () => {
-            const cost = parseFloat(row.dataset.costPrice) || 0;
             let markup = parseFloat(inlineMarkup.value);
             if (!Number.isFinite(markup) || markup < 0 || markup > 1000) markup = 0;
-            inlineMarkup.value = String(markup);
+            inlineMarkup.value = formatQuoteQtyDisplay(markup);
+            setQuoteRowMarkupOverrideState(row, markup);
             row.dataset.markupPct = String(markup);
-            const qty = parseFloat(row.querySelector('.quote-line-qty-input')?.value) || 0;
-            const unitPrice = Math.round(cost * (1 + markup / 100) * 100) / 100;
-            const lineTotal = Math.round(unitPrice * qty * 100) / 100;
-            row.cells[4].textContent = formatCurrency(unitPrice);
-            const totalVal = row.cells[5].querySelector('.quote-cell-total-value');
-            if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
-            else row.cells[5].textContent = formatCurrency(lineTotal);
+            updateQuoteMaterialRowComputedValues(row);
             recalcQuoteTotalsFromTableBody();
           });
           row.cells[3].appendChild(inlineMarkup);
@@ -1782,6 +1927,7 @@ function recalcQuoteFromEditTable(changedRow, changedField) {
   const total = Math.round((materialsSubtotal + labourTotal) * 100) / 100;
   if (materialsTotalDisplay) materialsTotalDisplay.textContent = formatCurrency(materialsSubtotal);
   if (quoteTotalDisplay) quoteTotalDisplay.textContent = formatCurrency(total);
+  syncLastQuoteDataFromTableBody();
 }
 
 /**
@@ -1818,6 +1964,8 @@ function recalcQuoteTotalsFromTableBody() {
   refreshQuoteSectionInlineActionLabels();
   updateQuoteTotalWarning();
   syncMobileQuoteLineSummaries();
+  syncLastQuoteDataFromTableBody();
+  updateQuoteGlobalMarkupControlState();
 }
 
 /**
@@ -2103,11 +2251,159 @@ function getQuoteLineTotal(row) {
   return parseCurrencyNumber(totalEl ? totalEl.textContent : row.cells[5]?.textContent);
 }
 
-/** True if row is a conditional/inferred product (BRK-, SCR-SS, SCL-, ACL-). Used to avoid re-calling API on qty edit (would merge with gutter and double total). */
+function updateQuoteMaterialRowComputedValues(row) {
+  if (!row || row.dataset.labourRow === 'true' || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return null;
+  const cost = getQuoteLineCost(row);
+  const markup = getQuoteLineMarkup(row) ?? 0;
+  const qty = getQuoteLineQuantityMeta(row).value;
+  const unitPrice = Math.round(cost * (1 + markup / 100) * 100) / 100;
+  const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+  row.dataset.markupPct = String(markup);
+  if (row.cells[4]) row.cells[4].textContent = formatCurrency(unitPrice);
+  const totalVal = row.cells[5]?.querySelector('.quote-cell-total-value');
+  if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
+  else if (row.cells[5]) row.cells[5].textContent = formatCurrency(lineTotal);
+  return { cost, markup, qty, unitPrice, lineTotal };
+}
+
+function setQuoteRowMarkupOverrideState(row, nextMarkup) {
+  if (!row?.dataset?.assetId) return;
+  const globalMarkup = getQuoteGlobalMarkupOverride();
+  const baseMarkup = globalMarkup != null ? globalMarkup : getQuoteRowBaseMarkup(row);
+  if (baseMarkup != null && Math.abs(baseMarkup - nextMarkup) < 0.0001) {
+    clearQuoteMarkupOverride(row.dataset.assetId);
+  } else {
+    setQuoteMarkupOverride(row.dataset.assetId, nextMarkup);
+  }
+}
+
+function setQuoteRowInferredQtyOverrideState(row, nextQty) {
+  if (!row?.dataset?.assetId || row.dataset.inferred !== 'true') return;
+  const baseQty = getQuoteRowBaseQty(row);
+  if (baseQty != null && Math.abs(baseQty - nextQty) < 0.0001) {
+    clearQuoteInferredQtyOverride(row.dataset.assetId);
+  } else {
+    setQuoteInferredQtyOverride(row.dataset.assetId, nextQty);
+  }
+}
+
+function buildQuoteSnapshotFromTableBody() {
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!tableBody) return null;
+  const previousMaterials = new Map((lastQuoteData?.materials || []).map((line) => [String(line.id || '').trim(), line]));
+  const materials = [];
+  let materialsSubtotal = 0;
+  let labourHours = 0;
+  let labourSubtotal = 0;
+  let labourRate = 0;
+  for (const row of tableBody.rows) {
+    if (row.dataset.sectionHeader || row.dataset.emptyRow === 'true') continue;
+    if (row.dataset.labourRow === 'true') {
+      const hours = getQuoteLineQuantityMeta(row).value;
+      const unitPrice = getQuoteLineUnitPrice(row);
+      const lineTotal = getQuoteLineTotal(row);
+      labourHours += hours;
+      labourSubtotal += lineTotal;
+      if (labourRate === 0 && unitPrice > 0) labourRate = unitPrice;
+      continue;
+    }
+    const assetId = String(row.dataset.assetId || '').trim();
+    if (!assetId) continue;
+    const previousLine = previousMaterials.get(assetId) || {};
+    const qty = getQuoteLineQuantityMeta(row).value;
+    const cost = getQuoteLineCost(row);
+    const markup = getQuoteLineMarkup(row);
+    const sellPrice = getQuoteLineUnitPrice(row);
+    const lineTotal = getQuoteLineTotal(row);
+    if (qty <= 0 && lineTotal <= 0) continue;
+    materialsSubtotal += lineTotal;
+    const line = {
+      id: assetId,
+      name: previousLine.name || getQuoteLineProductName(row),
+      qty,
+      cost_price: cost,
+      markup_percentage: Number.isFinite(markup) ? markup : (previousLine.markup_percentage ?? 0),
+      sell_price: sellPrice,
+      line_total: lineTotal,
+    };
+    if (previousLine.item_number != null) line.item_number = previousLine.item_number;
+    if (previousLine.servicem8_material_uuid != null) line.servicem8_material_uuid = previousLine.servicem8_material_uuid;
+    materials.push(line);
+  }
+  materialsSubtotal = Math.round(materialsSubtotal * 100) / 100;
+  labourHours = Math.round(labourHours * 100) / 100;
+  labourSubtotal = Math.round(labourSubtotal * 100) / 100;
+  const total = Math.round((materialsSubtotal + labourSubtotal) * 100) / 100;
+  return {
+    materials,
+    materials_subtotal: materialsSubtotal,
+    labour_hours: labourHours,
+    labour_rate: labourRate,
+    labour_subtotal: labourSubtotal,
+    total,
+  };
+}
+
+function syncLastQuoteDataFromTableBody() {
+  const snapshot = buildQuoteSnapshotFromTableBody();
+  if (snapshot) lastQuoteData = snapshot;
+}
+
+/** True if row is currently a backend-inferred accessory line. These rows stay local-only on qty edits to avoid double-counting on the next API call. */
 function isInferredProductRow(row) {
-  if (!row?.dataset?.assetId) return false;
-  const id = String(row.dataset.assetId).toUpperCase();
-  return id.startsWith('BRK-') || id === 'SCR-SS' || id.startsWith('SCL-') || id.startsWith('ACL-');
+  return row?.dataset?.inferred === 'true';
+}
+
+function getQuoteAutoAccessoryProfile(assetId) {
+  const raw = String(assetId || '').trim().toUpperCase();
+  const bracketMatch = /^BRK-(SC|CL)-/i.exec(raw);
+  if (bracketMatch) return bracketMatch[1].toUpperCase();
+  return null;
+}
+
+function getQuoteAutoAccessoryDownpipeSize(assetId) {
+  const raw = String(assetId || '').trim().toUpperCase();
+  const clipMatch = /^(?:SCL|ACL)-(\d+)/i.exec(raw);
+  if (clipMatch) return clipMatch[1];
+  return getDownpipeSizeFromAssetId(raw) || null;
+}
+
+function syncQuoteRowAutoBadge(row, productCell) {
+  if (!row || !productCell) return;
+  const isInferredRow = row.dataset.inferred === 'true';
+  let autoBadge = productCell.querySelector('.quote-product-auto-badge');
+  if (!isInferredRow) {
+    autoBadge?.remove();
+    return;
+  }
+  if (!(autoBadge instanceof HTMLButtonElement)) {
+    autoBadge?.remove();
+    autoBadge = document.createElement('button');
+    autoBadge.type = 'button';
+    autoBadge.className = 'quote-product-auto-badge';
+    const wrap = productCell.querySelector('.quote-mobile-product-cell-content');
+    const nameSpan = productCell.querySelector('.quote-product-indent-level-1, .quote-product-indent-level-2')
+      || Array.from(productCell.children).find((el) => el.nodeType === 1 && el.tagName === 'SPAN'
+        && !el.classList.contains('quote-row-remove-x')
+        && !el.classList.contains('quote-row-add-plus')
+        && !el.classList.contains('quote-mobile-line-summary'));
+    if (wrap) {
+      wrap.appendChild(autoBadge);
+    } else if (nameSpan) {
+      productCell.insertBefore(autoBadge, nameSpan.nextSibling);
+    } else {
+      productCell.appendChild(autoBadge);
+    }
+  }
+  const hasManualQtyOverride = isQuoteRowAutoOverrideActive(row);
+  autoBadge.textContent = 'AUTO';
+  autoBadge.classList.toggle('quote-product-auto-badge--manual', hasManualQtyOverride);
+  autoBadge.disabled = !hasManualQtyOverride;
+  autoBadge.setAttribute('aria-disabled', hasManualQtyOverride ? 'false' : 'true');
+  autoBadge.setAttribute('aria-label', hasManualQtyOverride ? 'Restore automatic quantity' : 'Automatically calculated');
+  autoBadge.title = hasManualQtyOverride
+    ? 'Manual quantity override active. Click to restore automatic quantity.'
+    : 'Automatically calculated from related quote items.';
 }
 
 function syncMobileQuoteLineSummaries() {
@@ -2171,7 +2467,11 @@ function syncMobileQuoteLineSummaries() {
           input.setAttribute('aria-label', 'Length in metres');
           input.addEventListener('change', () => commitMetresInput(row, input));
           input.addEventListener('blur', () => commitMetresInput(row, input));
-          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(row, input); input.blur(); } });
+          input.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            commitMetresInput(row, input);
+          });
           qtyCell.appendChild(input);
         } else if (row.dataset.manualLength === 'true' && row.dataset.lengthMm != null && row.dataset.lengthMm !== '') {
           const metresVal = mmToM(parseFloat(row.dataset.lengthMm));
@@ -2303,29 +2603,7 @@ function syncMobileQuoteLineSummaries() {
     lineSummary.textContent = `${qtyLabel} x ${unitLabel}${row.dataset.labourRow === 'true' ? '/hr' : ''} · Tap to edit`;
 
     // 54.93.11: AUTO label for inferred/conditional rows (mobile + desktop)
-    const isInferredRow = row.dataset.inferred === 'true' ||
-      productCell.querySelector('.quote-product-indent-level-1, .quote-product-indent-level-2');
-    let autoBadge = productCell.querySelector('.quote-product-auto-badge');
-    if (isInferredRow) {
-      if (!autoBadge) {
-        autoBadge = document.createElement('span');
-        autoBadge.className = 'quote-product-auto-badge';
-        autoBadge.setAttribute('aria-hidden', 'true');
-        autoBadge.textContent = 'AUTO';
-        const wrap = productCell.querySelector('.quote-mobile-product-cell-content');
-        const nameSpan = productCell.querySelector('.quote-product-indent-level-1, .quote-product-indent-level-2') ||
-          Array.from(productCell.children).find((el) => el.nodeType === 1 && el.tagName === 'SPAN' && !el.classList.contains('quote-row-remove-x') && !el.classList.contains('quote-row-add-plus') && !el.classList.contains('quote-mobile-line-summary'));
-        if (wrap) {
-          wrap.appendChild(autoBadge);
-        } else if (nameSpan) {
-          productCell.insertBefore(autoBadge, nameSpan.nextSibling);
-        } else {
-          productCell.insertBefore(autoBadge, lineSummary);
-        }
-      }
-    } else if (autoBadge) {
-      autoBadge.remove();
-    }
+    syncQuoteRowAutoBadge(row, productCell);
 
     // 54.93.3: on mobile, material rows (non-labour, non-metres) get qty stepper; only add qty summary for labour/metres so we don’t leave a stray summary in the cell
     const isLabourRow = row.dataset.labourRow === 'true';
@@ -2453,11 +2731,8 @@ function syncMobileQuoteLineSummaries() {
             updateStepperValue();
             // 50.19 follow-up: inferred rows (BRK/SCR/SCL/ACL) must not trigger API — backend would merge with gutter and double total
             if (isInferredProductRow(row)) {
-              const unitPrice = getQuoteLineUnitPrice(row);
-              const lineTotal = Math.round(next * unitPrice * 100) / 100;
-              const totalVal = row.cells[5]?.querySelector('.quote-cell-total-value');
-              if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
-              else if (row.cells[5]) row.cells[5].textContent = formatCurrency(lineTotal);
+              setQuoteRowInferredQtyOverrideState(row, next);
+              updateQuoteMaterialRowComputedValues(row);
               recalcQuoteTotalsFromTableBody();
               syncMobileQuoteLineSummaries();
             } else {
@@ -3005,6 +3280,7 @@ function renderLabourEditorRows() {
     const targetRow = findQuoteRowByUid(quoteLineEditorState.rowUid);
     if (!targetRow || !isEditableQuoteLineRow(targetRow)) return;
     if (targetRow.dataset.labourRow === 'true' && getLabourRowsOrdered().length <= 1) return;
+    clearQuoteRowLocalOverrides(targetRow);
     targetRow.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
@@ -3408,6 +3684,7 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null, sug
 
   closeQuickQuoterModal({ restoreFocus: false });
   await ensurePanelProductsLoaded({ reason: 'quote-modal-open' });
+  resetQuoteLocalOverrides();
   resetQuoteSectionModes();
 
   if (tableBody) tableBody.innerHTML = '';
@@ -3456,7 +3733,11 @@ async function openQuoteModalForElements(elementsForQuote, triggerEl = null, sug
       qtyCell.appendChild(input);
       input.addEventListener('change', () => commitMetresInput(tr, input));
       input.addEventListener('blur', () => commitMetresInput(tr, input));
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitMetresInput(tr, input); input.blur(); } });
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        commitMetresInput(tr, input);
+      });
     } else {
       const safeQty = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
       setQuoteRowStoredQty(tr, safeQty);
@@ -3524,6 +3805,8 @@ function initQuoteModal() {
   const btnBack = document.getElementById('quoteModalBackBtn');
   const btnClose = document.getElementById('quoteModalClose');
   const btnCloseFooter = document.getElementById('quoteCloseBtn');
+  const globalMarkupInput = document.getElementById('quoteGlobalMarkupInput');
+  const globalMarkupApplyBtn = document.getElementById('quoteGlobalMarkupApplyBtn');
   const btnGenerate = document.getElementById('generateQuoteBtn');
   const tableBody = document.getElementById('quoteTableBody');
 
@@ -3532,6 +3815,14 @@ function initQuoteModal() {
   btnBack?.addEventListener('click', hideQuoteModal);
   btnClose?.addEventListener('click', hideQuoteModal);
   btnCloseFooter?.addEventListener('click', hideQuoteModal);
+  globalMarkupInput?.addEventListener('input', updateQuoteGlobalMarkupControlState);
+  globalMarkupInput?.addEventListener('change', updateQuoteGlobalMarkupControlState);
+  globalMarkupInput?.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    applyQuoteGlobalMarkupOverride();
+  });
+  globalMarkupApplyBtn?.addEventListener('click', applyQuoteGlobalMarkupOverride);
 
   // Row remove X (Section 40.4): remove line from quote and recalc totals. 54.93.2: on mobile, red minus in cell 0 also removes (no early return).
   tableBody?.addEventListener('click', (ev) => {
@@ -3545,11 +3836,21 @@ function initQuoteModal() {
       calculateAndDisplayQuote();
       return;
     }
+    const autoBadge = ev.target.closest('.quote-product-auto-badge--manual');
+    if (autoBadge) {
+      ev.preventDefault();
+      const row = autoBadge.closest('tr');
+      if (!row?.dataset?.assetId) return;
+      clearQuoteInferredQtyOverride(row.dataset.assetId);
+      calculateAndDisplayQuote();
+      return;
+    }
     const control = ev.target.closest('.quote-row-remove-x');
     if (!control) return;
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
+    clearQuoteRowLocalOverrides(row);
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
@@ -3561,6 +3862,7 @@ function initQuoteModal() {
     ev.preventDefault();
     const row = control.closest('tr');
     if (!row || row.dataset.sectionHeader || row.dataset.emptyRow === 'true') return;
+    clearQuoteRowLocalOverrides(row);
     row.remove();
     ensureLabourRowsExist();
     removeEmptySectionHeaders();
@@ -3569,7 +3871,7 @@ function initQuoteModal() {
 
   tableBody?.addEventListener('click', (ev) => {
     if (!isMobileQuoteViewport()) return;
-    if (ev.target.closest('.quote-row-remove-x, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost, .quote-mobile-qty-stepper, .quote-section-mode-btn')) return;
+    if (ev.target.closest('.quote-row-remove-x, .quote-product-auto-badge, .quote-header-metres-input, .quote-input-markup-inline, .quote-input-markup, .quote-input-unit, .quote-input-cost, .quote-mobile-qty-stepper, .quote-section-mode-btn')) return;
     const row = ev.target.closest('tr');
     if (!isEditableQuoteLineRow(row)) return;
     openLabourEditorModal(row, row);
@@ -3577,7 +3879,7 @@ function initQuoteModal() {
   tableBody?.addEventListener('keydown', (ev) => {
     if (!isMobileQuoteViewport()) return;
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    if (ev.target.closest('.quote-mobile-qty-stepper')) return;
+    if (ev.target.closest('.quote-mobile-qty-stepper, .quote-product-auto-badge')) return;
     const row = ev.target.closest('tr');
     if (!isEditableQuoteLineRow(row)) return;
     ev.preventDefault();
@@ -3757,8 +4059,10 @@ function initQuoteModal() {
  * When user enters metres in an incomplete row's "Metres?" input: save length_mm, clear incomplete state, recalc quote.
  */
 function commitMetresInput(tr, input) {
+  if (!tr || !input || input.dataset.quoteMetresCommitted === 'true') return;
   const val = parseFloat(input.value);
   if (!Number.isFinite(val) || val <= 0) return;
+  input.dataset.quoteMetresCommitted = 'true';
   const multiplier = parseFloat(tr.dataset.missingMeasurementMultiplier || '1');
   const scaledMetres = Number.isFinite(multiplier) && multiplier > 0 ? (val * multiplier) : val;
   tr.dataset.lengthMm = String(mToMm(scaledMetres));
@@ -3767,8 +4071,8 @@ function commitMetresInput(tr, input) {
   tr.removeAttribute('data-incomplete-measurement');
   tr.classList.remove('quote-row-incomplete-measurement');
   const qtyCell = tr.cells[1];
-  if (qtyCell && input.parentNode === qtyCell) {
-    qtyCell.removeChild(input);
+  if (qtyCell && input.isConnected && input.parentNode === qtyCell) {
+    input.remove();
     // Set placeholder text until calculateAndDisplayQuote() updates it with the actual qty
     qtyCell.textContent = String(val) + ' m';
   }
@@ -4968,21 +5272,15 @@ async function calculateAndDisplayQuote() {
       const dpSize = isDownpipe ? getDownpipeSizeFromAssetId(line.id) : null;
       const hasDownpipeHeaderOverride = dpSize && downpipeLengthOverride[dpSize] != null;
       const shouldIgnoreDownpipeOverride = isDownpipe && hasDownpipeHeaderOverride;
-      const hasManualOverride = !shouldIgnoreGutterOverride && !shouldIgnoreDownpipeOverride && manualOverrides[line.id] != null;
-      if (!isGutterOrDownpipe && !hasManualOverride) row.dataset.inferred = 'true';
-      const isInferredItem = u(line.id).startsWith('BRK-') || line.id === 'SCR-SS' || u(line.id).startsWith('SCL-') || u(line.id).startsWith('ACL-');
-      let overrideQty = (shouldIgnoreGutterOverride || shouldIgnoreDownpipeOverride) ? null : manualOverrides[line.id];
-      // 50.19: For inferred lines, if preserved override differs from backend qty (merged), use backend qty so displayed qty matches line_total
-      if (isInferredItem && overrideQty != null) {
-        const overrideNum = parseFloat(overrideQty);
-        const backendQty = Number(line.qty);
-        if (!Number.isFinite(overrideNum) || !Number.isFinite(backendQty) || overrideNum !== backendQty) {
-          overrideQty = null;
-        }
-      }
-      // 50.20: When we ignored override for merged inferred line, mark row so we don't re-send it (avoid double merge on next recalc)
-      if (isInferredItem && manualOverrides[line.id] != null && overrideQty === null) row.dataset.inferred = 'true';
-      const qtyDisplay = overrideQty != null ? String(overrideQty) : ((isInferredItem && hasIncompleteMeasurable) ? '' : String(line.qty));
+      const rowIsInferred = shouldTreatQuoteRowAsAutoCalculated(line.id);
+      if (rowIsInferred) row.dataset.inferred = 'true';
+      else clearQuoteInferredQtyOverride(line.id);
+      const explicitQtyOverride = (shouldIgnoreGutterOverride || shouldIgnoreDownpipeOverride || rowIsInferred)
+        ? null
+        : manualOverrides[line.id];
+      const inferredQtyOverride = rowIsInferred ? getQuoteInferredQtyOverride(line.id) : null;
+      const effectiveQtyOverride = rowIsInferred ? inferredQtyOverride : explicitQtyOverride;
+      const qtyDisplay = effectiveQtyOverride != null ? String(effectiveQtyOverride) : ((rowIsInferred && hasIncompleteMeasurable) ? '' : String(line.qty));
       let nameClass = '';
       if (u(line.id).startsWith('SCR-')) nameClass = 'quote-product-indent-level-2';
       else if (u(line.id).startsWith('BRK-') || u(line.id).startsWith('SCL-') || u(line.id).startsWith('ACL-')) nameClass = 'quote-product-indent-level-1';
@@ -4992,7 +5290,14 @@ async function calculateAndDisplayQuote() {
       else tableBody.appendChild(row);
       setQuoteRowStoredQty(row, parseFloat(qtyDisplay));
       row.dataset.costPrice = String(line.cost_price);
-      row.dataset.markupPct = String(line.markup_percentage);
+      row.dataset.baseQty = String(line.qty);
+      row.dataset.baseMarkupPct = String(line.markup_percentage);
+      const markupOverride = getQuoteMarkupOverride(line.id);
+      const globalMarkupOverride = getQuoteGlobalMarkupOverride();
+      const effectiveMarkup = markupOverride != null
+        ? markupOverride
+        : (globalMarkupOverride != null ? globalMarkupOverride : line.markup_percentage);
+      row.dataset.markupPct = String(effectiveMarkup);
       row.cells[2].textContent = formatCurrency(line.cost_price);
       // Markup column: inline editable input (Section 40.2)
       const markupInput = document.createElement('input');
@@ -5001,22 +5306,16 @@ async function calculateAndDisplayQuote() {
       markupInput.min = '0';
       markupInput.max = '1000';
       markupInput.step = '0.01';
-      markupInput.value = String(line.markup_percentage);
+      markupInput.value = formatQuoteQtyDisplay(effectiveMarkup);
       markupInput.setAttribute('aria-label', 'Markup percentage');
       markupInput.disabled = !canUsePricingAdminControls();
       markupInput.addEventListener('change', () => {
-        const cost = parseFloat(row.dataset.costPrice) || 0;
         let markup = parseFloat(markupInput.value);
         if (!Number.isFinite(markup) || markup < 0 || markup > 1000) markup = 0;
-        markupInput.value = String(markup);
+        markupInput.value = formatQuoteQtyDisplay(markup);
+        setQuoteRowMarkupOverrideState(row, markup);
         row.dataset.markupPct = String(markup);
-        const qty = parseFloat(row.querySelector('.quote-line-qty-input')?.value) || 0;
-        const unitPrice = Math.round(cost * (1 + markup / 100) * 100) / 100;
-        const lineTotal = Math.round(unitPrice * qty * 100) / 100;
-        row.cells[4].textContent = formatCurrency(unitPrice);
-        const totalVal = row.cells[5].querySelector('.quote-cell-total-value');
-        if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
-        else row.cells[5].textContent = formatCurrency(lineTotal);
+        updateQuoteMaterialRowComputedValues(row);
         recalcQuoteTotalsFromTableBody();
       });
       row.cells[3].textContent = '';
@@ -5030,6 +5329,13 @@ async function calculateAndDisplayQuote() {
       // Total cell: value + remove X on hover (Section 40.3); JS hover class for reliable show/hide
       row.cells[5].className = 'quote-cell-total';
       row.cells[5].innerHTML = `<span class="quote-cell-total-value">${formatCurrency(line.line_total)}</span><span class="quote-row-remove-x" role="button" tabindex="0" aria-label="Remove line">×</span>`;
+      const backendMarkup = Number.isFinite(parseFloat(line.markup_percentage))
+        ? parseFloat(line.markup_percentage)
+        : 0;
+      if ((effectiveQtyOverride != null && String(effectiveQtyOverride) !== String(line.qty))
+        || Math.abs(effectiveMarkup - backendMarkup) > 0.0001) {
+        updateQuoteMaterialRowComputedValues(row);
+      }
       row.addEventListener('mouseenter', () => row.classList.add('quote-row-hovered'));
       row.addEventListener('mouseleave', () => row.classList.remove('quote-row-hovered'));
       const qtyInput = row.querySelector('.quote-line-qty-input');
@@ -5039,18 +5345,11 @@ async function calculateAndDisplayQuote() {
           setQuoteRowStoredQty(row, next);
           // 50.19 follow-up: inferred rows must not trigger API (would merge with gutter and double total)
           if (isInferredProductRow(row)) {
-            const unitPrice = getQuoteLineUnitPrice(row);
-            const lineTotal = Math.round(next * unitPrice * 100) / 100;
-            const totalVal = row.cells[5]?.querySelector('.quote-cell-total-value');
-            if (totalVal) totalVal.textContent = formatCurrency(lineTotal);
-            else if (row.cells[5]) row.cells[5].textContent = formatCurrency(lineTotal);
+            setQuoteRowInferredQtyOverrideState(row, next);
+            updateQuoteMaterialRowComputedValues(row);
             recalcQuoteTotalsFromTableBody();
             syncMobileQuoteLineSummaries();
           } else {
-            if (row.dataset.inferred === 'true') {
-              delete row.dataset.inferred;
-              row.removeAttribute('data-inferred');
-            }
             calculateAndDisplayQuote();
           }
         });
@@ -5137,6 +5436,7 @@ async function calculateAndDisplayQuote() {
         }
       }
       if (r.dataset.assetId) {
+        const assetId = String(r.dataset.assetId || '').trim();
         const qtyInput = r.querySelector('.quote-line-qty-input');
         if (qtyInput) {
           const v = parseFloat(qtyInput.value);
@@ -5148,6 +5448,43 @@ async function calculateAndDisplayQuote() {
         }
       }
     });
+
+    const autoDrivenGutterProfiles = new Set();
+    Object.entries(gutterGroups).forEach(([profile, group]) => {
+      if (group?.children?.some((line) => GUTTER_PATTERN.test(line.id))) autoDrivenGutterProfiles.add(profile);
+    });
+    Object.keys(profileLengthOverride).forEach((profile) => autoDrivenGutterProfiles.add(profile));
+    incompleteProfiles.forEach((profile) => autoDrivenGutterProfiles.add(profile));
+    preservedGutterProfiles.forEach((profile) => autoDrivenGutterProfiles.add(profile));
+
+    const autoDrivenDownpipeSizes = new Set();
+    Object.entries(downpipeGroups).forEach(([size, group]) => {
+      if (group?.children?.some((line) => DOWNPIPE_PATTERN.test(line.id))) autoDrivenDownpipeSizes.add(size);
+    });
+    Object.keys(downpipeLengthOverride).forEach((size) => autoDrivenDownpipeSizes.add(size));
+    incompleteDownpipeSizes.forEach((size) => autoDrivenDownpipeSizes.add(size));
+    preservedDownpipeSizes.forEach((size) => autoDrivenDownpipeSizes.add(size));
+
+    const hasAutoDrivenScrewInputs = quote.materials.some((line) => {
+      const lineId = String(line?.id || '').trim().toUpperCase();
+      return lineId === 'DROPPER' || lineId.startsWith('DRP-') || lineId.startsWith('SCL-') || lineId.startsWith('ACL-');
+    });
+
+    function shouldTreatQuoteRowAsAutoCalculated(lineId) {
+      const normalizedId = String(lineId || '').trim();
+      if (!normalizedId) return false;
+      const upperId = u(normalizedId);
+      const profile = getQuoteAutoAccessoryProfile(normalizedId);
+      if (profile) return autoDrivenGutterProfiles.has(profile);
+      const downpipeSize = getQuoteAutoAccessoryDownpipeSize(normalizedId);
+      if (upperId.startsWith('SCL-') || upperId.startsWith('ACL-')) {
+        return !!downpipeSize && autoDrivenDownpipeSizes.has(downpipeSize);
+      }
+      if (upperId === 'SCR-SS') {
+        return autoDrivenGutterProfiles.size > 0 || autoDrivenDownpipeSizes.size > 0 || hasAutoDrivenScrewInputs;
+      }
+      return false;
+    }
 
     // Clear table (preserve empty row and labour rows – Section 50), rebuild with system-based structure
     const emptyRowRef = tableBody?.querySelector('tr[data-empty-row="true"]');
@@ -5293,6 +5630,18 @@ async function calculateAndDisplayQuote() {
     // Render ungrouped items (droppers, etc.)
     ungrouped.forEach((line) => {
       renderMaterialRow(line, materialInsertBefore);
+    });
+
+    const renderedAssetIds = new Set(
+      Array.from(tableBody?.rows || [])
+        .map((row) => String(row.dataset.assetId || '').trim())
+        .filter(Boolean)
+    );
+    Object.keys(quoteLocalOverrides.markupPctByAssetId).forEach((key) => {
+      if (!renderedAssetIds.has(key)) delete quoteLocalOverrides.markupPctByAssetId[key];
+    });
+    Object.keys(quoteLocalOverrides.inferredQtyByAssetId).forEach((key) => {
+      if (!renderedAssetIds.has(key)) delete quoteLocalOverrides.inferredQtyByAssetId[key];
     });
 
     removeOrphanQuoteSectionInlineActionRows();

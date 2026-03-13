@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css?v=20260304-main" />
+  <link rel="stylesheet" href="/styles.css?v=20260313-quote-overrides-4" />
 </head>
 <body>
   <a class="skip-link" href="#workspaceMain">Skip to canvas workspace</a>
@@ -1274,7 +1274,7 @@
         <h2 id="quickQuoterModalTitle" class="auth-modal-title quick-quoter-modal-title">Quick Quoter</h2>
         <button type="button" class="quick-quoter-close" id="quickQuoterModalClose" aria-label="Close Quick Quoter">×</button>
       </div>
-      <p id="quickQuoterModalDescription" class="auth-modal-desc quick-quoter-modal-desc">Select one or more repair types and set quantity for each.</p>
+      <p id="quickQuoterModalDescription" class="auth-modal-desc quick-quoter-modal-desc">Pick repair types, then adjust quantity for each one.</p>
       <div class="quick-quoter-selectors" role="group" aria-label="Quick Quoter selectors">
         <label class="quick-quoter-selector-field" for="quickQuoterProfileSelect">
           <span>Profile</span>
@@ -1285,7 +1285,7 @@
           </select>
         </label>
         <label class="quick-quoter-selector-field" for="quickQuoterSizeSelect">
-          <span>Size mm</span>
+          <span>Downpipe size</span>
           <select id="quickQuoterSizeSelect">
             <option value="">Select size</option>
             <option value="65">65 mm</option>
@@ -1293,6 +1293,7 @@
           </select>
         </label>
       </div>
+      <p class="quick-quoter-helper">Only choose profile or size when the selected repair asks for it.</p>
       <div class="quick-quoter-validation" id="quickQuoterValidation" role="alert" aria-live="polite" hidden></div>
       <div class="quick-quoter-list" id="quickQuoterList" role="listbox" aria-multiselectable="true"></div>
       <div class="quick-quoter-actions">
@@ -1310,6 +1311,10 @@
         <button type="button" class="quote-modal-back-btn" id="quoteModalBackBtn" aria-label="Back to diagram">‹ Diagram</button>
         <h2 id="quoteModalTitle" class="quote-modal-title">Quote</h2>
         <div class="quote-modal-header-actions">
+          <div class="quote-global-markup-control" id="quoteGlobalMarkupControl" hidden>
+            <input type="number" id="quoteGlobalMarkupInput" class="quote-global-markup-input" min="0" max="1000" step="0.01" placeholder="Markup %" aria-label="Global markup percentage" />
+            <button type="button" class="btn quote-global-markup-apply" id="quoteGlobalMarkupApplyBtn" title="Apply markup to all material lines">Apply</button>
+          </div>
           <button type="button" class="btn" id="editPricingBtn" title="Edit cost and markup">Edit Pricing</button>
           <button type="button" class="btn" id="savePricingBtn" title="Save cost and markup to database" disabled hidden>Save to Database</button>
           <button type="button" class="quote-modal-close" id="quoteModalClose" title="Close" aria-label="Close quote">×</button>
@@ -1443,7 +1448,7 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=20260304-main"></script>
+  <script type="module" src="/app.js?v=20260313-quote-overrides-4"></script>
   <script src="/pwa.js?v=20260304-main"></script>
 </body>
 </html>
