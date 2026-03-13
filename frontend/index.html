@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css?v=20260313-quote-overrides-4" />
+  <link rel="stylesheet" href="/styles.css?v=20260313-quote-overrides-7" />
 </head>
 <body>
   <a class="skip-link" href="#workspaceMain">Skip to canvas workspace</a>
@@ -1312,17 +1312,26 @@
         <h2 id="quoteModalTitle" class="quote-modal-title">Quote</h2>
         <div class="quote-modal-header-actions">
           <div class="quote-global-markup-control" id="quoteGlobalMarkupControl" hidden>
-            <input type="number" id="quoteGlobalMarkupInput" class="quote-global-markup-input" min="0" max="1000" step="0.01" placeholder="Markup %" aria-label="Global markup percentage" />
-            <button type="button" class="btn quote-global-markup-apply" id="quoteGlobalMarkupApplyBtn" title="Apply markup to all material lines">Apply</button>
+            <div class="quote-global-markup-copy">
+              <span class="quote-global-markup-kicker">Quote-wide</span>
+              <span class="quote-global-markup-label">Global Markup</span>
+              <span class="quote-global-markup-hint">Apply one markup to all current and new material lines</span>
+            </div>
+            <div class="quote-global-markup-field">
+              <input type="number" id="quoteGlobalMarkupInput" class="quote-global-markup-input" min="0" max="1000" step="0.01" placeholder="35" aria-label="Global markup percentage" />
+              <span class="quote-global-markup-suffix" aria-hidden="true">%</span>
+              <button type="button" class="btn quote-global-markup-apply" id="quoteGlobalMarkupApplyBtn" title="Apply markup to all material lines">Apply to All</button>
+            </div>
           </div>
           <button type="button" class="btn" id="editPricingBtn" title="Edit cost and markup">Edit Pricing</button>
           <button type="button" class="btn" id="savePricingBtn" title="Save cost and markup to database" disabled hidden>Save to Database</button>
           <button type="button" class="quote-modal-close" id="quoteModalClose" title="Close" aria-label="Close quote">×</button>
         </div>
       </div>
-      <div class="quote-servicem8-notes-above-wrap quote-modal-notes-above">
+      <div class="quote-servicem8-notes-above-wrap quote-modal-notes-above quote-modal-notes-above--disabled">
         <label for="servicem8NotesAboveInput" class="quote-servicem8-job-label">Notes (Optional)</label>
-        <textarea id="servicem8NotesAboveInput" class="quote-servicem8-notes-above-input" rows="2" placeholder="enter any extra details here..." aria-label="Optional notes above job note (ServiceM8)" disabled></textarea>
+        <p class="quote-modal-notes-help">Added above the ServiceM8 job note when the job link is ready.</p>
+        <textarea id="servicem8NotesAboveInput" class="quote-servicem8-notes-above-input" rows="2" placeholder="Available once the ServiceM8 job link is ready." aria-label="Optional notes above job note (ServiceM8)" disabled></textarea>
       </div>
       <table class="quote-parts-table" id="quotePartsTable">
         <thead>
@@ -1448,7 +1457,7 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=20260313-quote-overrides-4"></script>
+  <script type="module" src="/app.js?v=20260313-quote-overrides-7"></script>
   <script src="/pwa.js?v=20260304-main"></script>
 </body>
 </html>
