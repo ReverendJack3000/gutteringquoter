@@ -6877,16 +6877,18 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
 .quote-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
 }
 
 /* Quote modal content: 50% wider than original 600/800 (Section 40.1); padding so table is contained */
 .quote-modal-content,
 #quoteModal .quote-modal-content {
   position: relative;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 20px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
   min-width: 900px;
   max-width: 1200px;
   width: 90vw;
@@ -6901,44 +6903,132 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.8);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
 }
 
 .quote-modal-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .quote-global-markup-control {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(59, 130, 246, 0.08) 55%, rgba(255, 255, 255, 0.98) 100%),
+    #f8fbff;
+  box-shadow:
+    0 12px 28px rgba(14, 165, 233, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.quote-global-markup-control::before {
+  content: '';
+  width: 4px;
+  align-self: stretch;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0ea5e9 0%, #38bdf8 100%);
+}
+
+.quote-global-markup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.quote-global-markup-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0369a1;
+}
+
+.quote-global-markup-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.quote-global-markup-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #475569;
+}
+
+.quote-global-markup-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .quote-global-markup-input {
-  width: 96px;
-  min-width: 96px;
-  padding: 6px 8px;
-  border: 1px solid #d6dce2;
-  border-radius: 8px;
-  font-size: 13px;
+  width: 88px;
+  min-width: 88px;
+  padding: 9px 12px;
+  border: 1px solid #9fcae2;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  background: #fff;
+  color: #0f172a;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .quote-global-markup-input:focus {
   outline: none;
-  border-color: #1f4f7a;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+}
+
+.quote-global-markup-suffix {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4b5563;
 }
 
 .quote-global-markup-apply {
   white-space: nowrap;
+  min-height: 40px;
+  padding-inline: 16px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 10px 18px rgba(2, 132, 199, 0.2);
+}
+
+.quote-global-markup-apply:hover,
+.quote-global-markup-apply:focus-visible {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  color: #ffffff;
+  outline: none;
 }
 
 .quote-modal-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
 }
 
 .quote-modal-back-btn {
@@ -6997,6 +7087,10 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
 
 .quote-parts-table tbody tr:nth-child(odd) {
   background: #fff;
+}
+
+.quote-parts-table tbody tr:hover {
+  background: #f8fbff;
 }
 
 /* 6 columns: Product, Qty, Cost Price, Markup %, Unit Price, Total */
@@ -7303,41 +7397,55 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
 
 .quote-section-mode-btn {
   margin-left: 8px;
-  padding: 3px 8px;
-  border: 1px solid #d0d7de;
+  padding: 5px 10px;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #4b5563;
+  color: #475569;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.3;
   cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 }
 
 .quote-section-mode-btn:hover,
 .quote-section-mode-btn:focus-visible {
-  border-color: #9ca3af;
+  border-color: #94a3b8;
+  background: #f8fafc;
   color: #111827;
   outline: none;
 }
 
 .quote-section-inline-action {
-  background: #f9fafb;
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f7fb 100%);
 }
 
 .quote-section-inline-action td {
   border-bottom: 1px solid #e5e7eb;
 }
 
+.quote-section-inline-action td:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .quote-section-inline-title {
-  margin-right: 8px;
   font-weight: 600;
   color: #4b5563;
 }
 
 .quote-section-inline-label {
-  color: #6b7280;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(224, 242, 254, 0.95);
+  color: #0f4c81;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* Two-cell appearance when header Qty (metres) is filled: product+qty | merged rest */
@@ -7550,42 +7658,62 @@ body[data-viewport-mode="mobile"] .quick-quoter-actions .btn {
   margin-bottom: 10px;
 }
 .quote-modal-notes-above {
-  margin-top: 12px;
-  margin-bottom: 12px;
+  margin: 12px 20px 16px;
+  padding: 16px 18px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 .quote-servicem8-notes-above-wrap .quote-servicem8-job-label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
+}
+.quote-modal-notes-help {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
 }
 .quote-servicem8-notes-above-input {
   width: 100%;
-  min-height: 52px;
-  padding: 10px 12px;
+  min-height: 54px;
+  padding: 3px 0 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   font-size: 14px;
-  line-height: 1.4;
-  background: #F5F5F7;
+  line-height: 1.5;
+  background: transparent;
   color: #1d1d1f;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   box-sizing: border-box;
-  resize: vertical;
+  resize: none;
 }
 .quote-servicem8-notes-above-input::placeholder {
-  color: #8e8e93;
+  color: #94a3b8;
 }
 .quote-servicem8-notes-above-input:focus {
   outline: none;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-/* Desktop: white background when focused (standard input look) */
-body:not([data-viewport-mode="mobile"]) .quote-servicem8-notes-above-input:focus {
-  background: #fff;
+  box-shadow: none;
 }
 .quote-servicem8-notes-above-input:disabled {
-  background: #e5e5e7;
-  color: #8e8e93;
+  background: transparent;
+  color: #7b8794;
+  cursor: default;
+}
+.quote-modal-notes-above--disabled .quote-servicem8-notes-above-input {
+  min-height: 34px;
+}
+.quote-modal-notes-above--disabled .quote-servicem8-notes-above-input::placeholder {
+  color: #8a97a5;
+}
+.quote-modal-notes-above--disabled {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-style: dashed;
+}
+.quote-modal-notes-above--disabled .quote-modal-notes-help {
+  color: #7b8794;
 }
 
 /* 49.36: Notes above job note – mobile-only spacing/readability (desktop unchanged) */
@@ -8651,6 +8779,16 @@ body[data-viewport-mode="mobile"] .doing-it-now-actions .job-confirm-create-new 
     flex-wrap: wrap;
     justify-content: flex-end;
   }
+  body:not([data-viewport-mode="mobile"]) .quote-global-markup-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+  body:not([data-viewport-mode="mobile"]) .quote-global-markup-copy {
+    flex: 1 1 auto;
+  }
+  body:not([data-viewport-mode="mobile"]) .quote-modal-notes-above {
+    margin: 10px 0 14px;
+  }
   body:not([data-viewport-mode="mobile"]) .quote-parts-table {
     margin: 0 0 12px;
     min-width: 640px;
@@ -8770,6 +8908,16 @@ body[data-viewport-mode="mobile"] #quoteModal #quoteModalClose {
   display: none !important;
 }
 
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-notes-above {
+  margin: 10px 0 12px;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-modal-notes-help {
+  margin-bottom: 8px;
+}
+
 body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table {
   width: 100%;
   min-width: 0;
@@ -8879,35 +9027,39 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
   justify-content: center;
   flex-shrink: 0;
   font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: #e8f4fc;
-  color: #0a7ea4;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #c5ced8;
+  background: #eef2f6;
+  color: #5a6470;
   white-space: nowrap;
   vertical-align: middle;
   box-shadow: none;
   font-family: inherit;
-  cursor: default;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 }
 
-#quoteModal .quote-parts-table .quote-product-auto-badge:disabled {
-  opacity: 1;
+#quoteModal .quote-parts-table .quote-product-auto-badge:hover,
+#quoteModal .quote-parts-table .quote-product-auto-badge:focus-visible {
+  background: #e5eaf0;
+  border-color: #b5c0cb;
+  color: #3f4850;
+  outline: none;
 }
 
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual {
-  background: #e4e7ea;
-  border-color: #c6cdd4;
-  color: #59636c;
-  cursor: pointer;
+  background: #dde3e9;
+  border-color: #aeb9c5;
+  color: #35404a;
 }
 
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual:hover,
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual:focus-visible {
-  background: #d7dde2;
-  border-color: #b2bcc5;
-  color: #3f4850;
+  background: #d4dce4;
+  border-color: #9ba7b4;
+  color: #1f2933;
   outline: none;
 }
 /* Product name in first cell: single-line truncate with ellipsis on mobile to keep row height fixed */

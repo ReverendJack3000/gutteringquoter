@@ -1028,6 +1028,16 @@ const quoteLocalOverrides = {
   inferredQtyByAssetId: Object.create(null),
   globalMarkupPct: null,
 };
+let pricingAdminUiOverrideForTest = false;
+
+const QUOTE_AUTO_RULES = Object.freeze({
+  bracketSpacingMm: 400,
+  clipSpacingMm: 1200,
+  screwsPerBracket: 3,
+  screwsPerDropper: 4,
+  screwsPerSaddleClip: 2,
+  screwsPerAdjustableClip: 2,
+});
 
 /** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
 let cachedLabourRates = [];
@@ -1239,6 +1249,143 @@ function refreshQuoteSectionInlineActionLabels() {
     const metres = getQuoteSectionDerivedMetresFromTable(sectionId, tableBody);
     label.textContent = `Auto: ${formatQuoteSectionMetresValue(metres)}m`;
   });
+}
+
+function getQuoteSectionTitle(sectionId) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  if (!normalized) return '';
+  if (normalized.startsWith('downpipe-')) {
+    const size = normalized.replace(/^downpipe-/, '');
+    return `Downpipe ${size}mm Length`;
+  }
+  const profileName = PROFILE_DISPLAY_NAMES[normalized] || normalized;
+  return `Gutter Length: ${profileName}`;
+}
+
+function getQuoteSectionInsertBefore(sectionId, tableBody = null) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  const table = tableBody || document.getElementById('quoteTableBody');
+  if (!normalized || !table) return null;
+  const rows = Array.from(table.rows);
+  const firstChild = rows.find((row) => row.dataset.sectionFor === normalized);
+  if (firstChild) return firstChild;
+  const firstLabourRow = rows.find((row) => row.dataset.labourRow === 'true');
+  if (firstLabourRow) return firstLabourRow;
+  return rows.find((row) => row.dataset.emptyRow === 'true') || null;
+}
+
+function bindQuoteSectionHeaderInput(headerRow) {
+  const input = headerRow?.querySelector('.quote-header-metres-input');
+  if (!(input instanceof HTMLInputElement)) return;
+  input.addEventListener('change', () => {
+    if (headerRow.dataset.sectionModeTransitioning === 'true') return;
+    const metres = parseFloat(input.value);
+    const sectionId = String(headerRow.dataset.sectionHeader || '').trim();
+    if (!Number.isFinite(metres) || metres <= 0) {
+      input.value = '';
+      headerRow.dataset.sectionModeTransitioning = 'true';
+      if (document.activeElement === input) input.blur();
+      window.setTimeout(() => {
+        const toggled = toggleQuoteSectionModeLocally(sectionId, 'parts');
+        if (!toggled) delete headerRow.dataset.sectionModeTransitioning;
+      }, 0);
+      return;
+    }
+    calculateAndDisplayQuote();
+  });
+}
+
+function createQuoteSectionInlineActionRow(sectionId, tableBody = null) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  if (!normalized) return null;
+  const table = tableBody || document.getElementById('quoteTableBody');
+  const row = document.createElement('tr');
+  row.className = 'quote-section-inline-action';
+  row.dataset.sectionInlineActionFor = normalized;
+  row.innerHTML = `<td><span class="quote-section-inline-title">${escapeHtml(getQuoteSectionTitle(normalized))}</span><span class="quote-section-inline-label">Auto: 0m</span></td><td><button type="button" class="quote-section-mode-btn quote-section-mode-btn--restore" data-section-action="header" data-section-id="${escapeHtml(normalized)}">Set custom metres</button></td><td></td><td></td><td></td><td></td>`;
+  const inlineLabel = row.querySelector('.quote-section-inline-label');
+  if (inlineLabel) {
+    const metres = getQuoteSectionDerivedMetresFromTable(normalized, table);
+    inlineLabel.textContent = `Auto: ${formatQuoteSectionMetresValue(metres)}m`;
+  }
+  return row;
+}
+
+function createQuoteSectionHeaderRow(sectionId, options = {}) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  if (!normalized) return null;
+  const {
+    metresValue = null,
+    isIncomplete = false,
+  } = options;
+  const resolvedMetres = Number.isFinite(metresValue) ? metresValue : 0;
+  const metresDisplay = isIncomplete
+    ? 'Metres?'
+    : formatQuoteSectionMetresValue(resolvedMetres);
+  const inputValue = isIncomplete || !(resolvedMetres > 0)
+    ? ''
+    : formatQuoteSectionMetresValue(resolvedMetres);
+  const row = document.createElement('tr');
+  row.className = 'quote-section-header';
+  if (isIncomplete) row.classList.add('quote-row-incomplete-measurement');
+  if (inputValue !== '' && !isIncomplete) row.classList.add('quote-section-header--has-metres');
+  row.dataset.sectionHeader = normalized;
+  row.innerHTML = `<td><span class="quote-section-header-label">${escapeHtml(getQuoteSectionTitle(normalized))} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${escapeHtml(normalized)}">Hide</button></td><td></td><td></td><td></td><td></td>`;
+  bindQuoteSectionHeaderInput(row);
+  return row;
+}
+
+function toggleQuoteSectionModeLocally(sectionId, mode) {
+  const normalized = normalizeQuoteSectionId(sectionId);
+  const tableBody = document.getElementById('quoteTableBody');
+  if (!normalized || !tableBody) return false;
+
+  const rows = Array.from(tableBody.rows);
+  const headerRow = rows.find((row) => row.dataset.sectionHeader === normalized) || null;
+  const inlineRow = rows.find((row) => normalizeQuoteSectionId(row.dataset.sectionInlineActionFor) === normalized) || null;
+  const childRows = rows.filter((row) => row.dataset.sectionFor === normalized);
+  if (childRows.length === 0) return false;
+
+  const removeRowIfStillAttached = (row) => {
+    if (!(row instanceof HTMLTableRowElement)) return;
+    if (row.parentElement !== tableBody) return;
+    row.remove();
+  };
+
+  if (mode === 'parts') {
+    if (inlineRow) return true;
+    setQuoteSectionMode(normalized, 'parts');
+    removeRowIfStillAttached(headerRow);
+    const nextInlineRow = createQuoteSectionInlineActionRow(normalized, tableBody);
+    const insertBefore = childRows[0] || getQuoteSectionInsertBefore(normalized, tableBody);
+    if (nextInlineRow) {
+      if (insertBefore) tableBody.insertBefore(nextInlineRow, insertBefore);
+      else tableBody.appendChild(nextInlineRow);
+    }
+    refreshQuoteSectionInlineActionLabels();
+    syncLastQuoteDataFromTableBody();
+    syncMobileQuoteLineSummaries();
+    return true;
+  }
+
+  if (mode === 'header') {
+    if (headerRow) return true;
+    setQuoteSectionMode(normalized, 'header');
+    removeRowIfStillAttached(inlineRow);
+    const metresValue = getQuoteSectionDerivedMetresFromTable(normalized, tableBody);
+    const nextHeaderRow = createQuoteSectionHeaderRow(normalized, { metresValue });
+    const insertBefore = childRows[0] || getQuoteSectionInsertBefore(normalized, tableBody);
+    if (nextHeaderRow) {
+      if (insertBefore) tableBody.insertBefore(nextHeaderRow, insertBefore);
+      else tableBody.appendChild(nextHeaderRow);
+    }
+    refreshQuoteSectionInlineActionLabels();
+    syncLastQuoteDataFromTableBody();
+    syncMobileQuoteLineSummaries();
+    return true;
+  }
+
+  return false;
 }
 
 /** True when user has changed cost/markup in quote edit mode and not yet saved. */
@@ -2090,6 +2237,7 @@ function isAdminRole() {
 }
 
 function canAccessDesktopAdminUi() {
+  if (pricingAdminUiOverrideForTest && isDesktopViewport()) return true;
   return !!authState.token && (isAdminRole() || !!authState.isSuperAdmin) && isDesktopViewport();
 }
 
@@ -2368,6 +2516,64 @@ function getQuoteAutoAccessoryDownpipeSize(assetId) {
   return getDownpipeSizeFromAssetId(raw) || null;
 }
 
+function getQuoteAutoDerivedQtyForAsset(assetId, tableBody = null) {
+  const normalizedAssetId = String(assetId || '').trim();
+  if (!normalizedAssetId) return null;
+  const table = tableBody || document.getElementById('quoteTableBody');
+  if (!table) return null;
+  const upperId = normalizedAssetId.toUpperCase();
+
+  if (upperId.startsWith('BRK-')) {
+    const profile = getQuoteAutoAccessoryProfile(normalizedAssetId);
+    if (!profile) return null;
+    const totalMm = Math.round(getQuoteSectionDerivedMetresFromTable(profile, table) * 1000);
+    if (!(totalMm > 0)) return 0;
+    return 1 + Math.floor(totalMm / QUOTE_AUTO_RULES.bracketSpacingMm);
+  }
+
+  if (upperId.startsWith('SCL-') || upperId.startsWith('ACL-')) {
+    const size = getQuoteAutoAccessoryDownpipeSize(normalizedAssetId);
+    if (!size) return null;
+    const totalMm = Math.round(getQuoteSectionDerivedMetresFromTable(`downpipe-${size}`, table) * 1000);
+    if (!(totalMm > 0)) return 0;
+    return Math.max(1, Math.ceil(totalMm / QUOTE_AUTO_RULES.clipSpacingMm));
+  }
+
+  if (upperId === 'SCR-SS') {
+    let total = 0;
+    Array.from(table.rows).forEach((row) => {
+      const candidateId = String(row.dataset.assetId || '').trim().toUpperCase();
+      if (!candidateId || candidateId === 'SCR-SS' || row.dataset.labourRow === 'true') return;
+      const qty = getQuoteLineQuantityMeta(row).value;
+      if (!(qty > 0)) return;
+      if (candidateId.startsWith('BRK-')) total += qty * QUOTE_AUTO_RULES.screwsPerBracket;
+      else if (candidateId === 'DROPPER' || candidateId.startsWith('DRP-')) total += qty * QUOTE_AUTO_RULES.screwsPerDropper;
+      else if (candidateId.startsWith('SCL-')) total += qty * QUOTE_AUTO_RULES.screwsPerSaddleClip;
+      else if (candidateId.startsWith('ACL-')) total += qty * QUOTE_AUTO_RULES.screwsPerAdjustableClip;
+    });
+    return total;
+  }
+
+  return null;
+}
+
+function recalculateSingleQuoteAutoRow(row) {
+  if (!row?.dataset?.assetId || row.dataset.inferred !== 'true') return false;
+  const nextQty = getQuoteAutoDerivedQtyForAsset(row.dataset.assetId);
+  if (nextQty == null || !Number.isFinite(nextQty)) return false;
+
+  clearQuoteInferredQtyOverride(row.dataset.assetId);
+  setQuoteRowStoredQty(row, nextQty);
+
+  const qtyInput = row.querySelector('.quote-line-qty-input');
+  if (qtyInput) qtyInput.value = formatQuoteQtyDisplay(nextQty);
+
+  updateQuoteMaterialRowComputedValues(row);
+  syncQuoteRowAutoBadge(row, row.cells?.[0]);
+  recalcQuoteTotalsFromTableBody();
+  return true;
+}
+
 function syncQuoteRowAutoBadge(row, productCell) {
   if (!row || !productCell) return;
   const isInferredRow = row.dataset.inferred === 'true';
@@ -2398,12 +2604,12 @@ function syncQuoteRowAutoBadge(row, productCell) {
   const hasManualQtyOverride = isQuoteRowAutoOverrideActive(row);
   autoBadge.textContent = 'AUTO';
   autoBadge.classList.toggle('quote-product-auto-badge--manual', hasManualQtyOverride);
-  autoBadge.disabled = !hasManualQtyOverride;
-  autoBadge.setAttribute('aria-disabled', hasManualQtyOverride ? 'false' : 'true');
-  autoBadge.setAttribute('aria-label', hasManualQtyOverride ? 'Restore automatic quantity' : 'Automatically calculated');
+  autoBadge.disabled = false;
+  autoBadge.setAttribute('aria-disabled', 'false');
+  autoBadge.setAttribute('aria-label', hasManualQtyOverride ? 'Restore automatic quantity' : 'Recalculate automatic quantity');
   autoBadge.title = hasManualQtyOverride
     ? 'Manual quantity override active. Click to restore automatic quantity.'
-    : 'Automatically calculated from related quote items.';
+    : 'Automatically calculated from related quote items. Click to refresh this line only.';
 }
 
 function syncMobileQuoteLineSummaries() {
@@ -3831,17 +4037,19 @@ function initQuoteModal() {
       ev.preventDefault();
       const action = String(sectionModeBtn.dataset.sectionAction || '').trim();
       const sectionId = String(sectionModeBtn.dataset.sectionId || '').trim();
+      const localMode = action === 'parts' ? 'parts' : (action === 'header' ? 'header' : '');
+      if (localMode && toggleQuoteSectionModeLocally(sectionId, localMode)) return;
       if (action === 'parts') setQuoteSectionMode(sectionId, 'parts');
       else if (action === 'header') setQuoteSectionMode(sectionId, 'header');
       calculateAndDisplayQuote();
       return;
     }
-    const autoBadge = ev.target.closest('.quote-product-auto-badge--manual');
+    const autoBadge = ev.target.closest('.quote-product-auto-badge');
     if (autoBadge) {
       ev.preventDefault();
       const row = autoBadge.closest('tr');
       if (!row?.dataset?.assetId) return;
-      clearQuoteInferredQtyOverride(row.dataset.assetId);
+      if (recalculateSingleQuoteAutoRow(row)) return;
       calculateAndDisplayQuote();
       return;
     }
@@ -4105,6 +4313,7 @@ function updateServiceM8SectionState(hasIncomplete) {
   const input = document.getElementById('servicem8JobIdInput');
   const btn = document.getElementById('servicem8AddToJobBtn');
   const notesInput = document.getElementById('servicem8NotesAboveInput');
+  const notesWrap = document.querySelector('.quote-modal-notes-above');
   const reasonEl = document.getElementById('quoteServicem8DisabledReason');
   const labourWarnEl = document.getElementById('quoteLabourWarning');
   if (!section || !input || !btn) return;
@@ -4120,7 +4329,13 @@ function updateServiceM8SectionState(hasIncomplete) {
     section.classList.add('quote-servicem8-section--disabled');
     input.disabled = true;
     btn.disabled = true;
-    if (notesInput) notesInput.disabled = true;
+    if (notesInput) {
+      notesInput.disabled = true;
+      notesInput.placeholder = !window.servicem8Connected
+        ? 'Available after ServiceM8 is connected.'
+        : 'Complete metres to unlock notes.';
+    }
+    notesWrap?.classList.add('quote-modal-notes-above--disabled');
     if (reasonEl) {
       reasonEl.textContent = !window.servicem8Connected
         ? 'Not signed in to ServiceM8'
@@ -4131,7 +4346,11 @@ function updateServiceM8SectionState(hasIncomplete) {
     section.classList.remove('quote-servicem8-section--disabled');
     input.disabled = false;
     btn.disabled = false;
-    if (notesInput) notesInput.disabled = false;
+    if (notesInput) {
+      notesInput.disabled = false;
+      notesInput.placeholder = 'Enter any extra details here...';
+    }
+    notesWrap?.classList.remove('quote-modal-notes-above--disabled');
     if (reasonEl) reasonEl.hidden = true;
     // Section 61.1: technicians see "Create new job" only; editor/admin see "Add to existing job"
     const titleEl = section.querySelector('.quote-servicem8-title');
@@ -5357,19 +5576,6 @@ async function calculateAndDisplayQuote() {
       return row;
     }
 
-    function renderSectionInlineActionRow(sectionId, label, insertBefore) {
-      const row = document.createElement('tr');
-      row.className = 'quote-section-inline-action';
-      row.dataset.sectionInlineActionFor = sectionId;
-      row.innerHTML = `<td><span class="quote-section-inline-title">${escapeHtml(label)}</span><span class="quote-section-inline-label">Auto: 0m</span></td><td><button type="button" class="quote-section-mode-btn quote-section-mode-btn--restore" data-section-action="header" data-section-id="${escapeHtml(sectionId)}">Set custom metres</button></td><td></td><td></td><td></td><td></td>`;
-      if (insertBefore) tableBody.insertBefore(row, insertBefore);
-      else tableBody.appendChild(row);
-      const metres = getQuoteSectionDerivedMetresFromTable(sectionId, tableBody);
-      const inlineLabel = row.querySelector('.quote-section-inline-label');
-      if (inlineLabel) inlineLabel.textContent = `Auto: ${formatQuoteSectionMetresValue(metres)}m`;
-      return row;
-    }
-
     // Track incomplete profiles before clearing: profiles with empty/invalid header inputs or incomplete measurement rows
     const incompleteProfiles = new Set();
     const incompleteDownpipeSizes = new Set();
@@ -5505,10 +5711,13 @@ async function calculateAndDisplayQuote() {
       if (!showSection) return;
       const effectiveGroup = group || { totalMetres: 0, children: [] };
       if (hasGroup && !groupHasGutterOrBracket(group)) return; // Do not show header when only screws in group (and we have materials)
-      const profileName = PROFILE_DISPLAY_NAMES[profile] || profile;
 
       if (partsMode) {
-        renderSectionInlineActionRow(sectionId, `Gutter Length: ${profileName}`, materialInsertBefore);
+        const inlineRow = createQuoteSectionInlineActionRow(sectionId, tableBody);
+        if (inlineRow) {
+          if (materialInsertBefore) tableBody.insertBefore(inlineRow, materialInsertBefore);
+          else tableBody.appendChild(inlineRow);
+        }
         effectiveGroup.children.forEach((line) => {
           renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionId });
         });
@@ -5517,34 +5726,13 @@ async function calculateAndDisplayQuote() {
 
       const isIncomplete = incompleteProfiles.has(profile);
 
-      // If incomplete, force empty value; otherwise use override or group total
-      let metresDisplay = '';
-      let inputValue = '';
-      if (isIncomplete) {
-        metresDisplay = 'Metres?';
-        inputValue = '';
-      } else {
-        const totalMetres = profileLengthOverride[profile] != null ? profileLengthOverride[profile] : effectiveGroup.totalMetres;
-        metresDisplay = totalMetres % 1 === 0 ? totalMetres : totalMetres.toFixed(3).replace(/\.?0+$/, '');
-        inputValue = String(metresDisplay);
-      }
-
-      const headerRow = document.createElement('tr');
-      headerRow.className = 'quote-section-header';
-      if (isIncomplete) {
-        headerRow.classList.add('quote-row-incomplete-measurement');
-      }
-      if (inputValue !== '' && !isIncomplete) {
-        headerRow.classList.add('quote-section-header--has-metres');
-      }
-      headerRow.dataset.sectionHeader = profile;
-      headerRow.innerHTML = `<td><span class="quote-section-header-label">Gutter Length: ${escapeHtml(profileName)} (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${escapeHtml(sectionId)}">Clear</button></td><td></td><td></td><td></td><td></td>`;
-      if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
-      else tableBody.appendChild(headerRow);
-      const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
-      if (headerMetresInput) {
-        // Avoid duplicate quote API calls from change+blur for the same edit.
-        headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
+      const headerRow = createQuoteSectionHeaderRow(sectionId, {
+        metresValue: isIncomplete ? null : (profileLengthOverride[profile] != null ? profileLengthOverride[profile] : effectiveGroup.totalMetres),
+        isIncomplete,
+      });
+      if (headerRow) {
+        if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
+        else tableBody.appendChild(headerRow);
       }
       // When profile is incomplete, skip child gutter rows (they're default/placeholder values from backend)
       // Only render brackets/screws if they exist, but gutters should be empty until header length is entered
@@ -5575,10 +5763,13 @@ async function calculateAndDisplayQuote() {
       const showSection = hasGroup || preservedDownpipeSizes.has(size);
       if (!showSection) return;
       const effectiveGroup = group || { totalMetres: 0, children: [] };
-      const sizeLabel = size + 'mm';
 
       if (partsMode) {
-        renderSectionInlineActionRow(sectionHeaderId, `Downpipe ${sizeLabel} Length`, materialInsertBefore);
+        const inlineRow = createQuoteSectionInlineActionRow(sectionHeaderId, tableBody);
+        if (inlineRow) {
+          if (materialInsertBefore) tableBody.insertBefore(inlineRow, materialInsertBefore);
+          else tableBody.appendChild(inlineRow);
+        }
         effectiveGroup.children.forEach((line) => {
           renderMaterialRow(line, materialInsertBefore, { sectionFor: sectionHeaderId });
         });
@@ -5586,32 +5777,13 @@ async function calculateAndDisplayQuote() {
       }
 
       const isIncomplete = incompleteDownpipeSizes.has(size);
-      let metresDisplay = '';
-      let inputValue = '';
-      if (isIncomplete) {
-        metresDisplay = 'Metres?';
-        inputValue = '';
-      } else {
-        const totalMetres = downpipeLengthOverride[size] != null ? downpipeLengthOverride[size] : effectiveGroup.totalMetres;
-        metresDisplay = totalMetres % 1 === 0 ? totalMetres : totalMetres.toFixed(3).replace(/\.?0+$/, '');
-        inputValue = String(metresDisplay);
-      }
-      const headerRow = document.createElement('tr');
-      headerRow.className = 'quote-section-header';
-      if (isIncomplete) {
-        headerRow.classList.add('quote-row-incomplete-measurement');
-      }
-      if (inputValue !== '' && !isIncomplete) {
-        headerRow.classList.add('quote-section-header--has-metres');
-      }
-      headerRow.dataset.sectionHeader = sectionHeaderId;
-      headerRow.innerHTML = `<td><span class="quote-section-header-label">Downpipe ${escapeHtml(sizeLabel)} Length (<span class="quote-header-metres-label">${escapeHtml(String(metresDisplay))}</span>${isIncomplete ? '' : ' m'})</span></td><td><span class="quote-header-metres-wrap"><input type="number" class="quote-header-metres-input" value="${escapeHtml(inputValue)}" min="0" step="0.5" placeholder="${isIncomplete ? 'Metres?' : ''}" aria-label="Length in metres"><span class="quote-header-metres-suffix"> m</span></span><button type="button" class="quote-section-mode-btn" data-section-action="parts" data-section-id="${escapeHtml(sectionHeaderId)}">Clear</button></td><td></td><td></td><td></td><td></td>`;
-      if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
-      else tableBody.appendChild(headerRow);
-      const headerMetresInput = headerRow.querySelector('.quote-header-metres-input');
-      if (headerMetresInput) {
-        // Avoid duplicate quote API calls from change+blur for the same edit.
-        headerMetresInput.addEventListener('change', () => calculateAndDisplayQuote());
+      const headerRow = createQuoteSectionHeaderRow(sectionHeaderId, {
+        metresValue: isIncomplete ? null : (downpipeLengthOverride[size] != null ? downpipeLengthOverride[size] : effectiveGroup.totalMetres),
+        isIncomplete,
+      });
+      if (headerRow) {
+        if (materialInsertBefore) tableBody.insertBefore(headerRow, materialInsertBefore);
+        else tableBody.appendChild(headerRow);
       }
       // Children: downpipes first (skip when incomplete, like gutter), then clips; screws rendered after all sizes when downpipe-only
       effectiveGroup.children.forEach((line) => {
@@ -15799,6 +15971,23 @@ if (typeof window !== 'undefined') {
     getOptimalGutterCombination,
     getOptimalDownpipeCombination,
     getElementsForQuoteFromSynthetic,
+    openQuoteModalForTestElements: async (elementsForQuote, suggestedLabourMinutes = null) => {
+      await openQuoteModalForElements(elementsForQuote, null, suggestedLabourMinutes);
+    },
+    openQuoteModalForSyntheticElements: async (syntheticElements, suggestedLabourMinutes = null) => {
+      const elementsForQuote = getElementsForQuoteFromSynthetic(syntheticElements);
+      await openQuoteModalForElements(elementsForQuote, null, suggestedLabourMinutes);
+    },
+    setPricingAdminForTest: (enabled) => {
+      const isEnabled = enabled !== false;
+      pricingAdminUiOverrideForTest = isEnabled;
+      updateSavePricingButtonState();
+      updateQuoteGlobalMarkupControlState();
+      return {
+        enabled: isEnabled,
+        canUsePricingAdminControls: canUsePricingAdminControls(),
+      };
+    },
     getElementsFromQuoteTable,
     commitMetresInput,
     setQuoteSectionModeForTest: setQuoteSectionMode,
