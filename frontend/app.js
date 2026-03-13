@@ -1278,11 +1278,17 @@ function bindQuoteSectionHeaderInput(headerRow) {
   const input = headerRow?.querySelector('.quote-header-metres-input');
   if (!(input instanceof HTMLInputElement)) return;
   input.addEventListener('change', () => {
+    if (headerRow.dataset.sectionModeTransitioning === 'true') return;
     const metres = parseFloat(input.value);
     const sectionId = String(headerRow.dataset.sectionHeader || '').trim();
     if (!Number.isFinite(metres) || metres <= 0) {
       input.value = '';
-      toggleQuoteSectionModeLocally(sectionId, 'parts');
+      headerRow.dataset.sectionModeTransitioning = 'true';
+      if (document.activeElement === input) input.blur();
+      window.setTimeout(() => {
+        const toggled = toggleQuoteSectionModeLocally(sectionId, 'parts');
+        if (!toggled) delete headerRow.dataset.sectionModeTransitioning;
+      }, 0);
       return;
     }
     calculateAndDisplayQuote();
@@ -1340,10 +1346,16 @@ function toggleQuoteSectionModeLocally(sectionId, mode) {
   const childRows = rows.filter((row) => row.dataset.sectionFor === normalized);
   if (childRows.length === 0) return false;
 
+  const removeRowIfStillAttached = (row) => {
+    if (!(row instanceof HTMLTableRowElement)) return;
+    if (row.parentElement !== tableBody) return;
+    row.remove();
+  };
+
   if (mode === 'parts') {
     if (inlineRow) return true;
     setQuoteSectionMode(normalized, 'parts');
-    headerRow?.remove();
+    removeRowIfStillAttached(headerRow);
     const nextInlineRow = createQuoteSectionInlineActionRow(normalized, tableBody);
     const insertBefore = childRows[0] || getQuoteSectionInsertBefore(normalized, tableBody);
     if (nextInlineRow) {
@@ -1359,7 +1371,7 @@ function toggleQuoteSectionModeLocally(sectionId, mode) {
   if (mode === 'header') {
     if (headerRow) return true;
     setQuoteSectionMode(normalized, 'header');
-    inlineRow?.remove();
+    removeRowIfStillAttached(inlineRow);
     const metresValue = getQuoteSectionDerivedMetresFromTable(normalized, tableBody);
     const nextHeaderRow = createQuoteSectionHeaderRow(normalized, { metresValue });
     const insertBefore = childRows[0] || getQuoteSectionInsertBefore(normalized, tableBody);
