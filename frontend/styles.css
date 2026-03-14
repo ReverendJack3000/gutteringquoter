@@ -9020,6 +9020,36 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
   white-space: nowrap;
   display: block;
 }
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-inline-action td:first-child {
+  flex-wrap: nowrap;
+  row-gap: 0;
+  min-width: 0;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-inline-action td:first-child .quote-section-inline-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-inline-action td:first-child .quote-section-inline-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-inline-action td:nth-child(2) {
+  white-space: nowrap;
+  text-align: right;
+}
+
+body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-section-inline-action td:nth-child(2) .quote-section-mode-btn {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
 /* 54.93.11: AUTO label pill for inferred/conditional rows (desktop + mobile) */
 #quoteModal .quote-parts-table .quote-product-auto-badge {
   display: inline-flex;
@@ -9030,9 +9060,9 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid #c5ced8;
-  background: #eef2f6;
-  color: #5a6470;
+  border: 1px solid #7dd3fc;
+  background: #e0f2fe;
+  color: #075985;
   white-space: nowrap;
   vertical-align: middle;
   box-shadow: none;
@@ -9043,23 +9073,23 @@ body[data-viewport-mode="mobile"] #quoteModal .quote-parts-table tbody tr.quote-
 
 #quoteModal .quote-parts-table .quote-product-auto-badge:hover,
 #quoteModal .quote-parts-table .quote-product-auto-badge:focus-visible {
-  background: #e5eaf0;
-  border-color: #b5c0cb;
-  color: #3f4850;
+  background: #bae6fd;
+  border-color: #38bdf8;
+  color: #0c4a6e;
   outline: none;
 }
 
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual {
-  background: #dde3e9;
-  border-color: #aeb9c5;
-  color: #35404a;
+  background: #eef2f6;
+  border-color: #c5ced8;
+  color: #5a6470;
 }
 
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual:hover,
 #quoteModal .quote-parts-table .quote-product-auto-badge--manual:focus-visible {
-  background: #d4dce4;
-  border-color: #9ba7b4;
-  color: #1f2933;
+  background: #e5eaf0;
+  border-color: #b5c0cb;
+  color: #3f4850;
   outline: none;
 }
 /* Product name in first cell: single-line truncate with ellipsis on mobile to keep row height fixed */

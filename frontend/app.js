@@ -2,9 +2,9 @@
  * Quote App – blueprint canvas, Marley panel, Canva-style elements (select, move, resize, rotate).
  */
 
-import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260313-quote-overrides-3';
+import { initDiagramToolbarDrag, diagramToolbarDragCleanupIfNeeded } from './toolbar.js?v=20260313-quote-overrides-9';
 
-const STATIC_ASSET_VERSION = '20260313-quote-overrides-3';
+const STATIC_ASSET_VERSION = '20260313-quote-overrides-9';
 const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const state = {
@@ -1030,15 +1030,6 @@ const quoteLocalOverrides = {
 };
 let pricingAdminUiOverrideForTest = false;
 
-const QUOTE_AUTO_RULES = Object.freeze({
-  bracketSpacingMm: 400,
-  clipSpacingMm: 1200,
-  screwsPerBracket: 3,
-  screwsPerDropper: 4,
-  screwsPerSaddleClip: 2,
-  screwsPerAdjustableClip: 2,
-});
-
 /** Cached labour rates for labour row dropdowns (Section 50): [{ id, rateName, hourlyRate }] */
 let cachedLabourRates = [];
 let quoteRowIdCounter = 0;
@@ -1137,6 +1128,21 @@ function getQuoteRowBaseQty(row) {
   return Number.isFinite(value) ? value : null;
 }
 
+function getQuoteRowAutoQtyBase(row) {
+  if (!row) return null;
+  const value = parseFloat(row.dataset.autoQtyBase);
+  return Number.isFinite(value) ? value : getQuoteRowBaseQty(row);
+}
+
+function setQuoteRowAutoQtyBase(row, qty) {
+  if (!row) return;
+  if (!Number.isFinite(qty) || qty < 0) {
+    delete row.dataset.autoQtyBase;
+    return;
+  }
+  row.dataset.autoQtyBase = formatQuoteQtyDisplay(qty);
+}
+
 function isQuoteRowAutoOverrideActive(row) {
   if (!row || row.dataset.inferred !== 'true') return false;
   return getQuoteInferredQtyOverride(row.dataset.assetId) != null;
@@ -1146,6 +1152,7 @@ function clearQuoteRowLocalOverrides(row) {
   if (!row?.dataset?.assetId) return;
   clearQuoteMarkupOverride(row.dataset.assetId);
   clearQuoteInferredQtyOverride(row.dataset.assetId);
+  delete row.dataset.autoState;
 }
 
 function normalizeQuoteSectionId(sectionId) {
@@ -2427,12 +2434,13 @@ function setQuoteRowMarkupOverrideState(row, nextMarkup) {
 
 function setQuoteRowInferredQtyOverrideState(row, nextQty) {
   if (!row?.dataset?.assetId || row.dataset.inferred !== 'true') return;
-  const baseQty = getQuoteRowBaseQty(row);
-  if (baseQty != null && Math.abs(baseQty - nextQty) < 0.0001) {
+  if (!Number.isFinite(nextQty) || nextQty < 0) {
     clearQuoteInferredQtyOverride(row.dataset.assetId);
-  } else {
-    setQuoteInferredQtyOverride(row.dataset.assetId, nextQty);
+    delete row.dataset.autoState;
+    return;
   }
+  setQuoteInferredQtyOverride(row.dataset.assetId, nextQty);
+  row.dataset.autoState = 'manual';
 }
 
 function buildQuoteSnapshotFromTableBody() {
@@ -2516,60 +2524,33 @@ function getQuoteAutoAccessoryDownpipeSize(assetId) {
   return getDownpipeSizeFromAssetId(raw) || null;
 }
 
-function getQuoteAutoDerivedQtyForAsset(assetId, tableBody = null) {
-  const normalizedAssetId = String(assetId || '').trim();
-  if (!normalizedAssetId) return null;
-  const table = tableBody || document.getElementById('quoteTableBody');
-  if (!table) return null;
-  const upperId = normalizedAssetId.toUpperCase();
-
-  if (upperId.startsWith('BRK-')) {
-    const profile = getQuoteAutoAccessoryProfile(normalizedAssetId);
-    if (!profile) return null;
-    const totalMm = Math.round(getQuoteSectionDerivedMetresFromTable(profile, table) * 1000);
-    if (!(totalMm > 0)) return 0;
-    return 1 + Math.floor(totalMm / QUOTE_AUTO_RULES.bracketSpacingMm);
-  }
-
-  if (upperId.startsWith('SCL-') || upperId.startsWith('ACL-')) {
-    const size = getQuoteAutoAccessoryDownpipeSize(normalizedAssetId);
-    if (!size) return null;
-    const totalMm = Math.round(getQuoteSectionDerivedMetresFromTable(`downpipe-${size}`, table) * 1000);
-    if (!(totalMm > 0)) return 0;
-    return Math.max(1, Math.ceil(totalMm / QUOTE_AUTO_RULES.clipSpacingMm));
-  }
-
-  if (upperId === 'SCR-SS') {
-    let total = 0;
-    Array.from(table.rows).forEach((row) => {
-      const candidateId = String(row.dataset.assetId || '').trim().toUpperCase();
-      if (!candidateId || candidateId === 'SCR-SS' || row.dataset.labourRow === 'true') return;
-      const qty = getQuoteLineQuantityMeta(row).value;
-      if (!(qty > 0)) return;
-      if (candidateId.startsWith('BRK-')) total += qty * QUOTE_AUTO_RULES.screwsPerBracket;
-      else if (candidateId === 'DROPPER' || candidateId.startsWith('DRP-')) total += qty * QUOTE_AUTO_RULES.screwsPerDropper;
-      else if (candidateId.startsWith('SCL-')) total += qty * QUOTE_AUTO_RULES.screwsPerSaddleClip;
-      else if (candidateId.startsWith('ACL-')) total += qty * QUOTE_AUTO_RULES.screwsPerAdjustableClip;
-    });
-    return total;
-  }
-
-  return null;
-}
-
-function recalculateSingleQuoteAutoRow(row) {
-  if (!row?.dataset?.assetId || row.dataset.inferred !== 'true') return false;
-  const nextQty = getQuoteAutoDerivedQtyForAsset(row.dataset.assetId);
-  if (nextQty == null || !Number.isFinite(nextQty)) return false;
-
-  clearQuoteInferredQtyOverride(row.dataset.assetId);
+function setQuoteRowQtyDisplayValue(row, nextQty) {
+  if (!row) return;
   setQuoteRowStoredQty(row, nextQty);
-
   const qtyInput = row.querySelector('.quote-line-qty-input');
   if (qtyInput) qtyInput.value = formatQuoteQtyDisplay(nextQty);
+}
+
+function toggleQuoteAutoRowState(row) {
+  if (!row?.dataset?.assetId || row.dataset.inferred !== 'true') return false;
+  const autoQty = getQuoteRowAutoQtyBase(row);
+  const manualOverrideActive = isQuoteRowAutoOverrideActive(row);
+
+  if (manualOverrideActive) {
+    if (!Number.isFinite(autoQty) || autoQty < 0) return false;
+    clearQuoteInferredQtyOverride(row.dataset.assetId);
+    row.dataset.autoState = 'auto';
+    setQuoteRowQtyDisplayValue(row, autoQty);
+  } else {
+    const currentQty = getQuoteRowStoredQty(row);
+    const nextQty = Number.isFinite(currentQty) && currentQty >= 0 ? currentQty : autoQty;
+    if (!Number.isFinite(nextQty) || nextQty < 0) return false;
+    setQuoteInferredQtyOverride(row.dataset.assetId, nextQty);
+    row.dataset.autoState = 'manual';
+    setQuoteRowQtyDisplayValue(row, nextQty);
+  }
 
   updateQuoteMaterialRowComputedValues(row);
-  syncQuoteRowAutoBadge(row, row.cells?.[0]);
   recalcQuoteTotalsFromTableBody();
   return true;
 }
@@ -2579,6 +2560,7 @@ function syncQuoteRowAutoBadge(row, productCell) {
   const isInferredRow = row.dataset.inferred === 'true';
   let autoBadge = productCell.querySelector('.quote-product-auto-badge');
   if (!isInferredRow) {
+    delete row.dataset.autoState;
     autoBadge?.remove();
     return;
   }
@@ -2602,14 +2584,16 @@ function syncQuoteRowAutoBadge(row, productCell) {
     }
   }
   const hasManualQtyOverride = isQuoteRowAutoOverrideActive(row);
+  row.dataset.autoState = hasManualQtyOverride ? 'manual' : 'auto';
   autoBadge.textContent = 'AUTO';
   autoBadge.classList.toggle('quote-product-auto-badge--manual', hasManualQtyOverride);
   autoBadge.disabled = false;
   autoBadge.setAttribute('aria-disabled', 'false');
-  autoBadge.setAttribute('aria-label', hasManualQtyOverride ? 'Restore automatic quantity' : 'Recalculate automatic quantity');
+  autoBadge.setAttribute('aria-label', hasManualQtyOverride ? 'Restore automatic quantity' : 'Switch to manual quantity');
+  autoBadge.setAttribute('aria-pressed', hasManualQtyOverride ? 'true' : 'false');
   autoBadge.title = hasManualQtyOverride
     ? 'Manual quantity override active. Click to restore automatic quantity.'
-    : 'Automatically calculated from related quote items. Click to refresh this line only.';
+    : 'Automatic quantity active. Click to keep the current quantity as a manual override.';
 }
 
 function syncMobileQuoteLineSummaries() {
@@ -4049,7 +4033,7 @@ function initQuoteModal() {
       ev.preventDefault();
       const row = autoBadge.closest('tr');
       if (!row?.dataset?.assetId) return;
-      if (recalculateSingleQuoteAutoRow(row)) return;
+      if (toggleQuoteAutoRowState(row)) return;
       calculateAndDisplayQuote();
       return;
     }
@@ -5492,8 +5476,15 @@ async function calculateAndDisplayQuote() {
       const hasDownpipeHeaderOverride = dpSize && downpipeLengthOverride[dpSize] != null;
       const shouldIgnoreDownpipeOverride = isDownpipe && hasDownpipeHeaderOverride;
       const rowIsInferred = shouldTreatQuoteRowAsAutoCalculated(line.id);
-      if (rowIsInferred) row.dataset.inferred = 'true';
-      else clearQuoteInferredQtyOverride(line.id);
+      if (rowIsInferred) {
+        row.dataset.inferred = 'true';
+        setQuoteRowAutoQtyBase(row, line.qty);
+      } else {
+        clearQuoteInferredQtyOverride(line.id);
+        delete row.dataset.inferred;
+        delete row.dataset.autoQtyBase;
+        delete row.dataset.autoState;
+      }
       const explicitQtyOverride = (shouldIgnoreGutterOverride || shouldIgnoreDownpipeOverride || rowIsInferred)
         ? null
         : manualOverrides[line.id];
